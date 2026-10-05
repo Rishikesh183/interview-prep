@@ -29,7 +29,12 @@ export const RequirementsSchema = z.object({
 });
 export type Requirements = z.infer<typeof RequirementsSchema>;
 
-export const TestResultSchema = z.object({ id: z.string(), passed: z.boolean() });
+export const TestResultSchema = z.object({
+  id: z.string(),
+  passed: z.boolean(),
+  /** Core tests decide "solved"; bonus ones don't. Older saved runs had no kinds (all core). */
+  core: z.boolean().default(true),
+});
 export type TestResult = z.infer<typeof TestResultSchema>;
 
 export const TestRunSchema = z.object({
@@ -54,6 +59,10 @@ export const AttemptSchema = z.object({
   /** User paused the clock (e.g. a break). Persisted so a reload stays paused. */
   timerPaused: z.boolean().default(false),
   hintsRevealed: z.number().int().min(0).default(0),
+  /** Used "Unlock anyway" on the solutions before submitting: this attempt scores 0. */
+  solutionViewedBeforeSubmit: z.boolean().default(false),
+  /** Points earned at submit (PHASE-2 §3). */
+  points: z.number().int().min(0).optional(),
   requirements: RequirementsSchema.default({
     functional: [],
     nonFunctional: [],

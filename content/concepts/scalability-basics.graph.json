@@ -1,0 +1,79 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "Load balancer"
+    },
+    {
+      "i": "s1",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "App (stateless) x N"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Cache"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 120,
+      "l": "Primary DB"
+    },
+    {
+      "i": "rep",
+      "t": "sql_db",
+      "x": 780,
+      "y": 240,
+      "l": "Read replica"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "s1",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "s1",
+      "d": "cache",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "s1",
+      "d": "db",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "s1",
+      "d": "rep",
+      "h": "r>l"
+    }
+  ]
+}

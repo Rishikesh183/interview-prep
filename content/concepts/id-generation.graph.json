@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "s",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "g",
+      "t": "id_generator",
+      "x": 260,
+      "y": 0,
+      "l": "Snowflake generator"
+    },
+    {
+      "i": "zk",
+      "t": "coordination",
+      "x": 520,
+      "y": 0,
+      "l": "Worker id leases"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "s",
+      "d": "g",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "g",
+      "d": "zk",
+      "h": "r>l"
+    }
+  ]
+}

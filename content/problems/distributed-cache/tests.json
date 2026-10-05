@@ -1,0 +1,107 @@
+[
+  {
+    "id": "partitioning",
+    "title": "Keys are partitioned with consistent hashing",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "consistent.?hash|hash.?ring|virtual.?node|hash.?slot"
+      }
+    },
+    "failHint": "Adding one node with hash(key) % N moves almost every key. What moves fewer?"
+  },
+  {
+    "id": "cluster",
+    "title": "The cache runs as a multi-node cluster",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "nodeConfig": {
+            "type": "cache",
+            "where": {
+              "cluster": true
+            }
+          }
+        },
+        {
+          "hasNode": "cache",
+          "min": 2
+        }
+      ]
+    },
+    "failHint": "Can one node hold 10 TB in memory?"
+  },
+  {
+    "id": "eviction",
+    "title": "An eviction policy is defined",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "lru|lfu|evict"
+      }
+    },
+    "failHint": "Memory is full and a new key arrives. Which key goes?"
+  },
+  {
+    "id": "replication",
+    "title": "Data is replicated for failover",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "replica|replicat|failover"
+      }
+    },
+    "failHint": "A cache node dies. Does every key it held become a miss?"
+  },
+  {
+    "id": "membership",
+    "title": "Cluster membership / failure detection exists",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "coordination"
+        },
+        {
+          "hasNode": "service_discovery"
+        },
+        {
+          "textMentions": {
+            "pattern": "gossip|heartbeat|membership"
+          }
+        }
+      ]
+    },
+    "failHint": "How does the cluster find out a node has died?"
+  },
+  {
+    "id": "hot-keys",
+    "title": "Hot keys are addressed",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "hot.?key|local cache|near cache|replicate hot"
+      }
+    },
+    "failHint": "One key gets 1M reads per second. What happens to its node?"
+  },
+  {
+    "id": "client-routing",
+    "title": "Clients route requests to the right node",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "client.?(library|side)|smart client|proxy|router|twemproxy"
+      }
+    },
+    "failHint": "How does a client know which node holds a key?"
+  }
+]

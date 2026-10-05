@@ -5,6 +5,7 @@ import type { AiReview } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 import { useAttemptStore } from "@/store/attempt";
 import { useWorkspaceStore } from "@/store/workspace";
+import { highlightLater } from "@/components/canvas/useFocusOnCanvas";
 
 const SEVERITY = {
   high: "bg-rose-500/10 text-rose-700 dark:text-rose-400",
@@ -14,9 +15,7 @@ const SEVERITY = {
 
 /** Jumps to the canvas with the issue's nodes highlighted (the canvas zooms to them on mount). */
 function showOnCanvas(nodeIds: string[]) {
-  const ws = useWorkspaceStore.getState();
-  ws.setHighlight({ nodeIds, edgeIds: [] });
-  ws.selectNodes(nodeIds);
+  highlightLater({ nodeIds, edgeIds: [] });
   useAttemptStore.getState().setStage("design");
 }
 

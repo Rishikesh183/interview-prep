@@ -1,0 +1,5 @@
+[
+  "Push (fan-out on write) makes reads cheap. What does it cost for an account with 100M followers?",
+  "Pull (fan-out on read) makes writes cheap. What does it cost on every timeline load?",
+  "Can you mix the two?"
+]

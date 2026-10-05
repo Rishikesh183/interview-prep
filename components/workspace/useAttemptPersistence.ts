@@ -1,9 +1,11 @@
 "use client";
 
 import { getAttempt, latestInProgress, newAttempt, saveAttempt } from "@/lib/db/attempts";
+import { forfeitsPoints } from "@/lib/db/mySolutions";
 import type { LintProblem } from "@/lib/lint/context";
 import type { SaveStatus } from "@/lib/persistence/autosaver";
 import { usePersistence } from "@/lib/persistence/usePersistence";
+import { waitForInitialSync } from "@/lib/sync/worker";
 import { snapshotAttempt, useAttemptStore } from "@/store/attempt";
 import { useWorkspaceStore } from "@/store/workspace";
 
@@ -19,7 +21,10 @@ async function resolveAttempt(problemId: string, requested: string | null) {
     const latest = await latestInProgress(problemId).catch(() => null);
     if (latest) return { attempt: latest, fresh: false };
   }
-  return { attempt: newAttempt(problemId), fresh: true };
+  const attempt = newAttempt(problemId);
+  // Solutions peeked at before this problem was ever submitted: a new attempt scores 0 too.
+  attempt.solutionViewedBeforeSubmit = await forfeitsPoints(attempt).catch(() => false);
+  return { attempt, fresh: true };
 }
 
 /**
@@ -35,6 +40,8 @@ export function useAttemptPersistence(
   return usePersistence({
     key: `${problemId}:${requested ?? ""}`,
     load: async () => {
+      // Signed in on a fresh device: let the first pull land so we open the synced attempt.
+      await waitForInitialSync();
       const { attempt, fresh } = await resolveAttempt(problemId, requested);
       useAttemptStore.getState().load(attempt, { pristine: fresh, problem });
       // Pin the URL to a saved attempt so a reload reopens it. A fresh one isn't in the DB

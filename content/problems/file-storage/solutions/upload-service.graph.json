@@ -1,0 +1,117 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "l": "Gateway"
+    },
+    {
+      "i": "up",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Upload Service",
+      "no": "Resumable chunked upload; SHA-1 per chunk for dedup"
+    },
+    {
+      "i": "sync",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Sync Service",
+      "no": "Long-poll /changes; conflicting edits keep both versions"
+    },
+    {
+      "i": "blobs",
+      "t": "object_storage",
+      "x": 780,
+      "y": 0,
+      "l": "Chunk storage"
+    },
+    {
+      "i": "meta",
+      "t": "nosql_document",
+      "x": 780,
+      "y": 130,
+      "l": "Metadata",
+      "c": {
+        "shardKey": "user_id"
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "up",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "gw",
+      "d": "sync",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "up",
+      "d": "blobs",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "up",
+      "d": "meta",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "sync",
+      "d": "meta",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "up",
+      "method": "PUT",
+      "path": "/v1/uploads/{id}/chunks/{n}",
+      "auth": true,
+      "idempotent": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "sync",
+      "method": "GET",
+      "path": "/v1/changes",
+      "auth": true,
+      "pagination": "cursor"
+    }
+  ],
+  "entities": [
+    {
+      "name": "File",
+      "fields": "id, owner, path, latest_version, chunk_list"
+    }
+  ]
+}

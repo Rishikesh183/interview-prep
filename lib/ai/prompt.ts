@@ -2,7 +2,11 @@ import type { AiReview, Attempt, LintIssue, Problem, TestResult } from "@/lib/sc
 import { RUBRIC } from "./rubric";
 import { serializeAttempt, serializeGraph } from "./serialize";
 
-export type ChatPrompt = { system: string; user: string };
+/**
+ * `system` + `context` (rubric + problem content) are the same for every review of a problem, so
+ * they form the cached prefix; the user's design comes after, in `user` (PHASE-2 §2, layer 4).
+ */
+export type ChatPrompt = { system: string; context?: string; user: string };
 
 const REVIEW_SYSTEM = `You are a senior staff engineer running a system design interview. You grade a candidate's written design like a fair, demanding interviewer.
 
@@ -31,10 +35,10 @@ export function buildReviewPrompt(
   lint: LintIssue[],
   tests: TestResult[],
 ): ChatPrompt {
-  const testById = new Map(problem.tests.map((t) => [t.id, t.desc]));
+  const testById = new Map(problem.tests.map((t) => [t.id, t.title]));
   const passed = tests.filter((t) => t.passed).length;
 
-  const user = `PROBLEM: ${problem.title} (${problem.difficulty})
+  const context = `PROBLEM: ${problem.title} (${problem.difficulty})
 ${problem.prompt}
 Scale: ${Object.entries(problem.scale)
     .map(([k, v]) => `${k}: ${v}`)
@@ -46,9 +50,9 @@ Non-functional: ${problem.nonFunctionalReqs.join("; ")}
 Out of scope: ${problem.outOfScope.join("; ") || "-"}
 
 PROBLEM-SPECIFIC SCORING POINTS: ${problem.rubricFocus.join("; ")}
-DEEP DIVES AN INTERVIEWER WOULD PROBE: ${problem.deepDives.join("; ")}
+DEEP DIVES AN INTERVIEWER WOULD PROBE: ${problem.deepDives.join("; ")}`;
 
-=== CANDIDATE SUBMISSION ===
+  const user = `=== CANDIDATE SUBMISSION ===
 ${serializeAttempt(attempt)}
 
 === AUTOMATED CHECKS ===
@@ -57,7 +61,7 @@ ${lint.length ? lint.map((i) => `  [${i.severity}] ${i.message}${i.nodeIds.lengt
 TESTS: ${passed}/${tests.length} passed
 ${tests.map((t) => `  ${t.passed ? "PASS" : "FAIL"} ${testById.get(t.id) ?? t.id}`).join("\n")}`;
 
-  return { system: REVIEW_SYSTEM, user };
+  return { system: REVIEW_SYSTEM, context, user };
 }
 
 const FOLLOWUP_SYSTEM = `You are a senior system design interviewer. The candidate is answering one of your follow-up questions about their design. Evaluate the answer: is it correct, specific to their design, and does it show understanding of trade-offs?
@@ -75,10 +79,9 @@ export function buildFollowUpPrompt(
   answer: string,
 ): ChatPrompt {
   const issues = review?.issues.map((i) => `  [${i.severity}] ${i.text}`).join("\n") ?? "  (none)";
-  const user = `PROBLEM: ${problem.title}
-${problem.prompt}
-
-CANDIDATE DESIGN:
+  const context = `PROBLEM: ${problem.title}
+${problem.prompt}`;
+  const user = `CANDIDATE DESIGN:
 ${serializeGraph(attempt)}
 
 ISSUES YOU RAISED IN THE REVIEW:
@@ -86,5 +89,5 @@ ${issues}
 
 QUESTION: ${question}
 CANDIDATE ANSWER: ${answer}`;
-  return { system: FOLLOWUP_SYSTEM, user };
+  return { system: FOLLOWUP_SYSTEM, context, user };
 }

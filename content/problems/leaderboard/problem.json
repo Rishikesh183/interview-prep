@@ -1,0 +1,33 @@
+{
+  "id": "leaderboard",
+  "number": 6,
+  "title": "Real-time Leaderboard",
+  "difficulty": "easy",
+  "tags": ["redis-sorted-sets", "sharding"],
+  "prompt": "Design a real-time leaderboard for an online game with millions of players. Players' scores change as they play; anyone can see the top 100 and their own rank.",
+  "functionalReqs": [
+    "Update a player's score",
+    "Get the top N players",
+    "Get a player's rank and nearby players",
+    "Daily / all-time leaderboards"
+  ],
+  "nonFunctionalReqs": [
+    "Rank updates visible within seconds",
+    "Top-N reads < 50 ms",
+    "Durable scores"
+  ],
+  "scale": {
+    "dau": "~25M DAU",
+    "qps": "~50K score updates/s peak, ~100K reads/s",
+    "storage": "~100 B per player per board"
+  },
+  "outOfScope": ["Anti-cheat", "Matchmaking"],
+  "keyComponents": ["service", "cache", "sql_db", "event_stream"],
+  "deepDives": [
+    "Redis sorted sets (ZINCRBY / ZREVRANK)",
+    "Sharding by score range vs by user",
+    "Rebuilding from durable storage"
+  ],
+  "rubricFocus": ["Right data structure", "Sharding strategy", "Durability"],
+  "prerequisites": ["caching-strategies", "sharding-partitioning"]
+}

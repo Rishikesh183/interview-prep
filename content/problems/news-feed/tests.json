@@ -1,0 +1,117 @@
+[
+  {
+    "id": "post-store",
+    "title": "Posts are stored durably",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": "@database"
+      }
+    },
+    "failHint": "Where is a post saved when it's created?"
+  },
+  {
+    "id": "timeline-cache",
+    "title": "Timelines or recent posts are served from a cache",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "cache"
+    },
+    "failHint": "Building a timeline from scratch on every load is slow. What do you keep ready?"
+  },
+  {
+    "id": "media",
+    "title": "Media is served from object storage / CDN",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "cdn"
+        },
+        {
+          "hasNode": "object_storage"
+        }
+      ]
+    },
+    "failHint": "Where do images and videos live, and how do they reach users fast?"
+  },
+  {
+    "id": "celebrity",
+    "title": "The celebrity (huge follower count) case is handled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "celebrit|hybrid|high.?follower|fan.?out on read|pull model"
+      }
+    },
+    "failHint": "An account with 100M followers posts. What does your design do?"
+  },
+  {
+    "id": "follow-graph",
+    "title": "The follow graph is modelled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "follow",
+            "in": ["entities"]
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "follow"
+          }
+        }
+      ]
+    },
+    "failHint": "How do you know whose posts belong in someone's feed?"
+  },
+  {
+    "id": "feed-api",
+    "title": "The timeline API uses cursor pagination",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "feed|timeline|home",
+        "method": "GET",
+        "pagination": "cursor"
+      }
+    },
+    "failHint": "How does the app page through an endless timeline without duplicates?"
+  },
+  {
+    "id": "post-api",
+    "title": "An API creates posts",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "post|tweet|status",
+        "method": "POST"
+      }
+    },
+    "failHint": "Which endpoint creates a post?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

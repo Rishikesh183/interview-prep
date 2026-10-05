@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "s",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "sql",
+      "t": "sql_db",
+      "x": 260,
+      "y": 0,
+      "l": "Orders (SQL)"
+    },
+    {
+      "i": "kv",
+      "t": "nosql_kv",
+      "x": 260,
+      "y": 120,
+      "l": "Sessions (KV)"
+    },
+    {
+      "i": "wc",
+      "t": "wide_column",
+      "x": 260,
+      "y": 240,
+      "l": "Events (wide-column)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "s",
+      "d": "sql",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "s",
+      "d": "kv",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "s",
+      "d": "wc",
+      "h": "r>l"
+    }
+  ]
+}

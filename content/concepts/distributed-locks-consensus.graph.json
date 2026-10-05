@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "a",
+      "t": "scheduler",
+      "x": 0,
+      "y": 0,
+      "l": "Scheduler A (leader)"
+    },
+    {
+      "i": "b",
+      "t": "scheduler",
+      "x": 0,
+      "y": 120,
+      "l": "Scheduler B (standby)"
+    },
+    {
+      "i": "zk",
+      "t": "coordination",
+      "x": 260,
+      "y": 0,
+      "l": "etcd (leases)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "a",
+      "d": "zk",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "b",
+      "d": "zk",
+      "h": "r>l"
+    }
+  ]
+}

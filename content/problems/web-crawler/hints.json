@@ -1,0 +1,5 @@
+[
+  "What decides which URL to fetch next, and when?",
+  "How do you know you've already seen a URL (or the same content)?",
+  "Thousands of workers hitting the same host is a DoS."
+]

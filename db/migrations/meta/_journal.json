@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791221757692,
+      "tag": "0000_fluffy_wendigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791221954425,
+      "tag": "0001_lww_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791224483760,
+      "tag": "0002_progress_keep_best",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791225759696,
+      "tag": "0003_amusing_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791225764644,
+      "tag": "0004_ai_budget",
+      "breakpoints": true
+    }
+  ]
+}

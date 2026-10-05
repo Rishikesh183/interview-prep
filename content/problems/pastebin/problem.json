@@ -1,0 +1,33 @@
+{
+  "id": "pastebin",
+  "number": 2,
+  "title": "Pastebin",
+  "difficulty": "easy",
+  "tags": ["object-storage", "ttl", "caching"],
+  "prompt": "Design a service like Pastebin where users paste text (up to a few MB), get a unique URL, and others can read it. Pastes can expire after a chosen time.",
+  "functionalReqs": [
+    "Create a paste and get a unique link",
+    "Read a paste by its link",
+    "Pastes expire after a user-chosen duration (or never)",
+    "Optional syntax highlighting language"
+  ],
+  "nonFunctionalReqs": [
+    "Reads are fast and highly available",
+    "Paste content is durable until expiry",
+    "Links are not guessable"
+  ],
+  "scale": {
+    "dau": "~1M new pastes/day",
+    "qps": "~12 writes/s, ~600 reads/s avg (50:1)",
+    "storage": "~10 KB avg paste → ~10 GB/day, ~18 TB over 5 years"
+  },
+  "outOfScope": ["Editing pastes", "Comments"],
+  "keyComponents": ["service", "object_storage", "sql_db", "cdn", "scheduler"],
+  "deepDives": [
+    "Separating blob and metadata storage",
+    "Expiry: lazy vs active cleanup",
+    "Key generation"
+  ],
+  "rubricFocus": ["Blob storage for content", "Clear expiry mechanism", "Caching hot reads"],
+  "prerequisites": ["object-storage-blobs", "caching-strategies", "cdn"]
+}

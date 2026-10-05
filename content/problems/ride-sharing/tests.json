@@ -1,0 +1,149 @@
+[
+  {
+    "id": "location-ingest",
+    "title": "Driver locations stream in over persistent connections or a stream",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "websocket_server"
+        },
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "event_stream"
+          }
+        }
+      ]
+    },
+    "failHint": "Five million drivers send their location every 4 seconds. How does it come in?"
+  },
+  {
+    "id": "geo",
+    "title": "A spatial index finds nearby drivers",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "geo_index"
+        },
+        {
+          "textMentions": {
+            "pattern": "geohash|quadtree|\\bs2\\b|\\bh3\\b|geosearch|georadius"
+          }
+        }
+      ]
+    },
+    "failHint": "How do you find drivers within 2 km without checking all of them?"
+  },
+  {
+    "id": "hot-writes",
+    "title": "Hot location writes avoid the primary transactional DB",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "cache"
+          }
+        },
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "geo_index"
+          }
+        },
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "event_stream"
+          }
+        }
+      ]
+    },
+    "failHint": "Should 1M location writes per second go to the trips database?"
+  },
+  {
+    "id": "matching",
+    "title": "A matching / dispatch service exists",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "hasNode": "service"
+        },
+        {
+          "textMentions": {
+            "pattern": "match|dispatch",
+            "in": ["notes", "labels"]
+          }
+        }
+      ]
+    },
+    "failHint": "Which component pairs a rider with a driver?"
+  },
+  {
+    "id": "trip-store",
+    "title": "Trips are stored durably",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do trips live for history and billing?"
+  },
+  {
+    "id": "atomic-assign",
+    "title": "A driver can only be assigned once",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "lock|atomic|compare.?and|cas|transaction|exactly one|setnx|conditional"
+      }
+    },
+    "failHint": "Two riders' requests reach the same driver at once. Who gets them?"
+  },
+  {
+    "id": "payments",
+    "title": "Payment provider is integrated",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "external_service"
+    },
+    "failHint": "Who charges the rider at the end?"
+  },
+  {
+    "id": "ride-api",
+    "title": "An API requests a ride",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "ride|trip",
+        "method": "POST"
+      }
+    },
+    "failHint": "Which endpoint does the rider app call to request a ride?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

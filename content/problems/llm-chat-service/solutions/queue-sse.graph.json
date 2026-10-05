@@ -1,0 +1,125 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Chat UI"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "no": "Token-based limits per user tier"
+    },
+    {
+      "i": "chat",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Chat Service",
+      "no": "Streams tokens to the browser over SSE"
+    },
+    {
+      "i": "db",
+      "t": "nosql_document",
+      "x": 780,
+      "y": 0,
+      "l": "Conversations",
+      "c": {
+        "shardKey": "user_id"
+      }
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 780,
+      "y": 130,
+      "l": "Inference queue",
+      "no": "Priority by tier; fair share under load"
+    },
+    {
+      "i": "gpu",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "GPU workers",
+      "c": {
+        "concurrency": 8
+      },
+      "no": "Continuous batching; KV cache / prompt caching"
+    },
+    {
+      "i": "tokens",
+      "t": "pub_sub",
+      "x": 1300,
+      "y": 0,
+      "l": "Token stream",
+      "no": "Per-request channel back to the chat node"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "chat",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "chat",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "chat",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "q",
+      "d": "gpu",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "gpu",
+      "d": "tokens",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "tokens",
+      "d": "chat",
+      "m": "a",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "chat",
+      "method": "POST",
+      "path": "/v1/conversations/{id}/messages",
+      "auth": true,
+      "response": "text/event-stream",
+      "rateLimited": true
+    }
+  ],
+  "entities": []
+}

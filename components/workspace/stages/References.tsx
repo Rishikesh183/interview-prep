@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ReferenceCompare } from "@/components/review/ReferenceCompare";
 import type { Problem } from "@/lib/schema";
 import { useAttemptStore } from "@/store/attempt";
@@ -58,7 +59,14 @@ export function References({ problem }: { problem: Problem }) {
       <section className="space-y-4">
         <h3 className="text-base font-semibold">Reference approaches</h3>
         <p className="text-muted-foreground text-sm">
-          There is no single right answer. These are common approaches and their trade-offs.
+          There is no single right answer. These are common approaches and their trade-offs.{" "}
+          <Link
+            href={`/problems/${problem.id}/solutions`}
+            target="_blank"
+            className="text-primary hover:underline"
+          >
+            Full walkthroughs, tests and My solutions →
+          </Link>
         </p>
         {problem.references.map((ref) => (
           <article key={ref.id} className="space-y-2 rounded-lg border p-4">

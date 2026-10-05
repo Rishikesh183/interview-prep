@@ -1,0 +1,185 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "driver",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Drivers"
+    },
+    {
+      "i": "rider",
+      "t": "web_client",
+      "x": 0,
+      "y": 130,
+      "l": "Riders"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "l": "Gateway"
+    },
+    {
+      "i": "ingest",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Location ingest"
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 780,
+      "y": 0,
+      "l": "Locations",
+      "c": {
+        "partitions": 512,
+        "partitionKey": "geohash prefix"
+      }
+    },
+    {
+      "i": "indexer",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Geo indexers",
+      "no": "Consume pings, update cells"
+    },
+    {
+      "i": "geo",
+      "t": "geo_index",
+      "x": 1300,
+      "y": 0,
+      "l": "Geo index shards",
+      "c": {
+        "strategy": "S2"
+      },
+      "no": "In-memory H3/S2 cells → drivers"
+    },
+    {
+      "i": "dispatch",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Dispatch Service",
+      "no": "Conditional write on driver state: claim exactly one"
+    },
+    {
+      "i": "state",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 130,
+      "l": "Driver state",
+      "c": {
+        "consistency": "strong"
+      }
+    },
+    {
+      "i": "trips",
+      "t": "sql_db",
+      "x": 780,
+      "y": 260,
+      "l": "Trips"
+    },
+    {
+      "i": "psp",
+      "t": "external_service",
+      "x": 780,
+      "y": 390,
+      "l": "PSP"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "driver",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "rider",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "gw",
+      "d": "ingest",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "gw",
+      "d": "dispatch",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "ingest",
+      "d": "kafka",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "kafka",
+      "d": "indexer",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "indexer",
+      "d": "geo",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "dispatch",
+      "d": "geo",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "dispatch",
+      "d": "state",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "dispatch",
+      "d": "trips",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "dispatch",
+      "d": "psp",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "dispatch",
+      "method": "POST",
+      "path": "/v1/trips",
+      "auth": true,
+      "idempotent": true
+    }
+  ],
+  "entities": [
+    {
+      "name": "Trip",
+      "fields": "trip_id, rider, driver, state"
+    }
+  ]
+}

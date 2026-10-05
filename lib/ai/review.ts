@@ -10,7 +10,7 @@ import {
   type Problem,
 } from "@/lib/schema";
 import { runAttemptTests } from "@/lib/tests/context";
-import { chatJson, type AiConfig } from "./openrouter";
+import { chatJson, type AiConfig, type ReviewTier, type TokenUsage } from "./openrouter";
 import { buildFollowUpPrompt, buildReviewPrompt } from "./prompt";
 import { levelFor, overallScore, RUBRIC } from "./rubric";
 import { designHash } from "./serialize";
@@ -21,7 +21,12 @@ const CompleteReviewSchema = ModelReviewSchema.refine(
   { message: `scores must include every dimension: ${RUBRIC.map((d) => d.dimension).join(", ")}` },
 );
 
-type Deps = { config: AiConfig; fetchImpl?: typeof fetch };
+type Deps = {
+  config: AiConfig;
+  fetchImpl?: typeof fetch;
+  onUsage?: (usage: TokenUsage) => void;
+  tier?: ReviewTier;
+};
 
 export async function reviewAttempt(
   problem: Problem,
@@ -42,7 +47,9 @@ export async function reviewAttempt(
   const { data, model } = await chatJson({
     prompt: buildReviewPrompt(problem, attempt, lint, tests),
     schema: CompleteReviewSchema,
-    ...deps,
+    config: deps.config,
+    fetchImpl: deps.fetchImpl,
+    onUsage: deps.onUsage,
   });
 
   const nodeIds = new Set(attempt.graph.nodes.map((n) => n.id));
@@ -60,6 +67,7 @@ export async function reviewAttempt(
     model,
     createdAt: Date.now(),
     designHash: designHash(attempt),
+    tier: deps.tier ?? "standard",
   };
 }
 
@@ -74,7 +82,9 @@ export async function answerFollowUp(
     prompt: buildFollowUpPrompt(problem, attempt, attempt.review, question, answer),
     schema: ModelFollowUpSchema,
     maxTokens: 1200,
-    ...deps,
+    config: deps.config,
+    fetchImpl: deps.fetchImpl,
+    onUsage: deps.onUsage,
   });
   return {
     feedback: data.feedback,

@@ -37,7 +37,10 @@ type AttemptState = {
   addElapsed: (ms: number) => void;
   revealHint: () => void;
   setTestRun: (run: TestRun) => void;
-  submit: () => void;
+  /** Locks the attempt and records the points it earned. */
+  submit: (points?: number) => void;
+  /** "Unlock anyway": see solutions before submitting; this attempt then scores 0. */
+  unlockSolutions: () => void;
   setReview: (review: AiReview) => void;
   addFollowUp: (followUp: FollowUp) => void;
 };
@@ -92,14 +95,19 @@ export const useAttemptStore = create<AttemptState>()((set, get) => {
       if (meta) patch({ hintsRevealed: meta.hintsRevealed + 1 });
     },
     setTestRun: (testRun) => patch({ testRun }),
-    submit: () => {
+    submit: (points) => {
       const meta = get().meta;
       if (!meta || meta.status !== "in_progress") return;
       patch({
         status: "submitted",
         submittedAt: Date.now(),
         durationSec: Math.round(meta.elapsedMs / 1000),
+        ...(points !== undefined ? { points } : {}),
       });
+    },
+    unlockSolutions: () => {
+      const meta = get().meta;
+      if (meta && meta.status === "in_progress") patch({ solutionViewedBeforeSubmit: true });
     },
     // Reviews and follow-ups are allowed on submitted (read-only) attempts.
     setReview: (review) => patch({ review, status: "reviewed" }),

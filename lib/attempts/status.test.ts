@@ -7,7 +7,7 @@ const attempt = (over: Partial<Attempt>): Attempt =>
 
 const run = (...passed: boolean[]) => ({
   ranAt: 1,
-  results: passed.map((p, i) => ({ id: `t${i}`, passed: p })),
+  results: passed.map((p, i) => ({ id: `t${i}`, passed: p, core: true })),
 });
 
 describe("attempt status", () => {
@@ -35,6 +35,15 @@ describe("attempt status", () => {
     expect(isSolved(attempt({ testRun: run(true, true) }))).toBe(false);
     expect(isSolved(attempt({ status: "submitted", testRun: run(true, false) }))).toBe(false);
     expect(isSolved(attempt({ status: "submitted", testRun: run(true, true) }))).toBe(true);
+    // A failing bonus test doesn't block "solved".
+    const withBonus = {
+      ranAt: 1,
+      results: [
+        { id: "core", passed: true, core: true },
+        { id: "bonus", passed: false, core: false },
+      ],
+    };
+    expect(isSolved(attempt({ status: "submitted", testRun: withBonus }))).toBe(true);
   });
 
   it("rolls attempts up per problem, solved wins", () => {

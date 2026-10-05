@@ -18,6 +18,8 @@ export class AiError extends Error {
 
 export type ReasoningEffort = "low" | "medium" | "high" | "none";
 export type AiConfig = { apiKey: string; models: string[]; reasoningEffort: ReasoningEffort };
+export type ReviewTier = "standard" | "deep";
+export type TokenUsage = { inputTokens: number; outputTokens: number };
 
 const EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "none"];
 
@@ -36,7 +38,37 @@ export function aiConfig(env: Record<string, string | undefined> = process.env):
   return { apiKey, models: [primary, ...fallbacks], reasoningEffort };
 }
 
-type Message = { role: "system" | "user" | "assistant"; content: string };
+/** "Deep review" uses DEEP_REVIEW_MODEL on its own (no silent fallback to the cheap models). */
+export function deepAiConfig(
+  env: Record<string, string | undefined> = process.env,
+): AiConfig | null {
+  const base = aiConfig(env);
+  const model = env.DEEP_REVIEW_MODEL?.trim();
+  return base && model ? { ...base, models: [model] } : null;
+}
+
+export const configForTier = (tier: ReviewTier, env?: Record<string, string | undefined>) =>
+  tier === "deep" ? deepAiConfig(env) : aiConfig(env);
+
+type TextPart = { type: "text"; text: string; cache_control?: { type: "ephemeral" } };
+type Message = { role: "system" | "user" | "assistant"; content: string | TextPart[] };
+
+/** Providers that need an explicit breakpoint; others (OpenAI, DeepSeek...) cache prefixes on their own. */
+const explicitCache = (model: string) => /^(anthropic|google)\//.test(model);
+
+/** System prompt + problem context first, marked cacheable, so repeat reviews reuse the prefix. */
+export function prefixMessage(prompt: ChatPrompt, model: string): Message {
+  if (!prompt.context) return { role: "system", content: prompt.system };
+  if (!explicitCache(model))
+    return { role: "system", content: `${prompt.system}\n\n${prompt.context}` };
+  return {
+    role: "system",
+    content: [
+      { type: "text", text: prompt.system },
+      { type: "text", text: prompt.context, cache_control: { type: "ephemeral" } },
+    ],
+  };
+}
 
 type Options<S extends z.ZodType> = {
   prompt: ChatPrompt;
@@ -44,6 +76,8 @@ type Options<S extends z.ZodType> = {
   config: AiConfig;
   maxTokens?: number;
   fetchImpl?: typeof fetch;
+  /** Called with the tokens used (summed over the retry), for the ai_usage log. */
+  onUsage?: (usage: TokenUsage) => void;
 };
 
 function upstreamError(status: number, detail: string): AiError {
@@ -94,12 +128,20 @@ async function complete(messages: Message[], o: Options<z.ZodType>) {
   const body = (await res.json().catch(() => ({}))) as {
     model?: string;
     error?: { message?: string };
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
     choices?: { message?: { content?: string | null }; error?: { message?: string } }[];
   };
   if (!res.ok) throw upstreamError(res.status, body.error?.message ?? res.statusText);
   const choice = body.choices?.[0];
   if (choice?.error) throw new AiError(`Model error: ${choice.error.message ?? "unknown"}`, 502);
-  return { content: choice?.message?.content ?? "", model: body.model ?? model };
+  return {
+    content: choice?.message?.content ?? "",
+    model: body.model ?? model,
+    usage: {
+      inputTokens: body.usage?.prompt_tokens ?? 0,
+      outputTokens: body.usage?.completion_tokens ?? 0,
+    },
+  };
 }
 
 /**
@@ -110,16 +152,23 @@ export async function chatJson<S extends z.ZodType>(
   o: Options<S>,
 ): Promise<{ data: z.infer<S>; model: string }> {
   const messages: Message[] = [
-    { role: "system", content: o.prompt.system },
+    prefixMessage(o.prompt, o.config.models[0]),
     { role: "user", content: o.prompt.user },
   ];
 
   let lastError = "";
+  const used: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+  const report = () => o.onUsage?.(used);
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { content, model } = await complete(messages, o);
+    const { content, model, usage } = await complete(messages, o);
+    used.inputTokens += usage.inputTokens;
+    used.outputTokens += usage.outputTokens;
     try {
       const parsed = o.schema.safeParse(extractJson(content));
-      if (parsed.success) return { data: parsed.data, model };
+      if (parsed.success) {
+        report();
+        return { data: parsed.data, model };
+      }
       lastError = parsed.error.issues
         .slice(0, 5)
         .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
@@ -135,5 +184,6 @@ export async function chatJson<S extends z.ZodType>(
       },
     );
   }
+  report();
   throw new AiError(`The model's reply didn't match the expected format: ${lastError}`, 502);
 }

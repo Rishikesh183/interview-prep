@@ -61,6 +61,7 @@ export function HistoryTable({ problems }: { problems: ProblemSummary[] }) {
             <th className="px-3 py-2">Problem</th>
             <th className="px-3 py-2">Status</th>
             <th className="px-3 py-2 text-right">Tests</th>
+            <th className="px-3 py-2 text-right">Points</th>
             <th className="px-3 py-2 text-right">Time</th>
             <th className="hidden px-3 py-2 md:table-cell">Started</th>
             <th className="w-10 px-3 py-2" aria-label="Actions" />
@@ -91,6 +92,21 @@ export function HistoryTable({ problems }: { problems: ProblemSummary[] }) {
                   )}
                 >
                   {score ? `${score.passed}/${score.total}` : "—"}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {a.points !== undefined ? (
+                    <span
+                      title={
+                        a.solutionViewedBeforeSubmit
+                          ? "Solutions unlocked before submit"
+                          : undefined
+                      }
+                    >
+                      {a.points}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="text-muted-foreground px-3 py-2.5 text-right tabular-nums">
                   {formatDuration(a.elapsedMs)}

@@ -1,0 +1,5 @@
+[
+  "Which data structure gives O(log n) rank lookups?",
+  "One sorted set with 100M members is big. How would you shard and still answer 'top 100'?",
+  "What is the source of truth if the cache is lost?"
+]

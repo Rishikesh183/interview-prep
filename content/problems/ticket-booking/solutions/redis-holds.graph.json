@@ -1,0 +1,191 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "c": {
+        "content": ["static", "api"],
+        "ttl": "5s"
+      },
+      "no": "Seat maps cached briefly"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 130,
+      "l": "LB"
+    },
+    {
+      "i": "rl",
+      "t": "rate_limiter",
+      "x": 520,
+      "y": 0,
+      "l": "Rate limiter",
+      "c": {
+        "limit": "10/min"
+      }
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 780,
+      "y": 0,
+      "l": "Booking Service",
+      "no": "Holds via SETNX with TTL 600s; releases on expiry"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 1040,
+      "y": 0,
+      "l": "Seat holds (Redis)",
+      "c": {
+        "strategy": "write-through",
+        "eviction": "TTL",
+        "ttl": "10m"
+      },
+      "no": "SET NX EX — atomic lock per seat"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 1040,
+      "y": 130,
+      "l": "Bookings DB",
+      "c": {
+        "replicas": 3,
+        "isolation": "serializable"
+      },
+      "no": "UNIQUE(show_id, seat_id) prevents double booking"
+    },
+    {
+      "i": "pay",
+      "t": "external_service",
+      "x": 1040,
+      "y": 260,
+      "l": "Payment gateway",
+      "c": {
+        "provider": "Stripe"
+      }
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 1040,
+      "y": 390,
+      "l": "Booking events"
+    },
+    {
+      "i": "mail",
+      "t": "worker",
+      "x": 1300,
+      "y": 0,
+      "l": "Confirmation sender"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "rl",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "rl",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "redis",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "svc",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "svc",
+      "d": "pay",
+      "no": "Idempotency-Key header",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "svc",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "q",
+      "d": "mail",
+      "m": "a",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/shows/{showId}/holds",
+      "auth": true,
+      "request": "{ seatIds[] }",
+      "statusCodes": "201, 409",
+      "idempotent": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/bookings",
+      "auth": true,
+      "request": "{ holdId, paymentToken }",
+      "idempotent": true,
+      "statusCodes": "201, 402, 409, 410"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Booking",
+      "fields": "id, show_id, seat_id, user_id, status, payment_id — UNIQUE(show_id, seat_id)"
+    },
+    {
+      "name": "Show",
+      "fields": "id, venue_id, starts_at"
+    }
+  ]
+}

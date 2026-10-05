@@ -1,0 +1,171 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App",
+      "no": "Uploads photos straight to S3 with a presigned URL"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "c": {
+        "content": ["media"],
+        "ttl": "30d"
+      }
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 130,
+      "l": "LB"
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Media API",
+      "no": "Issues presigned URLs; like counts are Redis counters flushed in batch"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 520,
+      "y": 130,
+      "l": "Photos"
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 780,
+      "y": 0,
+      "l": "Thumbnail jobs"
+    },
+    {
+      "i": "thumb",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Thumbnailers"
+    },
+    {
+      "i": "meta",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 130,
+      "l": "Posts",
+      "c": {
+        "partitionKey": "user_id",
+        "sortKey": "created_at"
+      }
+    },
+    {
+      "i": "feed",
+      "t": "cache",
+      "x": 780,
+      "y": 260,
+      "l": "Feed cache",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "7d",
+        "cluster": true
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "cdn",
+      "d": "s3",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "client",
+      "d": "s3",
+      "o": "w",
+      "l": "presigned PUT",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "lb",
+      "d": "api",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "api",
+      "d": "meta",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "api",
+      "d": "feed",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "api",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "q",
+      "d": "thumb",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "thumb",
+      "d": "s3",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/uploads",
+      "auth": true,
+      "response": "{ uploadUrl, postId }"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "api",
+      "method": "GET",
+      "path": "/v1/feed",
+      "auth": true,
+      "pagination": "cursor"
+    }
+  ],
+  "entities": []
+}

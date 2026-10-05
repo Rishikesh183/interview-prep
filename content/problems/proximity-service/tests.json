@@ -1,0 +1,105 @@
+[
+  {
+    "id": "geo-index",
+    "title": "A spatial index answers radius queries",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "geo_index"
+        },
+        {
+          "textMentions": {
+            "pattern": "geohash|quadtree|s2|h3|r-?tree|postgis"
+          }
+        }
+      ]
+    },
+    "failHint": "A query on lat AND lng ranges can't use one index well. What can?"
+  },
+  {
+    "id": "business-store",
+    "title": "Business data is stored in a database",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do business details live?"
+  },
+  {
+    "id": "read-scale",
+    "title": "Reads scale via replicas or caching",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "nodeConfig": {
+            "type": "sql_db",
+            "where": {
+              "readReplicas": true
+            }
+          }
+        },
+        {
+          "hasNode": "cache"
+        }
+      ]
+    },
+    "failHint": "Searches outnumber edits massively. How do reads scale?"
+  },
+  {
+    "id": "search-api",
+    "title": "A nearby-search API with pagination",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "search|nearby",
+        "method": "GET",
+        "pagination": ["cursor", "offset"]
+      }
+    },
+    "failHint": "What does the app call to find places near a point?"
+  },
+  {
+    "id": "boundaries",
+    "title": "Neighbouring cells / boundaries are handled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "neighbo|boundar|adjacent|expand"
+      }
+    },
+    "failHint": "The user stands at the edge of a grid cell. Which cells do you search?"
+  },
+  {
+    "id": "updates",
+    "title": "Index updates are batched or async",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "nightly|batch|rebuild|async|next day"
+      }
+    },
+    "failHint": "How quickly must an owner's edit show up, and how does it get into the index?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

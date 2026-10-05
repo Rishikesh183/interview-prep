@@ -1,0 +1,40 @@
+{
+  "id": "top-k-trending",
+  "number": 28,
+  "title": "Top-K Trending",
+  "difficulty": "hard",
+  "tags": ["heavy-hitters", "count-min-sketch"],
+  "prompt": "Design a service that shows the top 100 trending hashtags/videos over the last 1 hour, 1 day and 1 week, updated every minute, from a stream of billions of events/day.",
+  "functionalReqs": [
+    "Ingest view/mention events",
+    "Return top-K for several time windows",
+    "Results update about every minute"
+  ],
+  "nonFunctionalReqs": [
+    "Approximate counts are OK for the 1-hour view",
+    "Query latency < 50 ms",
+    "Scales with event volume"
+  ],
+  "scale": {
+    "qps": "~100K events/s",
+    "storage": "~100M distinct items/day"
+  },
+  "outOfScope": ["Personalized trends", "Spam detection"],
+  "keyComponents": ["event_stream", "stream_processor", "cache", "batch_processor", "service"],
+  "deepDives": [
+    "Count-min sketch + heap",
+    "Sliding windows",
+    "Merging partial top-K",
+    "Lambda architecture for exact daily counts"
+  ],
+  "rubricFocus": [
+    "Streaming aggregation",
+    "Approximate algorithms",
+    "Precomputed results for reads"
+  ],
+  "prerequisites": [
+    "message-queues-vs-streams",
+    "caching-strategies",
+    "back-of-envelope-estimation"
+  ]
+}

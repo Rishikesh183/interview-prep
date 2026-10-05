@@ -1,0 +1,5 @@
+[
+  "hash(key) % N reshuffles almost everything when N changes.",
+  "One celebrity key can overload a single node. Options?",
+  "Who knows which nodes are alive?"
+]

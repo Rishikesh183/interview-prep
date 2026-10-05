@@ -1,0 +1,114 @@
+[
+  {
+    "id": "partitioning",
+    "title": "Keys are partitioned with consistent hashing",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "consistent.?hash|hash.?ring|virtual.?node|vnode"
+      }
+    },
+    "failHint": "Which node owns a key, and what moves when a node joins?"
+  },
+  {
+    "id": "replication",
+    "title": "Each key is replicated to N nodes",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "replica|replicat"
+      }
+    },
+    "failHint": "A node dies. Is its data gone?"
+  },
+  {
+    "id": "quorum",
+    "title": "Reads/writes use tunable quorums",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "quorum|\\bR\\s*\\+\\s*W|N/R/W"
+      }
+    },
+    "failHint": "With 3 copies, how many must answer a read or a write?"
+  },
+  {
+    "id": "conflicts",
+    "title": "Conflicting versions are resolved",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "vector clock|last.?write|lww|sibling|version"
+      }
+    },
+    "failHint": "Two replicas hold different values for a key. Which one wins?"
+  },
+  {
+    "id": "membership",
+    "title": "Membership and failure detection (gossip)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "gossip"
+          }
+        },
+        {
+          "hasNode": "coordination"
+        }
+      ]
+    },
+    "failHint": "How do nodes learn that another node is down?"
+  },
+  {
+    "id": "repair",
+    "title": "Replicas repair divergence (hinted handoff / read repair / Merkle)",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "hinted|read.?repair|merkle|anti.?entropy"
+      }
+    },
+    "failHint": "A replica missed some writes while it was down. How does it catch up?"
+  },
+  {
+    "id": "storage-nodes",
+    "title": "Storage nodes exist",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": ["nosql_kv", "wide_column"]
+    },
+    "failHint": "Where are the key-value pairs physically stored?"
+  },
+  {
+    "id": "api",
+    "title": "get/put APIs exist",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "apiMatch": {
+            "path": ".",
+            "method": "GET"
+          }
+        },
+        {
+          "apiMatch": {
+            "path": ".",
+            "method": ["PUT", "POST"]
+          }
+        }
+      ]
+    },
+    "failHint": "How do clients read and write a key?"
+  }
+]

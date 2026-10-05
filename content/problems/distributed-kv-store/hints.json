@@ -1,0 +1,5 @@
+[
+  "How is the key space split and rebalanced?",
+  "With N replicas, how many must answer a read or write?",
+  "Two replicas have different values for a key. Which one wins?"
+]

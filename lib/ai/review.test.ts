@@ -161,9 +161,11 @@ describe("reviewAttempt", () => {
   it("sends the design, hidden requirements, lint and test results to the model", async () => {
     const { impl, calls } = fakeFetch(goodReview);
     await reviewAttempt(problem, weakUrlShortener(), { config, fetchImpl: impl });
-    const user = (calls[0].body.messages as { content: string }[])[1].content;
+    const [system, user] = (calls[0].body.messages as { content: string }[]).map((m) => m.content);
     expect(user).toContain('n4 sql_db "Postgres"');
-    expect(user).toContain("REFERENCE REQUIREMENTS");
+    // Problem content is part of the cacheable prefix, before the design.
+    expect(system).toContain("REFERENCE REQUIREMENTS");
+    expect(user).not.toContain("REFERENCE REQUIREMENTS");
     expect(user).toMatch(
       /\[warn\] Your requirements ask for high availability but Postgres \(n4\)/,
     );

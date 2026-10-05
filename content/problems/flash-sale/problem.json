@@ -1,0 +1,33 @@
+{
+  "id": "flash-sale",
+  "number": 19,
+  "title": "E-commerce Flash Sale",
+  "difficulty": "medium",
+  "tags": ["inventory-contention", "queue-buffering"],
+  "prompt": "Design the backend for a flash sale: 10,000 units of a product go on sale at noon and millions of users try to buy at the same second.",
+  "functionalReqs": [
+    "Users attempt to buy during the sale window",
+    "Exactly 10,000 units sold, never more",
+    "Users learn quickly whether they got one",
+    "Unpaid orders release stock after a timeout"
+  ],
+  "nonFunctionalReqs": [
+    "Survive ~1M requests/s at the start",
+    "No overselling",
+    "Rest of the site stays up"
+  ],
+  "scale": {
+    "qps": "~1M req/s peak for ~1 minute",
+    "dau": "~5M participants"
+  },
+  "outOfScope": ["Recommendation", "Fraud ML models"],
+  "keyComponents": ["cdn", "rate_limiter", "cache", "message_queue", "worker", "sql_db"],
+  "deepDives": [
+    "Atomic stock decrement in Redis",
+    "Queue buffering of orders",
+    "Static page + CDN for the sale page",
+    "Payment timeout and stock release"
+  ],
+  "rubricFocus": ["Early rejection", "Atomic inventory", "Async order processing"],
+  "prerequisites": ["rate-limiting-algorithms", "message-queues-vs-streams", "cdn"]
+}

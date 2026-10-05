@@ -1,0 +1,5 @@
+[
+  "Twitter Snowflake packs timestamp + machine ID + sequence into 64 bits.",
+  "What happens if a machine's clock jumps backwards?",
+  "How does each generator get a unique machine ID?"
+]

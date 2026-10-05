@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "l": "API gateway"
+    },
+    {
+      "i": "auth",
+      "t": "auth_service",
+      "x": 520,
+      "y": 0,
+      "l": "Auth (JWT)"
+    },
+    {
+      "i": "s",
+      "t": "service",
+      "x": 520,
+      "y": 120,
+      "l": "Service"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "auth",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "gw",
+      "d": "s",
+      "h": "r>l"
+    }
+  ]
+}

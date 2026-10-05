@@ -1,0 +1,5 @@
+[
+  "Recipients may be connected to a different WebSocket server than the sender. How does the message get there?",
+  "Messages are write-heavy and read by conversation + time. Which store fits that access pattern?",
+  "Ordering per conversation: who assigns the sequence?"
+]

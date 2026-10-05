@@ -1,0 +1,103 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "no": "Auth + rate limiting on create"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "URL Service",
+      "no": "hash(longUrl) → base62, take 7 chars; retry with salt on collision; 301 for permanent links"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Redis",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "12h"
+      }
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 130,
+      "l": "Postgres",
+      "c": {
+        "replicas": 3,
+        "readReplicas": true
+      },
+      "no": "UNIQUE(code) catches collisions"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "cache",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/shorten",
+      "auth": true,
+      "idempotent": true,
+      "statusCodes": "201, 400"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/:code",
+      "auth": false,
+      "statusCodes": "301, 404"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Link",
+      "fields": "code PK, original_url, created_at"
+    }
+  ]
+}

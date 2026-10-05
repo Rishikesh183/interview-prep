@@ -1,0 +1,164 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Checkout"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0
+    },
+    {
+      "i": "pay",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Payment Service",
+      "no": "Idempotency key → payment row; retries return stored result"
+    },
+    {
+      "i": "ledger",
+      "t": "sql_db",
+      "x": 780,
+      "y": 0,
+      "l": "Ledger DB",
+      "c": {
+        "replicas": 3,
+        "isolation": "serializable"
+      },
+      "no": "Append-only double-entry ledger; immutable, audit trail"
+    },
+    {
+      "i": "psp",
+      "t": "external_service",
+      "x": 780,
+      "y": 130,
+      "l": "PSP",
+      "c": {
+        "provider": "Stripe, Adyen"
+      }
+    },
+    {
+      "i": "webhooks",
+      "t": "message_queue",
+      "x": 1040,
+      "y": 0,
+      "l": "Webhook queue"
+    },
+    {
+      "i": "wh",
+      "t": "worker",
+      "x": 1300,
+      "y": 0,
+      "l": "Webhook processors",
+      "no": "Retry with backoff; idempotent status transitions"
+    },
+    {
+      "i": "recon",
+      "t": "batch_processor",
+      "x": 0,
+      "y": 130,
+      "l": "Reconciliation",
+      "no": "Reconcile ledger vs PSP settlement reports"
+    },
+    {
+      "i": "files",
+      "t": "object_storage",
+      "x": 260,
+      "y": 130,
+      "l": "Settlement files"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "pay",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "pay",
+      "d": "ledger",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "pay",
+      "d": "psp",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "psp",
+      "d": "webhooks",
+      "p": "HTTP",
+      "m": "a",
+      "l": "webhooks",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "webhooks",
+      "d": "wh",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "wh",
+      "d": "ledger",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "recon",
+      "d": "files",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "recon",
+      "d": "ledger",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "pay",
+      "method": "POST",
+      "path": "/v1/payments",
+      "auth": true,
+      "idempotent": true,
+      "request": "{ orderId, amount, currency, idempotencyKey }",
+      "statusCodes": "201, 402, 409"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Payment",
+      "fields": "id, idempotency_key UNIQUE, order_id, amount, status, psp_ref"
+    },
+    {
+      "name": "LedgerEntry",
+      "fields": "id, txn_id, account_id, debit, credit, created_at (append-only)"
+    }
+  ]
+}

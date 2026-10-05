@@ -1,0 +1,130 @@
+[
+  {
+    "id": "realtime",
+    "title": "Clients hold persistent connections for real-time delivery",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "websocket_server"
+    },
+    "failHint": "How does a message reach the recipient without them polling?"
+  },
+  {
+    "id": "cross-node",
+    "title": "Messages can reach users connected to a different WebSocket node",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "edgeExists": {
+            "from": "websocket_server",
+            "to": "@queue"
+          }
+        },
+        {
+          "edgeExists": {
+            "from": "@queue",
+            "to": "websocket_server"
+          }
+        }
+      ]
+    },
+    "failHint": "Sender and recipient are connected to different servers. How does the message hop across?"
+  },
+  {
+    "id": "message-store",
+    "title": "Messages are persisted",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "websocket_server",
+        "to": "@database"
+      }
+    },
+    "failHint": "Where do messages live after delivery, so history survives?"
+  },
+  {
+    "id": "offline",
+    "title": "Offline users get messages later (and a push notification)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "notification_service"
+        },
+        {
+          "textMentions": {
+            "pattern": "offline|push notif|apns|fcm"
+          }
+        }
+      ]
+    },
+    "failHint": "The recipient's phone is off. What happens to the message?"
+  },
+  {
+    "id": "ordering",
+    "title": "Per-conversation ordering is addressed",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "order|sequence|monotonic|snowflake"
+      }
+    },
+    "failHint": "Two messages are sent almost together. How do both phones show them in the same order?"
+  },
+  {
+    "id": "presence",
+    "title": "Presence / last seen is handled",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "presence|online|heartbeat|last.?seen"
+      }
+    },
+    "failHint": "How does the app know someone is online or when they were last seen?"
+  },
+  {
+    "id": "receipts",
+    "title": "Delivery and read receipts are handled",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "receipt|delivered|ack"
+      }
+    },
+    "failHint": "How does the sender learn a message was delivered and read?"
+  },
+  {
+    "id": "history-api",
+    "title": "Message history is fetched with cursor pagination",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "message|history|conversation|chat",
+        "method": "GET",
+        "pagination": "cursor"
+      }
+    },
+    "failHint": "How does a phone load older messages, a page at a time?"
+  },
+  {
+    "id": "ws-entry",
+    "title": "WebSocket servers sit behind a load balancer",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "upstreamOf": {
+        "target": "websocket_server",
+        "anyType": "@entry"
+      }
+    },
+    "failHint": "What sits in front of your WebSocket servers to spread connections?"
+  }
+]

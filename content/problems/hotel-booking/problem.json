@@ -1,0 +1,41 @@
+{
+  "id": "hotel-booking",
+  "number": 16,
+  "title": "Hotel Booking (Airbnb)",
+  "difficulty": "medium",
+  "tags": ["inventory", "reservations", "search"],
+  "prompt": "Design a hotel/home reservation system like Airbnb or Booking.com: guests search listings by location and dates, see availability and price, and book.",
+  "functionalReqs": [
+    "Search listings by location, dates, guests",
+    "View listing details and availability",
+    "Reserve and pay",
+    "Hosts manage listings and calendars"
+  ],
+  "nonFunctionalReqs": [
+    "No overbooking",
+    "Search < 500 ms",
+    "Availability updates reflected within seconds"
+  ],
+  "scale": {
+    "dau": "~20M DAU",
+    "qps": "~20K searches/s peak, ~500 bookings/s peak",
+    "storage": "~10M listings × 365 days inventory"
+  },
+  "outOfScope": ["Reviews", "Messaging between guest and host"],
+  "keyComponents": [
+    "service",
+    "search_index",
+    "sql_db",
+    "cache",
+    "external_service",
+    "message_queue"
+  ],
+  "deepDives": [
+    "Inventory model per date",
+    "Search index sync (CDC)",
+    "Reservation concurrency",
+    "Payments and idempotency"
+  ],
+  "rubricFocus": ["Inventory modelling", "Overbooking prevention", "Search architecture"],
+  "prerequisites": ["search-indexes", "consistency-models", "idempotency"]
+}

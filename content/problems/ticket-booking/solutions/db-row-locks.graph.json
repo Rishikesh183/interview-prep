@@ -1,0 +1,138 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Web"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "l": "Gateway"
+    },
+    {
+      "i": "wr",
+      "t": "message_queue",
+      "x": 520,
+      "y": 0,
+      "l": "Waiting room queue",
+      "c": {
+        "fifo": true
+      },
+      "no": "Virtual queue admits users in batches"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 780,
+      "y": 0,
+      "l": "Booking Service",
+      "no": "SELECT ... FOR UPDATE; status=HELD, held_until=now+10m"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 1040,
+      "y": 0,
+      "l": "Seats DB",
+      "c": {
+        "isolation": "repeatable-read"
+      }
+    },
+    {
+      "i": "sweeper",
+      "t": "scheduler",
+      "x": 0,
+      "y": 130,
+      "l": "Hold sweeper",
+      "c": {
+        "cron": "* * * * *"
+      },
+      "no": "Release expired holds"
+    },
+    {
+      "i": "pay",
+      "t": "external_service",
+      "x": 1040,
+      "y": 130,
+      "l": "PSP"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "wr",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "wr",
+      "d": "svc",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "gw",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "sweeper",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "svc",
+      "d": "pay",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/seats/hold",
+      "auth": true,
+      "idempotent": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/bookings/{holdId}/confirm",
+      "auth": true,
+      "idempotent": true
+    }
+  ],
+  "entities": [
+    {
+      "name": "Seat",
+      "fields": "show_id, seat_id, status, held_by, held_until, version"
+    }
+  ]
+}

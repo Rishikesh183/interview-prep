@@ -1,0 +1,111 @@
+[
+  {
+    "id": "blob-store",
+    "title": "Paste bodies live in object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Is a database row the best home for a multi-megabyte text body?"
+  },
+  {
+    "id": "metadata-store",
+    "title": "Paste metadata is stored in a database",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do the small facts about a paste (key, size, expiry) live?"
+  },
+  {
+    "id": "expiry",
+    "title": "Expired pastes are cleaned up",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "scheduler"
+        },
+        {
+          "textMentions": {
+            "pattern": "ttl|expir|lifecycle"
+          }
+        }
+      ]
+    },
+    "failHint": "What actually removes a paste once its expiry time passes?"
+  },
+  {
+    "id": "hot-reads",
+    "title": "Hot pastes are served from a cache or CDN",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "cdn"
+        },
+        {
+          "hasNode": "cache"
+        }
+      ]
+    },
+    "failHint": "A viral paste is read millions of times. What stops each read hitting storage?"
+  },
+  {
+    "id": "create-api",
+    "title": "An API creates pastes",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "paste",
+        "method": "POST"
+      }
+    },
+    "failHint": "Which endpoint creates a paste?"
+  },
+  {
+    "id": "read-api",
+    "title": "A GET endpoint reads a paste by key",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "\\{[^}]+\\}|/:\\w+",
+        "method": "GET"
+      }
+    },
+    "failHint": "How does a reader fetch one specific paste?"
+  },
+  {
+    "id": "paste-entity",
+    "title": "The data model records expiry",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "expir|ttl",
+        "in": ["entities"]
+      }
+    },
+    "failHint": "How does the data model know when a paste should disappear?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

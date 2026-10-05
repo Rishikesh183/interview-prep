@@ -11,7 +11,7 @@ import type {
   Problem,
   Requirements,
 } from "@/lib/schema";
-import { TYPE_ALIASES } from "@/lib/tests/aliases";
+import { GROUPS } from "@/lib/catalog/groups";
 
 export type LintContext = {
   graph: Graph;
@@ -32,10 +32,11 @@ export type Rule = {
 };
 
 const set = (...lists: (readonly string[])[]) => new Set(lists.flat());
-const CLIENTS = set(TYPE_ALIASES.client);
-const QUEUES = set(TYPE_ALIASES.queue);
-const DATABASES = set(TYPE_ALIASES.db);
-const DIRECT_STORES = set(TYPE_ALIASES.db, ["cache", "search_index", "data_warehouse"]);
+const CLIENTS = set(GROUPS["@client"]);
+const QUEUES = set(GROUPS["@queue"]);
+/** Every kind of database (writes land here), not blob stores or indexes. */
+const DATABASES = set(GROUPS["@database"], ["graph_db", "time_series_db", "vector_db"]);
+const DIRECT_STORES = set([...DATABASES], ["cache", "search_index", "data_warehouse"]);
 const CONSUMERS = set([
   "worker",
   "stream_processor",
@@ -44,7 +45,7 @@ const CONSUMERS = set([
   "websocket_server",
   "batch_processor",
 ]);
-const ENTRY = set(TYPE_ALIASES.entry);
+const ENTRY = set(GROUPS["@entry"]);
 const CROSS_CUTTING = set(["monitoring", "service_discovery"]);
 
 const label = (n: GraphNode) => `${n.data.label || getComponent(n.type)?.label} (${n.id})`;

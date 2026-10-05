@@ -1,0 +1,168 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "app",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients",
+      "no": "Resumable multipart uploads; DASH player with adaptive bitrate"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Video Service"
+    },
+    {
+      "i": "s3in",
+      "t": "object_storage",
+      "x": 260,
+      "y": 130,
+      "l": "Uploads bucket"
+    },
+    {
+      "i": "events",
+      "t": "message_queue",
+      "x": 520,
+      "y": 130,
+      "l": "Upload events"
+    },
+    {
+      "i": "fn",
+      "t": "serverless_fn",
+      "x": 780,
+      "y": 0,
+      "l": "Encode functions",
+      "c": {
+        "trigger": "queue"
+      },
+      "no": "Split + encode chunks into DASH renditions"
+    },
+    {
+      "i": "s3out",
+      "t": "object_storage",
+      "x": 1040,
+      "y": 0,
+      "l": "Encoded bucket"
+    },
+    {
+      "i": "meta",
+      "t": "nosql_kv",
+      "x": 1040,
+      "y": 130,
+      "l": "Video metadata",
+      "c": {
+        "partitionKey": "video_id"
+      }
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 260,
+      "c": {
+        "content": ["media"]
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "app",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "api",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "api",
+      "d": "meta",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "app",
+      "d": "s3in",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "s3in",
+      "d": "events",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "events",
+      "d": "fn",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "fn",
+      "d": "s3out",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "fn",
+      "d": "meta",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "app",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "cdn",
+      "d": "s3out",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/uploads",
+      "auth": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "api",
+      "method": "GET",
+      "path": "/v1/watch/{videoId}",
+      "auth": false
+    }
+  ],
+  "entities": [
+    {
+      "name": "Video",
+      "fields": "video_id, title, status, manifest_url"
+    }
+  ]
+}

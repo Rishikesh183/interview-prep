@@ -1,0 +1,123 @@
+[
+  {
+    "id": "blob",
+    "title": "Raw and transcoded videos live in object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Where do raw uploads and transcoded renditions live?"
+  },
+  {
+    "id": "cdn",
+    "title": "Viewers stream through a CDN",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": "cdn"
+      }
+    },
+    "failHint": "A billion viewers can't all stream from your origin. What's in between?"
+  },
+  {
+    "id": "async-transcode",
+    "title": "Transcoding runs asynchronously behind a queue",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "@queue",
+            "mode": "async"
+          }
+        },
+        {
+          "pathExists": {
+            "from": "@queue",
+            "to": ["worker", "serverless_fn", "batch_processor"]
+          }
+        }
+      ]
+    },
+    "failHint": "Transcoding a 2-hour 4K video takes a long time. Should the upload wait?"
+  },
+  {
+    "id": "abr",
+    "title": "Adaptive bitrate streaming (HLS/DASH, multiple renditions)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "adaptive|abr|hls|dash|bitrate|rendition"
+      }
+    },
+    "failHint": "The viewer's network gets worse mid-video. What should the player do?"
+  },
+  {
+    "id": "metadata",
+    "title": "Video metadata is stored in a database",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do titles, owners and processing status live?"
+  },
+  {
+    "id": "resumable",
+    "title": "Large uploads are resumable / direct to storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "presign|resum|chunk|multipart"
+      }
+    },
+    "failHint": "A 5 GB upload drops at 80%. What happens?"
+  },
+  {
+    "id": "upload-api",
+    "title": "An API initiates uploads",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "video|upload",
+        "method": ["POST", "PUT"]
+      }
+    },
+    "failHint": "Which endpoint starts an upload?"
+  },
+  {
+    "id": "watch-api",
+    "title": "An API returns playback info / manifest",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "video|watch|manifest|play",
+        "method": "GET"
+      }
+    },
+    "failHint": "What does the player call to start watching?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

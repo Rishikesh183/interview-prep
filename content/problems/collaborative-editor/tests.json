@@ -1,0 +1,120 @@
+[
+  {
+    "id": "realtime",
+    "title": "Editors connect over WebSockets",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "websocket_server"
+    },
+    "failHint": "How do edits reach other editors within 100 ms?"
+  },
+  {
+    "id": "algorithm",
+    "title": "Concurrent edits converge via OT or CRDT",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "\\bot\\b|operational transform|crdt|yjs|automerge"
+      }
+    },
+    "failHint": "Two people type at the same spot at the same time. How do both screens agree?"
+  },
+  {
+    "id": "op-log",
+    "title": "Operations are logged durably",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "op|operation|change",
+            "in": ["entities"]
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "op.?log|operation log|event log"
+          }
+        }
+      ]
+    },
+    "failHint": "Where is every edit recorded?"
+  },
+  {
+    "id": "snapshots",
+    "title": "Periodic snapshots speed up loading",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "snapshot|checkpoint|compact"
+      }
+    },
+    "failHint": "Opening a document by replaying a million edits is slow. What shortcut helps?"
+  },
+  {
+    "id": "doc-routing",
+    "title": "Editors of a document share a session (sticky routing or pub/sub)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "nodeConfig": {
+            "type": "load_balancer",
+            "where": {
+              "algorithm": "consistent-hash"
+            }
+          }
+        },
+        {
+          "hasNode": "pub_sub"
+        },
+        {
+          "textMentions": {
+            "pattern": "sticky|route by doc|session server"
+          }
+        }
+      ]
+    },
+    "failHint": "How do all editors of one document see the same stream of changes?"
+  },
+  {
+    "id": "presence",
+    "title": "Cursors / presence are shown",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "cursor|presence"
+      }
+    },
+    "failHint": "How do you see where others are typing?"
+  },
+  {
+    "id": "storage",
+    "title": "Documents are persisted",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@storage"
+    },
+    "failHint": "Where does the document live?"
+  },
+  {
+    "id": "ws-entry",
+    "title": "WebSocket servers sit behind a load balancer",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "upstreamOf": {
+        "target": "websocket_server",
+        "anyType": "@entry"
+      }
+    },
+    "failHint": "What sits in front of your WebSocket servers?"
+  }
+]

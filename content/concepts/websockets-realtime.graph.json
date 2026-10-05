@@ -1,0 +1,61 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Phones"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "L4 LB"
+    },
+    {
+      "i": "ws",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "WebSocket servers"
+    },
+    {
+      "i": "ps",
+      "t": "pub_sub",
+      "x": 780,
+      "y": 0,
+      "l": "Pub/sub"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "ws",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "ws",
+      "d": "ps",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "ps",
+      "d": "ws",
+      "m": "a",
+      "h": "r>l"
+    }
+  ]
+}

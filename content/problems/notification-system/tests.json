@@ -1,0 +1,150 @@
+[
+  {
+    "id": "async",
+    "title": "Sending is decoupled from the API with a queue",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "edgeExists": {
+        "from": "*",
+        "to": "@queue",
+        "mode": "async"
+      }
+    },
+    "failHint": "Should the caller wait while an SMS is actually delivered?"
+  },
+  {
+    "id": "per-channel",
+    "title": "Each channel has its own queue/topic so slow providers are isolated",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "message_queue",
+          "min": 2
+        },
+        {
+          "hasNode": "event_stream",
+          "min": 2
+        },
+        {
+          "textMentions": {
+            "pattern": "per.?channel|topic per|queue per"
+          }
+        }
+      ]
+    },
+    "failHint": "SMS is slow today. Should push notifications wait behind it?"
+  },
+  {
+    "id": "workers",
+    "title": "Workers consume from the queues",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@queue",
+        "to": "worker"
+      }
+    },
+    "failHint": "What picks up queued notifications and sends them?"
+  },
+  {
+    "id": "providers",
+    "title": "External providers (APNs, FCM, SES, Twilio) are integrated",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "worker",
+        "to": "external_service"
+      }
+    },
+    "failHint": "Who actually delivers the push, email and SMS?"
+  },
+  {
+    "id": "retries",
+    "title": "Failures are retried with backoff and dead-lettered",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "retr|backoff|dead.?letter|dlq"
+      }
+    },
+    "failHint": "The provider returns 500. What happens next, and after five failures?"
+  },
+  {
+    "id": "preferences",
+    "title": "User preferences / opt-outs are checked",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "pref|setting|subscription",
+            "in": ["entities"]
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "preference|opt.?out|unsubscribe"
+          }
+        }
+      ]
+    },
+    "failHint": "A user turned off email. Where is that checked?"
+  },
+  {
+    "id": "dedup",
+    "title": "Duplicate sends are prevented",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "apiMatch": {
+            "path": ".",
+            "method": "POST",
+            "idempotent": true
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "idempot|dedup"
+          }
+        }
+      ]
+    },
+    "failHint": "The caller times out and retries. How do you avoid sending twice?"
+  },
+  {
+    "id": "send-api",
+    "title": "An API accepts notification requests",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "notif|send|message",
+        "method": "POST"
+      }
+    },
+    "failHint": "How do other services ask you to send a notification?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

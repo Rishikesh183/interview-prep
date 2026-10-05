@@ -1,0 +1,133 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Browser"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB",
+      "c": {
+        "algorithm": "least-conn"
+      }
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "URL Service",
+      "c": {
+        "instancesMin": 3,
+        "instancesMax": 20
+      },
+      "no": "Base62-encodes IDs; returns 302 so we can add analytics later"
+    },
+    {
+      "i": "idgen",
+      "t": "id_generator",
+      "x": 780,
+      "y": 0,
+      "c": {
+        "strategy": "base62-counter"
+      },
+      "no": "Hands out ID ranges of 1000 per server"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 780,
+      "y": 130,
+      "l": "Redis",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "24h",
+        "cluster": true
+      },
+      "no": "Hot mappings, ~20% of daily reads"
+    },
+    {
+      "i": "db",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 260,
+      "l": "URL Store",
+      "c": {
+        "partitionKey": "code"
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "idgen",
+      "o": "r",
+      "l": "get ID range",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "cache",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "db",
+      "o": "rw",
+      "l": "insert / lookup mapping",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/urls",
+      "auth": true,
+      "request": "{ longUrl, alias?, expiresAt? }",
+      "response": "{ code, shortUrl }",
+      "statusCodes": "201, 400, 409",
+      "idempotent": false,
+      "rateLimited": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/{code}",
+      "auth": false,
+      "response": "302 Location: longUrl",
+      "statusCodes": "302, 404, 410"
+    }
+  ],
+  "entities": [
+    {
+      "name": "UrlMapping",
+      "fields": "code (PK), long_url, created_at, expires_at, owner_id"
+    }
+  ]
+}

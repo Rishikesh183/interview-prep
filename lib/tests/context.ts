@@ -3,18 +3,12 @@ import { runTests, type DesignContext } from "./engine";
 
 /** What the tests see from an attempt: the design plus the user's written reasoning. */
 export function designContext(attempt: Attempt): DesignContext {
-  const r = attempt.requirements;
   return {
     graph: attempt.graph,
     apis: attempt.apis,
     entities: attempt.entities,
-    extraText: [
-      ...r.functional,
-      ...r.nonFunctional,
-      ...r.outOfScope,
-      ...r.questions,
-      attempt.estimation.notes,
-    ],
+    requirements: attempt.requirements,
+    estimation: attempt.estimation,
   };
 }
 

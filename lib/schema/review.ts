@@ -72,6 +72,10 @@ export const AiReviewSchema = z.object({
   createdAt: z.number(),
   /** Hash of the serialized design; an unchanged design reuses the saved review. */
   designHash: z.string(),
+  /** "deep" = DEEP_REVIEW_MODEL. */
+  tier: z.enum(["standard", "deep"]).default("standard"),
+  /** Served from the review cache (no model call). */
+  cached: z.boolean().optional(),
 });
 export type AiReview = z.infer<typeof AiReviewSchema>;
 

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "frontier",
+    "title": "A URL frontier queue feeds fetchers",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@queue",
+        "to": "worker"
+      }
+    },
+    "failHint": "What decides which URL gets fetched next?"
+  },
+  {
+    "id": "workers",
+    "title": "Fetching is distributed across workers",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "worker"
+    },
+    "failHint": "One machine can't fetch 400 pages a second. Who shares the work?"
+  },
+  {
+    "id": "content-store",
+    "title": "Raw pages go to object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Where do billions of raw pages get stored?"
+  },
+  {
+    "id": "politeness",
+    "title": "Per-host politeness and robots.txt are respected",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "politeness|robots|per.?host|crawl.?delay"
+      }
+    },
+    "failHint": "A thousand workers all hit the same small website. What stops that?"
+  },
+  {
+    "id": "dedup",
+    "title": "Duplicate URLs / content are detected",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "bloom|dedup|fingerprint|checksum|simhash|seen"
+      }
+    },
+    "failHint": "How do you know you've already seen this URL, or this exact page?"
+  },
+  {
+    "id": "url-store",
+    "title": "Seen URLs / crawl state are stored",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where is crawl state (seen URLs, last fetch time) kept?"
+  },
+  {
+    "id": "dns",
+    "title": "DNS resolution is cached",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "dns"
+        },
+        {
+          "textMentions": {
+            "pattern": "dns"
+          }
+        }
+      ]
+    },
+    "failHint": "Each fetch needs a DNS lookup. Can you avoid repeating them?"
+  },
+  {
+    "id": "recrawl",
+    "title": "Re-crawl scheduling exists",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "scheduler"
+        },
+        {
+          "textMentions": {
+            "pattern": "re.?crawl|freshness|priority"
+          }
+        }
+      ]
+    },
+    "failHint": "Pages change. How does a page get crawled again?"
+  }
+]

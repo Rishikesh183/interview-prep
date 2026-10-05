@@ -1,0 +1,5 @@
+[
+  "Most requests will fail. Reject them as early and cheaply as possible.",
+  "Decrementing a DB row 1M times/s is a hot spot.",
+  "Accept fast, process orders asynchronously."
+]

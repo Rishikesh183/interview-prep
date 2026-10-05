@@ -1,0 +1,86 @@
+[
+  {
+    "id": "sorted-set",
+    "title": "Ranks come from a sorted structure (e.g. Redis ZSET)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "sorted.?set|zset|zadd|zincrby|zrevrank|skip.?list"
+      }
+    },
+    "failHint": "What data structure gives you someone's rank without scanning everyone?"
+  },
+  {
+    "id": "cache",
+    "title": "Leaderboards are served from memory",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "cache"
+    },
+    "failHint": "Where should rankings live so reads are fast?"
+  },
+  {
+    "id": "durable",
+    "title": "Scores are persisted durably",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "If the in-memory store is wiped, how do you rebuild the leaderboard?"
+  },
+  {
+    "id": "top-api",
+    "title": "An API returns the top players",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "top|leaderboard|rank",
+        "method": "GET"
+      }
+    },
+    "failHint": "How does the game ask for the top 100?"
+  },
+  {
+    "id": "score-api",
+    "title": "An API updates scores",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "score",
+        "method": ["POST", "PUT", "PATCH"]
+      }
+    },
+    "failHint": "How does a finished match report a new score?"
+  },
+  {
+    "id": "sharding",
+    "title": "Scaling past one node is addressed",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "shard|partition|bucket"
+      }
+    },
+    "failHint": "What happens when one structure holds 100M players?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

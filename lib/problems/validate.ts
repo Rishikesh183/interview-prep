@@ -1,107 +1,93 @@
 import { CATALOG } from "@/lib/catalog/components";
-import { ProblemSchema, type Problem, type TestCheck, type TypeList } from "@/lib/schema";
-import { aliasNames } from "@/lib/tests/aliases";
+import { isGroupOrWildcard } from "@/lib/catalog/groups";
+import { CONCEPT_SLUGS } from "@/lib/content/concepts";
+import { assembleProblem, type RawProblemDir } from "@/lib/content/problemDir";
+import type { Check, Problem, TypeRefs } from "@/lib/schema";
 import { runTests } from "@/lib/tests/engine";
 
-export type ProblemFile = { file: string; json: unknown };
 export type ValidationResult = { problems: Problem[]; errors: string[] };
 
-const KNOWN_TYPES = new Set([...Object.keys(CATALOG), ...aliasNames()]);
+const list = (r: TypeRefs | undefined): string[] =>
+  r === undefined ? [] : Array.isArray(r) ? r : [r];
 
-function typeRefs(list: TypeList | undefined): string[] {
-  if (list === undefined) return [];
-  return Array.isArray(list) ? list : [list];
-}
-
-/** Every node type a check refers to, so typos are caught at build time. */
-function checkTypes(check: TestCheck): string[] {
-  if ("anyOf" in check) return check.anyOf.flatMap(checkTypes);
-  if ("allOf" in check) return check.allOf.flatMap(checkTypes);
-  if ("not" in check) return checkTypes(check.not);
-  if ("hasNode" in check) return typeRefs(check.hasNode);
-  if ("nodeConfig" in check) return typeRefs(check.nodeConfig.type);
-  if ("edgeMatch" in check)
-    return [...typeRefs(check.edgeMatch.from), ...typeRefs(check.edgeMatch.to)];
-  if ("pathExists" in check) {
-    const p = check.pathExists;
-    return [...typeRefs(p.from), ...typeRefs(p.to), ...(p.via ?? []).flatMap(typeRefs)];
-  }
-  if ("upstreamOf" in check) return [...typeRefs(check.upstreamOf), ...typeRefs(check.anyType)];
+/** Every node type / group a check names, so typos fail the build. */
+function checkTypes(c: Check): string[] {
+  if ("anyOf" in c) return c.anyOf.flatMap(checkTypes);
+  if ("allOf" in c) return c.allOf.flatMap(checkTypes);
+  if ("not" in c) return checkTypes(c.not);
+  if ("hasNode" in c) return list(c.hasNode);
+  if ("nodeConfig" in c) return list(c.nodeConfig.type);
+  if ("pathExists" in c)
+    return [...list(c.pathExists.from), ...list(c.pathExists.to), ...list(c.pathExists.via)];
+  if ("edgeExists" in c) return [...list(c.edgeExists.from), ...list(c.edgeExists.to)];
+  if ("upstreamOf" in c) return [...list(c.upstreamOf.target), ...list(c.upstreamOf.anyType)];
   return [];
 }
 
-function validateOne(problem: Problem, file: string): string[] {
+const knownType = (t: string) => Boolean(CATALOG[t]) || isGroupOrWildcard(t);
+
+function crossChecks(p: Problem, dir: string): string[] {
   const errors: string[] = [];
-  const at = (msg: string) => errors.push(`${file}: ${msg}`);
+  const at = (msg: string) => errors.push(`${dir}: ${msg}`);
 
-  if (`${problem.id}.json` !== file) at(`id "${problem.id}" must match the file name`);
-
-  for (const type of problem.keyComponents) {
-    if (!CATALOG[type]) at(`keyComponents: unknown node type "${type}"`);
+  if (p.id !== dir) at(`id "${p.id}" must match the folder name`);
+  for (const t of p.keyComponents) if (!CATALOG[t]) at(`keyComponents: unknown type "${t}"`);
+  for (const slug of p.prerequisites) {
+    if (!(CONCEPT_SLUGS as readonly string[]).includes(slug))
+      at(`prerequisites: unknown concept "${slug}"`);
   }
 
-  const testIds = new Set<string>();
-  for (const test of problem.tests) {
-    if (testIds.has(test.id)) at(`duplicate test id "${test.id}"`);
-    testIds.add(test.id);
-    for (const type of checkTypes(test.check)) {
-      if (!KNOWN_TYPES.has(type)) at(`test "${test.id}": unknown node type "${type}"`);
-    }
+  const ids = new Set<string>();
+  for (const t of p.tests) {
+    if (ids.has(t.id)) at(`duplicate test id "${t.id}"`);
+    ids.add(t.id);
+    for (const type of checkTypes(t.check))
+      if (!knownType(type)) at(`test "${t.id}": unknown type "${type}"`);
   }
+  if (p.tests.filter((t) => t.kind === "core").length < 4) at("needs at least 4 core tests");
 
-  for (const ref of problem.references) {
+  for (const ref of p.references) {
     if (!ref.graph) continue;
-    const ids = new Set(ref.graph.nodes.map((n) => n.id));
-    for (const n of ref.graph.nodes) {
-      if (!CATALOG[n.type]) at(`reference "${ref.id}": unknown node type "${n.type}"`);
-    }
+    const nodeIds = new Set(ref.graph.nodes.map((n) => n.id));
+    for (const n of ref.graph.nodes)
+      if (!CATALOG[n.type]) at(`solution "${ref.id}": unknown type "${n.type}"`);
     for (const e of ref.graph.edges) {
-      if (!ids.has(e.source) || !ids.has(e.target)) {
-        at(`reference "${ref.id}": edge ${e.id} points at a missing node`);
-      }
+      if (!nodeIds.has(e.source) || !nodeIds.has(e.target))
+        at(`solution "${ref.id}": edge ${e.id} is dangling`);
     }
-    for (const a of ref.apis) {
-      if (!ids.has(a.ownerNodeId)) at(`reference "${ref.id}": API ${a.id} has a missing owner`);
-    }
-    // Tests describe what a design achieves, so every reference approach must pass all of them.
-    const failed = runTests(problem.tests, {
-      graph: ref.graph,
-      apis: ref.apis,
-      entities: ref.entities,
-    }).filter((r) => !r.passed);
-    if (failed.length) {
-      at(`reference "${ref.id}" fails tests: ${failed.map((r) => r.id).join(", ")}`);
-    }
+    for (const a of ref.apis)
+      if (!nodeIds.has(a.ownerNodeId)) at(`solution "${ref.id}": API ${a.id} has no owner`);
+    // Tests describe what a design achieves, so every reference solution must pass all core tests.
+    const failed = runTests(p.tests, { graph: ref.graph, apis: ref.apis, entities: ref.entities })
+      .filter((r) => r.core && !r.passed)
+      .map((r) => r.id);
+    if (failed.length) at(`solution "${ref.id}" fails core tests: ${failed.join(", ")}`);
   }
   return errors;
 }
 
-export function validateProblems(files: ProblemFile[]): ValidationResult {
+/** Validates every problem folder: schemas, cross-references, and solutions against their tests. */
+export function validateContent(dirs: RawProblemDir[]): ValidationResult {
   const problems: Problem[] = [];
   const errors: string[] = [];
-  const seenIds = new Map<string, string>();
+  const seenIds = new Set<string>();
   const seenNumbers = new Map<number, string>();
 
-  for (const { file, json } of files) {
-    const parsed = ProblemSchema.safeParse(json);
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues.slice(0, 5)) {
-        errors.push(`${file}: ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-      }
+  for (const raw of dirs) {
+    const assembled = assembleProblem(raw);
+    if (!assembled.ok) {
+      errors.push(...assembled.errors);
       continue;
     }
-    const p = parsed.data;
-    if (seenIds.has(p.id))
-      errors.push(`${file}: duplicate id "${p.id}" (also in ${seenIds.get(p.id)})`);
-    if (seenNumbers.has(p.number)) {
-      errors.push(`${file}: duplicate number ${p.number} (also in ${seenNumbers.get(p.number)})`);
-    }
-    seenIds.set(p.id, file);
-    seenNumbers.set(p.number, file);
-    errors.push(...validateOne(p, file));
+    const p = assembled.value;
+    if (seenIds.has(p.id)) errors.push(`${raw.dir}: duplicate id "${p.id}"`);
+    const clash = seenNumbers.get(p.number);
+    if (clash) errors.push(`${raw.dir}: number ${p.number} is also used by ${clash}`);
+    seenIds.add(p.id);
+    seenNumbers.set(p.number, raw.dir);
+    errors.push(...crossChecks(p, raw.dir));
     problems.push(p);
   }
-
   problems.sort((a, b) => a.number - b.number);
   return { problems, errors };
 }

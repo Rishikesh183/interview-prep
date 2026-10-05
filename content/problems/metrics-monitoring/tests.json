@@ -1,0 +1,104 @@
+[
+  {
+    "id": "tsdb",
+    "title": "Metrics are stored in a time-series DB",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "time_series_db"
+    },
+    "failHint": "What kind of store is built for timestamped points at millions per second?"
+  },
+  {
+    "id": "ingest-buffer",
+    "title": "Ingestion is buffered through a stream/queue",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@queue",
+        "to": ["time_series_db", "stream_processor", "worker"]
+      }
+    },
+    "failHint": "A spike of writes hits. What stops the store from falling over?"
+  },
+  {
+    "id": "aggregation",
+    "title": "Metrics are aggregated / rolled up",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "stream_processor"
+        },
+        {
+          "hasNode": "batch_processor"
+        },
+        {
+          "textMentions": {
+            "pattern": "rollup|downsampl|aggregat"
+          }
+        }
+      ]
+    },
+    "failHint": "Dashboards show hourly averages for a year. Do you compute them from raw points?"
+  },
+  {
+    "id": "retention",
+    "title": "Retention / downsampling policy is defined",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "retention|downsampl|rollup|ttl"
+      }
+    },
+    "failHint": "Keeping every 10-second point forever is huge. What do you keep, and for how long?"
+  },
+  {
+    "id": "alerting",
+    "title": "Alerts notify on-call",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "notification_service"
+        },
+        {
+          "pathExists": {
+            "from": "*",
+            "to": "external_service"
+          }
+        }
+      ]
+    },
+    "failHint": "CPU stays at 99%. How does on-call get paged?"
+  },
+  {
+    "id": "collection",
+    "title": "Collection model (push agents or pull scraping) is chosen",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "push|pull|scrap|agent"
+      }
+    },
+    "failHint": "Do hosts push metrics to you, or do you pull them?"
+  },
+  {
+    "id": "query-api",
+    "title": "A query API returns series for a time range",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "query|metric|series",
+        "method": ["GET", "POST"]
+      }
+    },
+    "failHint": "How does a dashboard ask for a series over a time range?"
+  }
+]

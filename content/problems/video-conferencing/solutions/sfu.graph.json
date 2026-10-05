@@ -1,0 +1,195 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Participants",
+      "no": "Sends 3 simulcast layers; adapts to bandwidth"
+    },
+    {
+      "i": "dns",
+      "t": "dns",
+      "x": 260,
+      "y": 0,
+      "l": "Geo DNS",
+      "c": {
+        "geoRouting": true
+      },
+      "no": "Routes to the nearest region"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 130,
+      "l": "Signaling LB",
+      "c": {
+        "algorithm": "consistent-hash"
+      },
+      "no": "By meeting id"
+    },
+    {
+      "i": "sig",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "Signaling",
+      "c": {
+        "instances": 6
+      }
+    },
+    {
+      "i": "meet",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Meeting Service"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 0,
+      "l": "Meetings",
+      "c": {
+        "replicas": 2
+      }
+    },
+    {
+      "i": "mlb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 260,
+      "l": "Media LB",
+      "c": {
+        "layer": "L4"
+      }
+    },
+    {
+      "i": "sfu",
+      "t": "service",
+      "x": 520,
+      "y": 260,
+      "l": "Regional SFU",
+      "no": "Selective forwarding unit: forwards the right simulcast layer to each receiver (no mixing)"
+    },
+    {
+      "i": "turn",
+      "t": "external_service",
+      "x": 260,
+      "y": 390,
+      "l": "STUN/TURN",
+      "c": {
+        "provider": "coturn"
+      },
+      "no": "ICE / NAT traversal"
+    },
+    {
+      "i": "rec",
+      "t": "worker",
+      "x": 780,
+      "y": 130,
+      "l": "Recording bots"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 1040,
+      "y": 0,
+      "l": "Recordings"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "dns",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "client",
+      "d": "lb",
+      "p": "WebSocket",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "sig",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "meet",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "meet",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "client",
+      "d": "turn",
+      "p": "TCP",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "client",
+      "d": "mlb",
+      "p": "TCP",
+      "l": "WebRTC media",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "mlb",
+      "d": "sfu",
+      "p": "TCP",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "sfu",
+      "d": "rec",
+      "p": "internal",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "rec",
+      "d": "s3",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "meet",
+      "method": "POST",
+      "path": "/v1/meetings",
+      "auth": true,
+      "response": "{ meetingId, joinUrl }"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "meet",
+      "method": "POST",
+      "path": "/v1/meetings/{id}/join",
+      "auth": true,
+      "response": "{ token, sfuRegion, iceServers }"
+    }
+  ],
+  "entities": []
+}

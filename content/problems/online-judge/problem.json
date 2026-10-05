@@ -1,0 +1,41 @@
+{
+  "id": "online-judge",
+  "number": 17,
+  "title": "Online Judge (LeetCode)",
+  "difficulty": "medium",
+  "tags": ["sandboxing", "queues", "workers"],
+  "prompt": "Design an online judge like LeetCode: users submit code for a problem, it runs against hidden test cases in a sandbox, and they see the verdict.",
+  "functionalReqs": [
+    "Submit code in several languages",
+    "Run against hidden tests with time/memory limits",
+    "Show verdict and runtime",
+    "Contest mode with leaderboard"
+  ],
+  "nonFunctionalReqs": [
+    "Untrusted code must never escape the sandbox",
+    "Verdict within a few seconds normally",
+    "Handle contest spikes (10× load)"
+  ],
+  "scale": {
+    "dau": "~1M DAU",
+    "qps": "~50 submissions/s normal, ~2K/s during contests",
+    "storage": "Test data ~1 GB total; submissions ~5 KB each"
+  },
+  "outOfScope": ["Plagiarism detection", "Discussion forums"],
+  "keyComponents": [
+    "api_gateway",
+    "service",
+    "message_queue",
+    "worker",
+    "object_storage",
+    "sql_db",
+    "websocket_server"
+  ],
+  "deepDives": [
+    "Sandbox isolation (containers, gVisor, Firecracker)",
+    "Queue-based autoscaling",
+    "Result delivery (polling vs push)"
+  ],
+  "rubricFocus": ["Isolation", "Async execution", "Scaling under contest load"],
+  "prerequisites": ["message-queues-vs-streams", "fault-tolerance-retries", "scalability-basics"]
+}

@@ -1,0 +1,5 @@
+[
+  "A SQL range query on lat AND lng doesn't use one index well.",
+  "Geohash, quadtree, S2: what are the trade-offs at city boundaries?",
+  "How often does the index really need to change?"
+]

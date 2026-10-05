@@ -1,0 +1,105 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "sched",
+      "t": "scheduler",
+      "x": 0,
+      "y": 0,
+      "l": "Re-crawl scheduler",
+      "c": {
+        "purpose": "Re-enqueue stale URLs by priority"
+      }
+    },
+    {
+      "i": "frontier",
+      "t": "message_queue",
+      "x": 260,
+      "y": 0,
+      "l": "URL frontier",
+      "no": "Front queues by priority, back queues per host (politeness, robots.txt, crawl delay)"
+    },
+    {
+      "i": "fetch",
+      "t": "worker",
+      "x": 520,
+      "y": 0,
+      "l": "Fetchers",
+      "c": {
+        "instances": 50
+      }
+    },
+    {
+      "i": "dns",
+      "t": "dns",
+      "x": 780,
+      "y": 0,
+      "l": "DNS cache"
+    },
+    {
+      "i": "seen",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 130,
+      "l": "Seen URLs",
+      "c": {
+        "partitionKey": "url_hash"
+      },
+      "no": "Bloom filter in front + content fingerprint dedup"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 780,
+      "y": 260,
+      "l": "Raw pages"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "sched",
+      "d": "frontier",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "frontier",
+      "d": "fetch",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "fetch",
+      "d": "dns",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "fetch",
+      "d": "seen",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "fetch",
+      "d": "s3",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "fetch",
+      "d": "frontier",
+      "m": "a",
+      "l": "new links",
+      "h": "r>l"
+    }
+  ],
+  "apis": [],
+  "entities": []
+}

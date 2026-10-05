@@ -1,0 +1,39 @@
+{
+  "id": "rate-limiter",
+  "number": 3,
+  "title": "Rate Limiter",
+  "difficulty": "easy",
+  "priority": true,
+  "tags": ["rate-limiting", "redis", "distributed-counters"],
+  "prompt": "Design a distributed rate limiter that protects a public API. Limits are configurable per user / API key (e.g. 100 requests per minute). Requests over the limit are rejected. The limiter runs across many API servers.",
+  "functionalReqs": [
+    "Limit requests per client key (user, IP or API key) per time window",
+    "Configurable rules per endpoint / tier",
+    "Reject over-limit requests with a clear error",
+    "Expose remaining quota to clients"
+  ],
+  "nonFunctionalReqs": [
+    "Adds < 5 ms latency per request",
+    "Accurate across many limiter instances",
+    "Highly available: limiter failure must not take down the API"
+  ],
+  "scale": {
+    "qps": "~1M requests/s across the fleet",
+    "dau": "~10M API keys",
+    "storage": "Counter state only: ~100 B per key per window"
+  },
+  "outOfScope": ["Billing for overages", "DDoS protection at the network layer"],
+  "keyComponents": ["api_gateway", "rate_limiter", "cache", "service"],
+  "deepDives": [
+    "Token bucket vs sliding window trade-offs",
+    "Atomic counters in Redis with Lua scripts",
+    "Fail-open vs fail-closed when Redis is down",
+    "Multi-region limits"
+  ],
+  "rubricFocus": [
+    "Correct algorithm choice with justification",
+    "Shared atomic state",
+    "Failure behaviour"
+  ],
+  "prerequisites": ["rate-limiting-algorithms", "caching-strategies"]
+}

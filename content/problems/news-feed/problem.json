@@ -1,0 +1,49 @@
+{
+  "id": "news-feed",
+  "number": 8,
+  "title": "News Feed (Twitter)",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["fan-out", "caching", "celebrity-problem"],
+  "prompt": "Design the home timeline for a Twitter-like service. Users post short text (with optional images) and follow other users. The home feed shows recent posts from people they follow.",
+  "functionalReqs": [
+    "Create a post (text + optional media)",
+    "Follow / unfollow users",
+    "View home timeline (reverse chronological, paginated)",
+    "View a user's own posts"
+  ],
+  "nonFunctionalReqs": [
+    "Timeline loads in < 200 ms p99",
+    "Eventual consistency OK: a post may take a few seconds to show up",
+    "Highly available"
+  ],
+  "scale": {
+    "dau": "~200M DAU",
+    "qps": "~5 timeline reads/user/day → ~12K reads/s avg; ~500M posts/day → ~6K writes/s",
+    "storage": "~300 B per post → ~150 GB/day (media separate)",
+    "notes": "Average 200 followers; some accounts have 100M+"
+  },
+  "outOfScope": ["Ranking ML models", "Ads", "Search"],
+  "keyComponents": [
+    "load_balancer",
+    "service",
+    "cache",
+    "event_stream",
+    "worker",
+    "nosql_kv",
+    "object_storage",
+    "cdn"
+  ],
+  "deepDives": [
+    "Fan-out on write vs read vs hybrid",
+    "Celebrity problem",
+    "Timeline cache sizing",
+    "Media delivery"
+  ],
+  "rubricFocus": ["Fan-out strategy with trade-offs", "Timeline caching", "Handling celebrities"],
+  "prerequisites": [
+    "caching-strategies",
+    "message-queues-vs-streams",
+    "database-choice-sql-vs-nosql"
+  ]
+}

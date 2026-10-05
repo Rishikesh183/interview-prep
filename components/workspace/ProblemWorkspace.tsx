@@ -1,9 +1,10 @@
 "use client";
 
+import { AccountMenu } from "@/components/auth/AccountMenu";
 import { ReactFlowProvider } from "@xyflow/react";
-import { ArrowLeft, BookOpen, Loader2, Lock, Plus } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Loader2, Lock, Plus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { SaveStatus } from "@/lib/persistence/autosaver";
 import type { Problem, Stage } from "@/lib/schema";
@@ -63,6 +64,10 @@ function Workspace({ problem, requested, onNewAttempt }: Props) {
   const readOnly = isReadOnly(meta);
   const loading = status === "loading" || !meta || meta.problemId !== problem.id;
   const [panelOpen, setPanelOpen] = useState(true);
+  // The canvas gets the room on the design stage; the panel comes back on the other stages.
+  // Only on stage changes, so a manual toggle within a stage sticks.
+  const isDesign = stage === "design";
+  useEffect(() => setPanelOpen(!isDesign), [isDesign]);
   useShortcuts(
     {
       ...Object.fromEntries(
@@ -111,6 +116,7 @@ function Workspace({ problem, requested, onNewAttempt }: Props) {
         <Button variant="outline" size="sm" onClick={onNewAttempt}>
           <Plus /> New attempt
         </Button>
+        <AccountMenu />
         <ShortcutsButton />
         <ThemeToggle />
       </header>
@@ -121,6 +127,15 @@ function Workspace({ problem, requested, onNewAttempt }: Props) {
             <ProblemPanel problem={problem} />
           </aside>
         )}
+        <button
+          type="button"
+          onClick={() => setPanelOpen((o) => !o)}
+          aria-label={panelOpen ? "Hide the problem" : "Show the problem"}
+          title={panelOpen ? "Hide the problem" : "Show the problem"}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent flex w-4 shrink-0 items-center justify-center border-r"
+        >
+          {panelOpen ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        </button>
         <main className="min-w-0 flex-1">
           {loading ? (
             <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
@@ -144,7 +159,8 @@ function StageView({
   problem: Problem;
   readOnly: boolean;
 }) {
-  if (stage === "design") return <Design readOnly={readOnly} fileBase={problem.id} />;
+  if (stage === "design")
+    return <Design readOnly={readOnly} fileBase={problem.id} problem={problem} />;
 
   const forms: Record<Exclude<Stage, "design">, React.ReactNode> = {
     requirements: <Requirements />,

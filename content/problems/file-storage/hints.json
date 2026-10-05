@@ -1,0 +1,5 @@
+[
+  "Uploading a 10 GB file in one request fails often. Split it?",
+  "If only 1 MB of a 1 GB file changed, what needs to be uploaded?",
+  "How do the other devices learn that something changed?"
+]

@@ -1,0 +1,5 @@
+[
+  "Token bucket, leaky bucket, fixed window, sliding log, sliding window counter: which trade-off fits?",
+  "If each API server counts locally, limits are multiplied by the number of servers.",
+  "Read-then-write on a shared counter has a race. How do you make it atomic?"
+]

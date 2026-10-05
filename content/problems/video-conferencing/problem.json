@@ -1,0 +1,36 @@
+{
+  "id": "video-conferencing",
+  "number": 29,
+  "title": "Video Conferencing (Zoom)",
+  "difficulty": "hard",
+  "tags": ["webrtc", "sfu", "realtime"],
+  "prompt": "Design a video conferencing service like Zoom/Google Meet supporting meetings with up to 100 participants, screen sharing and recording.",
+  "functionalReqs": [
+    "Create/join meetings",
+    "Multi-party audio/video",
+    "Screen sharing",
+    "Cloud recording",
+    "Chat in meeting"
+  ],
+  "nonFunctionalReqs": [
+    "< 150 ms media latency",
+    "Adapts to poor networks",
+    "Works behind NATs and firewalls",
+    "Global users"
+  ],
+  "scale": {
+    "dau": "~300M meeting participants/day",
+    "qps": "~1M concurrent meetings at peak"
+  },
+  "outOfScope": ["Transcription", "Breakout rooms"],
+  "keyComponents": ["websocket_server", "service", "load_balancer", "object_storage", "sql_db"],
+  "deepDives": [
+    "Signaling vs media plane",
+    "SFU with simulcast",
+    "STUN/TURN",
+    "Region selection",
+    "Recording pipeline"
+  ],
+  "rubricFocus": ["Media architecture choice", "NAT traversal", "Scaling media servers"],
+  "prerequisites": ["websockets-realtime", "load-balancing", "object-storage-blobs"]
+}

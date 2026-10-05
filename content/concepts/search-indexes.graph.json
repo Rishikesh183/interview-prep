@@ -1,0 +1,74 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "s",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 260,
+      "y": 0,
+      "l": "Database (truth)"
+    },
+    {
+      "i": "cdc",
+      "t": "event_stream",
+      "x": 520,
+      "y": 0,
+      "l": "CDC stream"
+    },
+    {
+      "i": "w",
+      "t": "worker",
+      "x": 780,
+      "y": 0,
+      "l": "Indexer"
+    },
+    {
+      "i": "es",
+      "t": "search_index",
+      "x": 1040,
+      "y": 0,
+      "l": "Search index"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "s",
+      "d": "db",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "db",
+      "d": "cdc",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "cdc",
+      "d": "w",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "w",
+      "d": "es",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "s",
+      "d": "es",
+      "h": "r>l"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "API clients"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 520,
+      "y": 0,
+      "no": "Token bucket per API key via Lua script; 429 + Retry-After; fail open on Redis errors"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Redis cluster",
+      "c": {
+        "strategy": "write-through",
+        "eviction": "TTL",
+        "ttl": "60s",
+        "cluster": true
+      },
+      "no": "Bucket state: tokens + last_refill, atomic Lua"
+    },
+    {
+      "i": "rules",
+      "t": "sql_db",
+      "x": 780,
+      "y": 130,
+      "l": "Rules DB",
+      "no": "Per-tier limits, cached in gateway memory"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 780,
+      "y": 260,
+      "l": "Backend API"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "gw",
+      "d": "redis",
+      "o": "rw",
+      "l": "EVALSHA bucket.lua",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "gw",
+      "d": "rules",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "gw",
+      "d": "svc",
+      "h": "r>l"
+    }
+  ],
+  "apis": [],
+  "entities": []
+}

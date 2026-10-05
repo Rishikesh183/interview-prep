@@ -1,0 +1,5 @@
+[
+  "Counting in the click handler doesn't scale and loses data on crashes.",
+  "What window do aggregates use?",
+  "Stream results might drift. How do you get billing-grade numbers?"
+]

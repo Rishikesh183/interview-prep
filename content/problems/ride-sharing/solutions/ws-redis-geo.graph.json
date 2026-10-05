@@ -1,0 +1,223 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "driver",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Driver app"
+    },
+    {
+      "i": "rider",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 130,
+      "l": "Rider app"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB",
+      "c": {
+        "layer": "L4"
+      }
+    },
+    {
+      "i": "loc",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "Location gateway",
+      "c": {
+        "instances": 100
+      }
+    },
+    {
+      "i": "geo",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Redis GEO (per city)",
+      "c": {
+        "strategy": "write-back",
+        "ttl": "30s",
+        "cluster": true
+      },
+      "no": "GEOADD / GEOSEARCH, sharded by city"
+    },
+    {
+      "i": "match",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Matching Service",
+      "no": "Atomic Lua: available → assigned (exactly one rider)"
+    },
+    {
+      "i": "trip",
+      "t": "service",
+      "x": 780,
+      "y": 130,
+      "l": "Trip Service"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 1040,
+      "y": 0,
+      "l": "Trips DB",
+      "c": {
+        "replicas": 3,
+        "sharding": "hash",
+        "shardKey": "city_id"
+      }
+    },
+    {
+      "i": "pay",
+      "t": "external_service",
+      "x": 1040,
+      "y": 130,
+      "l": "Payments",
+      "c": {
+        "provider": "Stripe/Adyen"
+      }
+    },
+    {
+      "i": "notif",
+      "t": "notification_service",
+      "x": 780,
+      "y": 260,
+      "l": "Push"
+    },
+    {
+      "i": "trips",
+      "t": "pub_sub",
+      "x": 780,
+      "y": 390,
+      "l": "Trip channels",
+      "no": "Live driver location fanned out to the rider's gateway node"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "driver",
+      "d": "lb",
+      "p": "WebSocket",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "rider",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "loc",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "match",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "lb",
+      "d": "trip",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "loc",
+      "d": "geo",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "match",
+      "d": "geo",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "match",
+      "d": "trip",
+      "p": "gRPC",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "trip",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "trip",
+      "d": "pay",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "match",
+      "d": "notif",
+      "p": "gRPC",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "loc",
+      "d": "trips",
+      "p": "internal",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e13",
+      "s": "trips",
+      "d": "loc",
+      "p": "internal",
+      "m": "a",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "match",
+      "method": "POST",
+      "path": "/v1/rides",
+      "auth": true,
+      "idempotent": true,
+      "request": "{ pickup, dropoff, product }",
+      "statusCodes": "201, 409"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "loc",
+      "method": "WS",
+      "path": "/v1/driver/location",
+      "auth": true
+    }
+  ],
+  "entities": [
+    {
+      "name": "Trip",
+      "fields": "id, rider_id, driver_id, status, pickup, dropoff, fare, city_id"
+    },
+    {
+      "name": "DriverLocation",
+      "fields": "driver_id, lat, lng, geohash, updated_at (in Redis)"
+    }
+  ]
+}

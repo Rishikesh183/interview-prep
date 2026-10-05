@@ -1,0 +1,159 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Web"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "l": "Gateway"
+    },
+    {
+      "i": "post",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Post Service"
+    },
+    {
+      "i": "feed",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Feed Service",
+      "no": "Pull model: merge recent posts of followees; celebrity posts cost nothing extra"
+    },
+    {
+      "i": "authorCache",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Recent posts per author",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "48h"
+      }
+    },
+    {
+      "i": "posts",
+      "t": "wide_column",
+      "x": 780,
+      "y": 130,
+      "l": "Posts",
+      "c": {
+        "partitionKey": "author_id",
+        "clusteringKey": "created_at"
+      }
+    },
+    {
+      "i": "follows",
+      "t": "graph_db",
+      "x": 780,
+      "y": 260,
+      "l": "Follow graph"
+    },
+    {
+      "i": "media",
+      "t": "object_storage",
+      "x": 780,
+      "y": 390,
+      "l": "Media"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "post",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "gw",
+      "d": "feed",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "post",
+      "d": "posts",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "post",
+      "d": "authorCache",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "post",
+      "d": "media",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "feed",
+      "d": "follows",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "feed",
+      "d": "authorCache",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "feed",
+      "d": "posts",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "post",
+      "method": "POST",
+      "path": "/v1/tweets",
+      "auth": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "feed",
+      "method": "GET",
+      "path": "/v1/feed",
+      "auth": true,
+      "pagination": "cursor"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Tweet",
+      "fields": "author_id, created_at, tweet_id, text"
+    },
+    {
+      "name": "Follows",
+      "fields": "follower, followee"
+    }
+  ]
+}

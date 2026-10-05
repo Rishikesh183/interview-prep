@@ -1,0 +1,50 @@
+{
+  "id": "payment-system",
+  "number": 23,
+  "title": "Payment System / Wallet",
+  "difficulty": "hard",
+  "priority": true,
+  "tags": ["idempotency", "ledger", "reconciliation"],
+  "prompt": "Design the payment backend for an e-commerce company: it charges customers through external payment service providers (PSPs), keeps an internal wallet/ledger, pays out to sellers, and reconciles with the PSPs daily.",
+  "functionalReqs": [
+    "Charge a customer for an order via a PSP",
+    "Maintain wallet balances via a ledger",
+    "Pay out sellers",
+    "Handle PSP webhooks (success/failure/refund)",
+    "Daily reconciliation with PSP reports"
+  ],
+  "nonFunctionalReqs": [
+    "Never double-charge or lose money",
+    "Every balance change is auditable",
+    "Strong consistency for balances",
+    "Tolerate PSP timeouts and retries"
+  ],
+  "scale": {
+    "qps": "~1K payments/s peak",
+    "storage": "~10M transactions/day; ledger entries kept 7+ years",
+    "notes": "PSP calls take 1–5 s and sometimes time out"
+  },
+  "outOfScope": ["Fraud detection models", "Building a card network/PSP"],
+  "keyComponents": [
+    "api_gateway",
+    "service",
+    "sql_db",
+    "message_queue",
+    "worker",
+    "external_service",
+    "batch_processor"
+  ],
+  "deepDives": [
+    "Idempotency keys end-to-end",
+    "Double-entry ledger",
+    "Outbox pattern / exactly-once effects",
+    "Reconciliation"
+  ],
+  "rubricFocus": [
+    "Idempotency",
+    "Ledger correctness",
+    "Failure handling with PSPs",
+    "Reconciliation"
+  ],
+  "prerequisites": ["idempotency", "consistency-models", "fault-tolerance-retries"]
+}

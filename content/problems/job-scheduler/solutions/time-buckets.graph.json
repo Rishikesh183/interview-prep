@@ -1,0 +1,144 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Job owners"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Job API"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 0,
+      "l": "Jobs",
+      "c": {
+        "replicas": 3,
+        "sharding": "hash",
+        "shardKey": "partition_id"
+      },
+      "no": "Indexed by (partition, next_run minute bucket)"
+    },
+    {
+      "i": "sched",
+      "t": "scheduler",
+      "x": 0,
+      "y": 130,
+      "l": "Scheduler shards",
+      "c": {
+        "purpose": "Poll due jobs per owned partition"
+      }
+    },
+    {
+      "i": "etcd",
+      "t": "coordination",
+      "x": 260,
+      "y": 130,
+      "l": "etcd",
+      "c": {
+        "purpose": "locks"
+      },
+      "no": "Partition leases so only one scheduler dispatches a job"
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 260,
+      "y": 260,
+      "l": "Dispatch queue"
+    },
+    {
+      "i": "workers",
+      "t": "worker",
+      "x": 520,
+      "y": 130,
+      "l": "Workers",
+      "no": "At-least-once; handlers must be idempotent; retry with backoff; visibility timeout covers crashes"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "api",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "api",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "sched",
+      "d": "etcd",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "sched",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "sched",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "q",
+      "d": "workers",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "workers",
+      "d": "db",
+      "o": "w",
+      "l": "status",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/jobs",
+      "auth": true,
+      "idempotent": true,
+      "request": "{ cron | runAt, payload, retries }"
+    }
+  ],
+  "entities": []
+}

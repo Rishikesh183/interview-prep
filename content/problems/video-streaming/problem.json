@@ -1,0 +1,50 @@
+{
+  "id": "video-streaming",
+  "number": 21,
+  "title": "YouTube / Netflix",
+  "difficulty": "hard",
+  "priority": true,
+  "tags": ["transcoding", "cdn", "adaptive-bitrate"],
+  "prompt": "Design a video platform like YouTube: creators upload videos, which are processed into multiple resolutions, and viewers around the world stream them smoothly on any device and network.",
+  "functionalReqs": [
+    "Upload videos (up to several GB)",
+    "Transcode into multiple resolutions/formats",
+    "Stream with adaptive bitrate",
+    "Video metadata, search by title, view counts"
+  ],
+  "nonFunctionalReqs": [
+    "Smooth playback worldwide (low startup time, minimal buffering)",
+    "Uploads are durable and resumable",
+    "Processing can take minutes; playback cannot lag",
+    "Highly available reads"
+  ],
+  "scale": {
+    "dau": "~1B daily views",
+    "qps": "~500 hours of video uploaded per minute; ~100K concurrent stream starts/s at peak",
+    "storage": "~1 GB per hour per rendition set → ~1 PB/day new storage",
+    "notes": "Egress dominates cost: CDN is essential"
+  },
+  "outOfScope": ["Recommendations", "Comments", "Live streaming"],
+  "keyComponents": [
+    "cdn",
+    "object_storage",
+    "message_queue",
+    "worker",
+    "service",
+    "sql_db",
+    "cache"
+  ],
+  "deepDives": [
+    "Upload pipeline (resumable, presigned)",
+    "Transcoding DAG and parallel chunk encoding",
+    "HLS/DASH adaptive bitrate",
+    "CDN strategy and cost"
+  ],
+  "rubricFocus": [
+    "Async processing pipeline",
+    "CDN delivery",
+    "Adaptive streaming",
+    "Storage layout"
+  ],
+  "prerequisites": ["object-storage-blobs", "cdn", "message-queues-vs-streams"]
+}

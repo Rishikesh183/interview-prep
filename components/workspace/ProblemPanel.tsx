@@ -1,9 +1,10 @@
 "use client";
 
-import { Lightbulb } from "lucide-react";
+import { BookOpen, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/problems/DifficultyBadge";
 import type { Problem } from "@/lib/schema";
+import { HINT_PENALTY } from "@/lib/points";
 import { useAttemptStore } from "@/store/attempt";
 
 const SCALE_LABELS = { dau: "Users", qps: "Traffic", storage: "Storage", notes: "Notes" } as const;
@@ -12,6 +13,19 @@ const SCALE_LABELS = { dau: "Users", qps: "Traffic", storage: "Storage", notes: 
 export function ProblemPanel({ problem }: { problem: Problem }) {
   const revealed = useAttemptStore((s) => s.meta?.hintsRevealed ?? 0);
   const revealHint = useAttemptStore((s) => s.revealHint);
+  const inProgress = useAttemptStore((s) => s.meta?.status === "in_progress");
+
+  // Hints cost 25% of this attempt's points each while it's in progress (PHASE-2 §3).
+  const onReveal = () => {
+    if (inProgress) {
+      const left = Math.max(0, 100 - Math.round(HINT_PENALTY * 100) * (revealed + 1));
+      const ok = window.confirm(
+        `Reveal hint ${revealed + 1}? Each hint costs 25% of this attempt's points (you'd keep ${left}%).`,
+      );
+      if (!ok) return;
+    }
+    revealHint();
+  };
   const scale = (Object.keys(SCALE_LABELS) as (keyof typeof SCALE_LABELS)[]).filter(
     (k) => problem.scale[k],
   );
@@ -26,6 +40,24 @@ export function ProblemPanel({ problem }: { problem: Problem }) {
         </div>
         <h2 className="text-base font-semibold">{problem.title}</h2>
         <p className="leading-relaxed">{problem.prompt}</p>
+        {problem.prerequisites.length > 0 && (
+          <p className="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
+            <BookOpen className="size-3.5" /> Prerequisites:
+            {problem.prerequisites.map((slug, i) => (
+              <span key={slug}>
+                <a
+                  href={`/learn/${slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {slug.replace(/-/g, " ")}
+                </a>
+                {i < problem.prerequisites.length - 1 && ","}
+              </span>
+            ))}
+          </p>
+        )}
       </div>
 
       {scale.length > 0 && (
@@ -58,8 +90,9 @@ export function ProblemPanel({ problem }: { problem: Problem }) {
             ))}
           </ol>
           {shown < problem.hints.length && (
-            <Button variant="outline" size="sm" onClick={revealHint}>
+            <Button variant="outline" size="sm" onClick={onReveal}>
               <Lightbulb /> Show hint {shown + 1} of {problem.hints.length}
+              {inProgress && <span className="text-muted-foreground">(−25% points)</span>}
             </Button>
           )}
         </section>

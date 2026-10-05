@@ -1,0 +1,82 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB",
+      "c": {
+        "layer": "L4"
+      }
+    },
+    {
+      "i": "rl",
+      "t": "rate_limiter",
+      "x": 520,
+      "y": 0,
+      "c": {
+        "algorithm": "sliding-window",
+        "key": "api-key"
+      },
+      "no": "Sliding window counter; returns 429 with X-RateLimit-Remaining"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Redis",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "2m"
+      },
+      "no": "INCR + EXPIRE per window key (atomic)"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 780,
+      "y": 130,
+      "l": "Services"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "rl",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "rl",
+      "d": "redis",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "rl",
+      "d": "svc",
+      "no": "fail open if Redis times out (> 5 ms)",
+      "h": "r>l"
+    }
+  ],
+  "apis": [],
+  "entities": []
+}

@@ -1,0 +1,216 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "c": {
+        "content": ["media"]
+      }
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 130,
+      "l": "LB"
+    },
+    {
+      "i": "post",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Post Service"
+    },
+    {
+      "i": "tl",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Timeline Service",
+      "no": "Reads Redis timeline; merges celebrity posts on read (hybrid)"
+    },
+    {
+      "i": "posts",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 0,
+      "l": "Posts",
+      "c": {
+        "partitionKey": "post_id"
+      }
+    },
+    {
+      "i": "graphdb",
+      "t": "sql_db",
+      "x": 0,
+      "y": 130,
+      "l": "Follow graph",
+      "c": {
+        "readReplicas": true
+      },
+      "no": "follows(follower_id, followee_id)"
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 780,
+      "y": 130,
+      "l": "Post events",
+      "c": {
+        "topic": "posts"
+      }
+    },
+    {
+      "i": "fanout",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Fan-out workers",
+      "c": {
+        "instances": 30
+      },
+      "no": "Skip celebrities (> 10K followers)"
+    },
+    {
+      "i": "tcache",
+      "t": "cache",
+      "x": 1300,
+      "y": 0,
+      "l": "Timeline cache",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "7d",
+        "cluster": true
+      },
+      "no": "List of post IDs per user"
+    },
+    {
+      "i": "media",
+      "t": "object_storage",
+      "x": 520,
+      "y": 260,
+      "l": "Media"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "cdn",
+      "d": "media",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "post",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "lb",
+      "d": "tl",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "post",
+      "d": "posts",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "post",
+      "d": "kafka",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "kafka",
+      "d": "fanout",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "fanout",
+      "d": "graphdb",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "fanout",
+      "d": "tcache",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "tl",
+      "d": "tcache",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "tl",
+      "d": "posts",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "post",
+      "method": "POST",
+      "path": "/v1/posts",
+      "auth": true,
+      "idempotent": true,
+      "statusCodes": "201, 400"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "tl",
+      "method": "GET",
+      "path": "/v1/timeline/home",
+      "auth": true,
+      "pagination": "cursor"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Post",
+      "fields": "post_id, author_id, text, media_urls, created_at"
+    },
+    {
+      "name": "Follow",
+      "fields": "follower_id, followee_id, created_at"
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Mobile app"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "L4 LB",
+      "c": {
+        "layer": "L4",
+        "algorithm": "least-conn"
+      }
+    },
+    {
+      "i": "ws",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "Chat servers",
+      "c": {
+        "instances": 50
+      },
+      "no": "Heartbeats update presence; ACKs drive delivered/read receipts"
+    },
+    {
+      "i": "ps",
+      "t": "pub_sub",
+      "x": 0,
+      "y": 130,
+      "l": "Redis Pub/Sub",
+      "no": "Channel per user id; the node holding the socket subscribes"
+    },
+    {
+      "i": "msg",
+      "t": "service",
+      "x": 780,
+      "y": 0,
+      "l": "Message Service",
+      "no": "Assigns per-conversation sequence (snowflake) for ordering"
+    },
+    {
+      "i": "cass",
+      "t": "wide_column",
+      "x": 1040,
+      "y": 0,
+      "l": "Cassandra",
+      "c": {
+        "partitionKey": "conversation_id",
+        "clusteringKey": "message_id",
+        "consistencyLevel": "LOCAL_QUORUM"
+      }
+    },
+    {
+      "i": "presence",
+      "t": "cache",
+      "x": 780,
+      "y": 130,
+      "l": "Presence Redis",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "60s"
+      },
+      "no": "online / last seen"
+    },
+    {
+      "i": "notif",
+      "t": "notification_service",
+      "x": 1040,
+      "y": 130,
+      "l": "Push Notifications",
+      "no": "Offline users"
+    },
+    {
+      "i": "apns",
+      "t": "external_service",
+      "x": 1300,
+      "y": 0,
+      "l": "APNs / FCM",
+      "c": {
+        "provider": "APNs, FCM"
+      }
+    },
+    {
+      "i": "hist",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "History API"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "p": "WebSocket",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "ws",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "hist",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "ws",
+      "d": "msg",
+      "p": "gRPC",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "msg",
+      "d": "cass",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "msg",
+      "d": "ps",
+      "m": "a",
+      "l": "publish to recipient channel",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "ps",
+      "d": "ws",
+      "m": "a",
+      "l": "deliver",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "ws",
+      "d": "presence",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "msg",
+      "d": "notif",
+      "p": "gRPC",
+      "l": "recipient offline",
+      "no": "Notification service enqueues internally",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "notif",
+      "d": "apns",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "hist",
+      "d": "cass",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "ws",
+      "method": "WS",
+      "path": "/v1/connect",
+      "auth": true,
+      "request": "send {conversationId, clientMsgId, body}",
+      "response": "ack {messageId, seq}"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "hist",
+      "method": "GET",
+      "path": "/v1/conversations/{id}/messages",
+      "auth": true,
+      "pagination": "cursor",
+      "response": "{ messages, nextCursor }"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Message",
+      "fields": "conversation_id (partition), message_id (clustering, snowflake), sender_id, body, status"
+    },
+    {
+      "name": "Conversation",
+      "fields": "id, members[], type (direct/group)"
+    }
+  ]
+}

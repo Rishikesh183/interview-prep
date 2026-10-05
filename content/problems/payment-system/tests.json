@@ -1,0 +1,150 @@
+[
+  {
+    "id": "idempotent",
+    "title": "Payment APIs are idempotent",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": ".",
+        "method": "POST",
+        "idempotent": true
+      }
+    },
+    "failHint": "The PSP call times out and the client retries. How do you avoid charging twice?"
+  },
+  {
+    "id": "ledger",
+    "title": "Money movements are recorded in a double-entry ledger",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "ledger|entry|journal",
+            "in": ["entities"]
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "double.?entry|ledger"
+          }
+        }
+      ]
+    },
+    "failHint": "How would you prove where every rupee went, and recompute any balance?"
+  },
+  {
+    "id": "consistency",
+    "title": "Balances use a strongly consistent store",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "sql_db"
+        },
+        {
+          "nodeConfig": {
+            "type": "nosql_kv",
+            "where": {
+              "consistency": "strong"
+            }
+          }
+        }
+      ]
+    },
+    "failHint": "Which kind of store can guarantee a balance is never wrong?"
+  },
+  {
+    "id": "psp",
+    "title": "External PSPs are integrated",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "external_service"
+    },
+    "failHint": "Who actually moves the money?"
+  },
+  {
+    "id": "reconcile",
+    "title": "Daily reconciliation with PSP reports",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "reconcil"
+      }
+    },
+    "failHint": "Your records and the PSP's disagree. How do you find out?"
+  },
+  {
+    "id": "async-retries",
+    "title": "Webhooks / PSP failures are processed with retries",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "pathExists": {
+            "from": "@queue",
+            "to": "worker"
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "retr|webhook"
+          }
+        }
+      ]
+    },
+    "failHint": "A webhook delivery fails. What happens to it?"
+  },
+  {
+    "id": "audit",
+    "title": "Ledger is append-only and auditable",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "append.?only|immutable|audit"
+      }
+    },
+    "failHint": "Can a past ledger entry ever be edited?"
+  },
+  {
+    "id": "auth",
+    "title": "APIs are authenticated",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "auth_service"
+        },
+        {
+          "apiMatch": {
+            "path": ".",
+            "auth": true
+          }
+        }
+      ]
+    },
+    "failHint": "Who is allowed to call the payment API?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

@@ -1,0 +1,118 @@
+[
+  {
+    "id": "generator",
+    "title": "An ID generator component exists",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "id_generator"
+        },
+        {
+          "hasNode": "service"
+        }
+      ]
+    },
+    "failHint": "Which component hands out the IDs?"
+  },
+  {
+    "id": "time-ordered",
+    "title": "IDs embed a timestamp for rough ordering",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "snowflake|timestamp|epoch|time.?based|ulid"
+      }
+    },
+    "failHint": "How can IDs be sorted roughly by creation time without a lookup?"
+  },
+  {
+    "id": "worker-ids",
+    "title": "Each generator gets a unique worker/machine ID",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "coordination"
+        },
+        {
+          "textMentions": {
+            "pattern": "worker.?id|machine.?id|node.?id|datacenter"
+          }
+        }
+      ]
+    },
+    "failHint": "Two generators issue an ID in the same millisecond. What makes them differ?"
+  },
+  {
+    "id": "sequence",
+    "title": "A per-millisecond sequence handles bursts",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "sequence|counter"
+      }
+    },
+    "failHint": "What happens when one generator needs thousands of IDs in a single millisecond?"
+  },
+  {
+    "id": "clock-skew",
+    "title": "Clock going backwards is handled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "clock|ntp|skew|backward"
+      }
+    },
+    "failHint": "What should a generator do if its clock jumps backwards?"
+  },
+  {
+    "id": "no-spof",
+    "title": "Multiple generator instances run independently",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "id_generator",
+          "min": 2
+        },
+        {
+          "allOf": [
+            {
+              "hasNode": ["service", "id_generator"]
+            },
+            {
+              "textMentions": {
+                "pattern": "instances|replica|independent|each node",
+                "in": ["notes", "labels"]
+              }
+            }
+          ]
+        },
+        {
+          "hasNode": "load_balancer"
+        }
+      ]
+    },
+    "failHint": "What happens to the system if your only generator dies?"
+  },
+  {
+    "id": "api",
+    "title": "An API returns new IDs",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "id",
+        "method": ["GET", "POST", "RPC"]
+      }
+    },
+    "failHint": "How does a caller ask for new IDs?"
+  }
+]

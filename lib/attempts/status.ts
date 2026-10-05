@@ -10,11 +10,11 @@ export function testScore(
   return { passed: results.filter((r) => r.passed).length, total: results.length };
 }
 
-/** LeetCode-style: solved = a submitted attempt that passed every test. */
+/** Solved = a submitted attempt whose core tests all pass (bonus tests don't count; PHASE-2 §2). */
 export function isSolved(attempt: Pick<Attempt, "status" | "testRun">): boolean {
-  if (attempt.status === "in_progress") return false;
-  const score = testScore(attempt);
-  return score !== null && score.total > 0 && score.passed === score.total;
+  if (attempt.status === "in_progress" || !attempt.testRun) return false;
+  const core = attempt.testRun.results.filter((r) => r.core);
+  return core.length > 0 && core.every((r) => r.passed);
 }
 
 export function statusByProblem(attempts: Attempt[]): Map<string, ProblemStatus> {

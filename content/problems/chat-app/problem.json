@@ -1,0 +1,50 @@
+{
+  "id": "chat-app",
+  "number": 7,
+  "title": "Chat App (WhatsApp)",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["websockets", "pub-sub", "ordering", "offline-delivery"],
+  "prompt": "Design a 1:1 and small-group chat service like WhatsApp. Users send text messages in real time, see delivery/read receipts and online presence, and receive messages sent while they were offline.",
+  "functionalReqs": [
+    "1:1 and group chats (up to 256 members)",
+    "Real-time message delivery",
+    "Offline delivery when the recipient reconnects (+ push notification)",
+    "Sent / delivered / read receipts",
+    "Online presence / last seen",
+    "Message history sync across devices"
+  ],
+  "nonFunctionalReqs": [
+    "Low latency delivery (< 200 ms p99 within a region)",
+    "Messages are never lost and arrive in order per conversation",
+    "Highly available; tolerate WebSocket node failures"
+  ],
+  "scale": {
+    "dau": "~500M DAU",
+    "qps": "~40 messages/user/day → ~230K messages/s avg, ~700K/s peak",
+    "storage": "~100 B per message → ~2 TB/day",
+    "notes": "~50M concurrent connections"
+  },
+  "outOfScope": ["Voice / video calls", "End-to-end encryption key exchange details"],
+  "keyComponents": [
+    "load_balancer",
+    "websocket_server",
+    "pub_sub",
+    "wide_column",
+    "cache",
+    "notification_service"
+  ],
+  "deepDives": [
+    "Routing messages across WebSocket nodes (pub/sub, session registry)",
+    "Per-conversation ordering and message IDs",
+    "Offline delivery and push notifications",
+    "Read receipts and presence at scale"
+  ],
+  "rubricFocus": [
+    "Real-time transport",
+    "Cross-node delivery",
+    "Message storage model",
+    "Delivery guarantees"
+  ],
+  "prerequisites": ["websockets-realtime", "pub-sub", "database-choice-sql-vs-nosql"]
+}

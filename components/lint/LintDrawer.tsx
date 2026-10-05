@@ -1,6 +1,5 @@
 "use client";
 
-import { useReactFlow } from "@xyflow/react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -15,6 +14,7 @@ import type { LintIssue, LintSeverity } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 import { usePreferences } from "@/store/preferences";
 import { useWorkspaceStore } from "@/store/workspace";
+import { sameHighlight, useFocusOnCanvas } from "@/components/canvas/useFocusOnCanvas";
 import { useShortcuts } from "@/components/useShortcuts";
 import { useLint } from "./useLint";
 
@@ -32,35 +32,19 @@ export function LintDrawer({ showHintToggle = false }: { showHintToggle?: boolea
   const hints = usePreferences((s) => s.keyComponentHints);
   const setPrefs = usePreferences((s) => s.set);
   const highlight = useWorkspaceStore((s) => s.highlight);
-  const { fitView } = useReactFlow();
+  const focusOnCanvas = useFocusOnCanvas();
   useShortcuts({
     lint: () => setPrefs({ lintDrawerOpen: !usePreferences.getState().lintDrawerOpen }),
   });
 
-  const focus = (issue: LintIssue) => {
-    const ws = useWorkspaceStore.getState();
-    const same =
-      ws.highlight.nodeIds.join() === issue.nodeIds.join() &&
-      ws.highlight.edgeIds.join() === issue.edgeIds.join();
-    if (same) {
-      ws.setHighlight({ nodeIds: [], edgeIds: [] });
-      return;
-    }
-    ws.setHighlight({ nodeIds: issue.nodeIds, edgeIds: issue.edgeIds });
-    if (issue.nodeIds.length) {
-      ws.selectNodes(issue.nodeIds);
-      void fitView({
-        nodes: issue.nodeIds.map((id) => ({ id })),
-        padding: 0.6,
-        maxZoom: 1.2,
-        duration: 300,
-      });
-    }
-  };
+  const target = (i: LintIssue) => ({ nodeIds: i.nodeIds, edgeIds: i.edgeIds });
+  // Clicking the active issue again clears the highlight.
+  const focus = (issue: LintIssue) =>
+    sameHighlight(useWorkspaceStore.getState().highlight, target(issue))
+      ? useWorkspaceStore.getState().setHighlight({ nodeIds: [], edgeIds: [] })
+      : focusOnCanvas(target(issue));
   const isActive = (i: LintIssue) =>
-    i.nodeIds.join() === highlight.nodeIds.join() &&
-    i.edgeIds.join() === highlight.edgeIds.join() &&
-    (i.nodeIds.length > 0 || i.edgeIds.length > 0);
+    (i.nodeIds.length > 0 || i.edgeIds.length > 0) && sameHighlight(highlight, target(i));
 
   return (
     <section className="bg-background shrink-0 border-t" aria-label="Lint">

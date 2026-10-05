@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "s",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 260,
+      "y": 0,
+      "l": "Posts (index on user_id, created_at)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "s",
+      "d": "db",
+      "l": "WHERE user_id = ? ORDER BY created_at",
+      "h": "r>l"
+    }
+  ]
+}

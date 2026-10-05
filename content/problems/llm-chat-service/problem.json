@@ -1,0 +1,43 @@
+{
+  "id": "llm-chat-service",
+  "number": 30,
+  "title": "LLM Chat Service (ChatGPT)",
+  "difficulty": "hard",
+  "tags": ["token-streaming", "gpu-queueing", "rate-limiting"],
+  "prompt": "Design a chat service like ChatGPT: users send messages in conversations and receive streamed model responses. Inference runs on a limited, expensive GPU fleet.",
+  "functionalReqs": [
+    "Create conversations and send messages",
+    "Stream the response token by token",
+    "Conversation history",
+    "Per-user / per-tier usage limits"
+  ],
+  "nonFunctionalReqs": [
+    "Time-to-first-token < 1 s for paid users",
+    "Fair use of scarce GPUs; graceful degradation under load",
+    "No lost conversations"
+  ],
+  "scale": {
+    "dau": "~100M DAU",
+    "qps": "~50K concurrent generations at peak; ~500 tokens per response",
+    "storage": "~10 KB per conversation turn"
+  },
+  "outOfScope": ["Model training", "Plugins / tools"],
+  "keyComponents": [
+    "api_gateway",
+    "rate_limiter",
+    "service",
+    "message_queue",
+    "worker",
+    "nosql_document",
+    "cache"
+  ],
+  "deepDives": [
+    "SSE/WebSocket streaming",
+    "Request queueing and batching on GPUs",
+    "Priority by tier",
+    "KV-cache / prompt caching",
+    "Token-based rate limits"
+  ],
+  "rubricFocus": ["Streaming transport", "GPU scheduling", "Rate limiting and fairness"],
+  "prerequisites": ["rate-limiting-algorithms", "message-queues-vs-streams", "websockets-realtime"]
+}

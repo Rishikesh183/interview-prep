@@ -1,0 +1,126 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Search box",
+      "no": "Debounce 150 ms; browser cache for repeated prefixes"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "c": {
+        "content": ["api"],
+        "ttl": "5m"
+      }
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 520,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 780,
+      "y": 0,
+      "l": "Suggest Service",
+      "no": "Serves a trie with cached top-10 per prefix node; sharded by first two letters, replicated"
+    },
+    {
+      "i": "tries",
+      "t": "nosql_kv",
+      "x": 1040,
+      "y": 0,
+      "l": "Serialized tries",
+      "c": {
+        "partitionKey": "prefix_shard"
+      }
+    },
+    {
+      "i": "log",
+      "t": "event_stream",
+      "x": 1040,
+      "y": 130,
+      "l": "Query log",
+      "c": {
+        "topic": "queries"
+      }
+    },
+    {
+      "i": "spark",
+      "t": "batch_processor",
+      "x": 1300,
+      "y": 0,
+      "l": "Top-K builder",
+      "no": "Aggregates counts, rebuilds the trie"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "cdn",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "tries",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "log",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "log",
+      "d": "spark",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "spark",
+      "d": "tries",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/suggest",
+      "auth": false,
+      "request": "?q=prefix&locale=en"
+    }
+  ],
+  "entities": []
+}

@@ -1,0 +1,66 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "producers",
+      "t": "external_service",
+      "x": 0,
+      "y": 0,
+      "l": "Producer apps",
+      "no": "acks=all waits for the in-sync replicas"
+    },
+    {
+      "i": "brokers",
+      "t": "event_stream",
+      "x": 260,
+      "y": 0,
+      "l": "Broker cluster",
+      "c": {
+        "partitions": 1000
+      },
+      "no": "Partitions are append-only logs; leader + followers (ISR), min.insync.replicas=2, fsync batched; retention 7 days or compaction"
+    },
+    {
+      "i": "controller",
+      "t": "coordination",
+      "x": 520,
+      "y": 0,
+      "l": "Controller (KRaft)",
+      "no": "Assigns partition leaders"
+    },
+    {
+      "i": "consumers",
+      "t": "worker",
+      "x": 520,
+      "y": 130,
+      "l": "Consumer group",
+      "no": "Commit offsets to an internal topic; rebalancing on join/leave"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "producers",
+      "d": "brokers",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "brokers",
+      "d": "consumers",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "brokers",
+      "d": "controller",
+      "m": "a",
+      "o": "rw",
+      "h": "r>l"
+    }
+  ],
+  "apis": [],
+  "entities": []
+}

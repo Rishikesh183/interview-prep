@@ -1,0 +1,223 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "caller",
+      "t": "external_service",
+      "x": 0,
+      "y": 0,
+      "l": "Internal services",
+      "c": {
+        "provider": "order, auth, marketing"
+      }
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 0,
+      "l": "Gateway"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Notification Service",
+      "no": "Validates, checks preferences, dedups on idempotency key, renders template"
+    },
+    {
+      "i": "prefs",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Preferences cache",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "10m"
+      }
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 130,
+      "l": "Notifications DB",
+      "no": "preferences, templates, delivery log"
+    },
+    {
+      "i": "qpush",
+      "t": "message_queue",
+      "x": 780,
+      "y": 260,
+      "l": "Push queue"
+    },
+    {
+      "i": "qemail",
+      "t": "message_queue",
+      "x": 780,
+      "y": 390,
+      "l": "Email queue"
+    },
+    {
+      "i": "qsms",
+      "t": "message_queue",
+      "x": 780,
+      "y": 520,
+      "l": "SMS queue"
+    },
+    {
+      "i": "wpush",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Push workers",
+      "no": "Exponential backoff, 5 retries then DLQ"
+    },
+    {
+      "i": "wemail",
+      "t": "worker",
+      "x": 1040,
+      "y": 130,
+      "l": "Email workers"
+    },
+    {
+      "i": "wsms",
+      "t": "worker",
+      "x": 1040,
+      "y": 260,
+      "l": "SMS workers"
+    },
+    {
+      "i": "apns",
+      "t": "external_service",
+      "x": 1300,
+      "y": 0,
+      "l": "APNs/FCM"
+    },
+    {
+      "i": "ses",
+      "t": "external_service",
+      "x": 1300,
+      "y": 130,
+      "l": "SES"
+    },
+    {
+      "i": "twilio",
+      "t": "external_service",
+      "x": 1300,
+      "y": 260,
+      "l": "Twilio"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "caller",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "prefs",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "qpush",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "svc",
+      "d": "qemail",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "svc",
+      "d": "qsms",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "qpush",
+      "d": "wpush",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "qemail",
+      "d": "wemail",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "qsms",
+      "d": "wsms",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "wpush",
+      "d": "apns",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "wemail",
+      "d": "ses",
+      "h": "r>l"
+    },
+    {
+      "i": "e13",
+      "s": "wsms",
+      "d": "twilio",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/notifications",
+      "auth": true,
+      "idempotent": true,
+      "request": "{ userId, template, vars, channels?, idempotencyKey }",
+      "statusCodes": "202, 400, 409"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Preference",
+      "fields": "user_id, channel, enabled, quiet_hours"
+    },
+    {
+      "name": "NotificationLog",
+      "fields": "id, user_id, channel, status, idempotency_key"
+    }
+  ]
+}

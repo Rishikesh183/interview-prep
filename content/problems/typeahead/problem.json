@@ -1,0 +1,33 @@
+{
+  "id": "typeahead",
+  "number": 11,
+  "title": "Typeahead / Autocomplete",
+  "difficulty": "medium",
+  "tags": ["trie", "top-k", "caching"],
+  "prompt": "Design search autocomplete: as a user types, show the top 5-10 suggested queries for the current prefix, ranked by popularity.",
+  "functionalReqs": [
+    "Return top-K suggestions for a prefix",
+    "Suggestions reflect popularity, updated periodically",
+    "Support multiple languages / regions"
+  ],
+  "nonFunctionalReqs": [
+    "< 100 ms end-to-end, ideally < 20 ms server time",
+    "Highly available",
+    "Freshness within hours is fine"
+  ],
+  "scale": {
+    "dau": "~100M DAU",
+    "qps": "~10 searches/user/day × ~6 keystrokes → ~70K req/s avg",
+    "storage": "~100M unique queries"
+  },
+  "outOfScope": ["Spell correction", "Personalization"],
+  "keyComponents": ["cdn", "service", "cache", "event_stream", "batch_processor"],
+  "deepDives": [
+    "Trie with cached top-K per node",
+    "Offline aggregation pipeline",
+    "Sharding by prefix",
+    "Client-side debouncing"
+  ],
+  "rubricFocus": ["Precomputed top-K", "Read path latency", "Data collection pipeline"],
+  "prerequisites": ["caching-strategies", "search-indexes", "sharding-partitioning"]
+}

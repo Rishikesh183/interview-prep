@@ -1,0 +1,162 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "caller",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Producers"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Notify API",
+      "no": "Dedup via idempotency key in Redis (SETNX, 24h)"
+    },
+    {
+      "i": "dedup",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Dedup Redis",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "24h"
+      }
+    },
+    {
+      "i": "prefs",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 130,
+      "l": "User preferences",
+      "no": "opt-out per channel"
+    },
+    {
+      "i": "push",
+      "t": "event_stream",
+      "x": 780,
+      "y": 260,
+      "l": "push topic",
+      "c": {
+        "topic": "notify.push"
+      }
+    },
+    {
+      "i": "email",
+      "t": "event_stream",
+      "x": 780,
+      "y": 390,
+      "l": "email topic",
+      "c": {
+        "topic": "notify.email"
+      }
+    },
+    {
+      "i": "cw",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Channel consumers",
+      "no": "Retry topic with backoff, then dead-letter topic"
+    },
+    {
+      "i": "prov",
+      "t": "external_service",
+      "x": 1300,
+      "y": 0,
+      "l": "Providers",
+      "c": {
+        "provider": "FCM, SendGrid"
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "caller",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "dedup",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "prefs",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "push",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "svc",
+      "d": "email",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "push",
+      "d": "cw",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "email",
+      "d": "cw",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "cw",
+      "d": "prov",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/send",
+      "auth": true,
+      "idempotent": true
+    }
+  ],
+  "entities": [
+    {
+      "name": "UserPreference",
+      "fields": "user_id, channel, opted_out"
+    }
+  ]
+}

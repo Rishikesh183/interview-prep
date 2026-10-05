@@ -1,0 +1,5 @@
+[
+  "If SMS provider is slow, should push notifications wait?",
+  "What happens when a provider returns 500? And after 5 failures?",
+  "A caller retries the API call after a timeout. How do you avoid sending twice?"
+]

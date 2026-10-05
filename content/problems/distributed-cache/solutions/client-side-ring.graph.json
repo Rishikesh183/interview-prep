@@ -1,0 +1,95 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Users"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "app",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "App servers",
+      "no": "Smart client library holds the consistent hashing ring (150 virtual nodes per server); local near cache for hot keys"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Cache cluster",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "1h",
+        "cluster": true
+      },
+      "no": "Each key also written to the next node on the ring (replica) for failover"
+    },
+    {
+      "i": "sd",
+      "t": "service_discovery",
+      "x": 780,
+      "y": 130,
+      "l": "Membership",
+      "no": "Gossip heartbeats; publishes the ring to clients"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 260,
+      "l": "Source of truth",
+      "c": {
+        "replicas": 2
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "app",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "app",
+      "d": "cache",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "app",
+      "d": "sd",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "app",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [],
+  "entities": []
+}

@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "s",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Services"
+    },
+    {
+      "i": "m",
+      "t": "monitoring",
+      "x": 260,
+      "y": 0,
+      "l": "Metrics / logs / traces"
+    },
+    {
+      "i": "t",
+      "t": "time_series_db",
+      "x": 520,
+      "y": 0,
+      "l": "Time-series DB"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "s",
+      "d": "m",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "m",
+      "d": "t",
+      "h": "r>l"
+    }
+  ]
+}

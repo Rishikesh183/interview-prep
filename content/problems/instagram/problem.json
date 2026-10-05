@@ -1,0 +1,37 @@
+{
+  "id": "instagram",
+  "number": 9,
+  "title": "Instagram",
+  "difficulty": "medium",
+  "tags": ["object-storage", "cdn", "feed"],
+  "prompt": "Design a photo-sharing app like Instagram: users upload photos with captions, follow others, see a feed of followed users' photos, and like/comment.",
+  "functionalReqs": [
+    "Upload photos with captions",
+    "Follow users",
+    "Home feed of followed users' photos",
+    "Like and comment"
+  ],
+  "nonFunctionalReqs": [
+    "Photos load fast worldwide",
+    "Uploads must not be lost",
+    "Feed loads < 300 ms"
+  ],
+  "scale": {
+    "dau": "~500M DAU",
+    "qps": "~100M uploads/day (~1.2K/s), ~50K feed reads/s",
+    "storage": "~2 MB per photo (+ thumbnails) → ~200 TB/day"
+  },
+  "outOfScope": ["Stories", "Reels", "DMs"],
+  "keyComponents": [
+    "cdn",
+    "object_storage",
+    "service",
+    "message_queue",
+    "worker",
+    "cache",
+    "nosql_kv"
+  ],
+  "deepDives": ["Presigned uploads", "Thumbnail pipeline", "Feed fan-out", "Like counters"],
+  "rubricFocus": ["Upload path", "Media delivery via CDN", "Feed generation"],
+  "prerequisites": ["object-storage-blobs", "cdn", "message-queues-vs-streams"]
+}

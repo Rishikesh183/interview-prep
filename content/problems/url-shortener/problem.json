@@ -1,0 +1,41 @@
+{
+  "id": "url-shortener",
+  "number": 1,
+  "title": "URL Shortener",
+  "difficulty": "easy",
+  "priority": true,
+  "tags": ["id-generation", "caching", "read-heavy"],
+  "prompt": "Design a URL shortening service like bit.ly. Users submit a long URL and get back a short link (e.g. sho.rt/aZ3kQ9). Visiting the short link redirects to the original URL. Optionally users can pick a custom alias and set an expiry.",
+  "functionalReqs": [
+    "Create a short URL from a long URL",
+    "Redirect a short URL to the original long URL",
+    "Optional custom alias",
+    "Optional expiry time per link"
+  ],
+  "nonFunctionalReqs": [
+    "Highly available: redirects must keep working",
+    "Low latency redirects (p99 < 50 ms)",
+    "Short codes must be unique and not easily guessable",
+    "Read-heavy: ~100:1 reads to writes"
+  ],
+  "scale": {
+    "dau": "~100M new URLs/month (~40 writes/s avg)",
+    "qps": "~4K redirects/s avg, ~12K/s peak",
+    "storage": "~500 B per mapping, 5-year retention → ~3 TB",
+    "notes": "100:1 read:write"
+  },
+  "outOfScope": ["Analytics dashboards", "User accounts and link management UI"],
+  "keyComponents": ["load_balancer", "service", "cache", "nosql_kv", "id_generator"],
+  "deepDives": [
+    "ID generation: counter + base62 vs hashing vs pre-generated key service",
+    "Cache-aside on the redirect path and cache sizing (80/20)",
+    "301 vs 302 redirects",
+    "Handling expiry and custom alias collisions"
+  ],
+  "rubricFocus": [
+    "Collision-free code generation with a clear strategy",
+    "Read path optimized with caching",
+    "Choice of datastore justified by access pattern (key lookups)"
+  ],
+  "prerequisites": ["id-generation", "caching-strategies", "load-balancing"]
+}

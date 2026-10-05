@@ -1,0 +1,86 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Callers"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Order Service",
+      "no": "Asks for IDs in batches"
+    },
+    {
+      "i": "idgen",
+      "t": "id_generator",
+      "x": 780,
+      "y": 0,
+      "l": "Snowflake generators",
+      "no": "41-bit timestamp + 5-bit datacenter + 5-bit worker id + 12-bit sequence; refuses to issue IDs if the clock moves backwards (NTP skew)"
+    },
+    {
+      "i": "zk",
+      "t": "coordination",
+      "x": 1040,
+      "y": 0,
+      "l": "ZooKeeper",
+      "c": {
+        "purpose": "config"
+      },
+      "no": "Leases a unique worker id to each generator at startup"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "idgen",
+      "p": "gRPC",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "idgen",
+      "d": "zk",
+      "o": "rw",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "idgen",
+      "method": "RPC",
+      "path": "/ids.Next",
+      "auth": true,
+      "request": "{ count }",
+      "response": "{ ids[] }"
+    }
+  ],
+  "entities": []
+}

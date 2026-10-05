@@ -1,0 +1,55 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Client"
+    },
+    {
+      "i": "s",
+      "t": "service",
+      "x": 260,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 520,
+      "y": 0,
+      "l": "Redis (cache-aside)"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 520,
+      "y": 120,
+      "l": "Database"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "s",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "s",
+      "d": "cache",
+      "l": "1. read",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "s",
+      "d": "db",
+      "l": "2. on miss",
+      "h": "r>l"
+    }
+  ]
+}

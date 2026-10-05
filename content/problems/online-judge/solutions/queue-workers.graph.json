@@ -1,0 +1,132 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Browser"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Submission API"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 0,
+      "l": "Submissions",
+      "c": {
+        "replicas": 2
+      }
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 780,
+      "y": 130,
+      "l": "Judge queue"
+    },
+    {
+      "i": "judge",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Judge workers",
+      "c": {
+        "concurrency": 4
+      },
+      "no": "Firecracker microVM sandbox per run; cgroup time limit + memory limit; autoscale on queue depth"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 1300,
+      "y": 0,
+      "l": "Hidden test data"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "api",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "api",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "api",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "q",
+      "d": "judge",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "judge",
+      "d": "s3",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "judge",
+      "d": "db",
+      "o": "w",
+      "l": "verdict",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/submissions",
+      "auth": true,
+      "idempotent": true,
+      "response": "{ submissionId }",
+      "statusCodes": "202"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "api",
+      "method": "GET",
+      "path": "/v1/submissions/{id}",
+      "auth": true,
+      "response": "{ status, verdict, runtimeMs }"
+    }
+  ],
+  "entities": []
+}

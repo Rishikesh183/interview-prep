@@ -1,0 +1,48 @@
+{
+  "id": "file-storage",
+  "number": 13,
+  "title": "Dropbox / Google Drive",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["chunking", "presigned-urls", "sync"],
+  "prompt": "Design a file storage and sync service like Dropbox. Users upload files from any device, files sync to all their devices, and they can share files with others.",
+  "functionalReqs": [
+    "Upload and download files up to 50 GB",
+    "Automatic sync across a user's devices",
+    "Share files/folders with other users",
+    "File version history"
+  ],
+  "nonFunctionalReqs": [
+    "Files are never lost (11 nines durability)",
+    "Uploads resume after network failures",
+    "Sync latency a few seconds",
+    "Minimize bandwidth for small edits to large files"
+  ],
+  "scale": {
+    "dau": "~50M DAU",
+    "qps": "~2 file changes/user/day → ~1.2K writes/s; reads ~5×",
+    "storage": "~500 PB total, avg file 1 MB"
+  },
+  "outOfScope": ["Real-time collaborative editing", "Full-text search in files"],
+  "keyComponents": [
+    "service",
+    "object_storage",
+    "sql_db",
+    "message_queue",
+    "websocket_server",
+    "cdn"
+  ],
+  "deepDives": [
+    "Chunking and content-addressed blocks",
+    "Presigned URLs",
+    "Metadata DB design",
+    "Sync protocol and conflict resolution"
+  ],
+  "rubricFocus": [
+    "Chunked, resumable uploads",
+    "Metadata vs blob separation",
+    "Sync notification mechanism",
+    "Conflict handling"
+  ],
+  "prerequisites": ["object-storage-blobs", "consistency-models", "pub-sub"]
+}

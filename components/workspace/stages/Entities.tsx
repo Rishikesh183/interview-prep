@@ -8,11 +8,11 @@ import { useNodeOptions } from "@/components/canvas/useNodeOptions";
 import { FormRow } from "@/components/form/FormRow";
 import { SimpleSelect } from "@/components/form/SimpleSelect";
 import type { Entity } from "@/lib/schema";
-import { TYPE_ALIASES } from "@/lib/tests/aliases";
+import { GROUPS } from "@/lib/catalog/groups";
 import { useAttemptStore } from "@/store/attempt";
 import { StageIntro } from "./StageIntro";
 
-const STORE_TYPES = [...TYPE_ALIASES.storage, "cache"];
+const STORE_TYPES = [...GROUPS["@storage"], "cache"];
 
 export function Entities() {
   const entities = useAttemptStore((s) => s.meta?.entities);

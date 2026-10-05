@@ -1,0 +1,41 @@
+{
+  "id": "job-scheduler",
+  "number": 18,
+  "title": "Distributed Job Scheduler",
+  "difficulty": "medium",
+  "tags": ["leader-election", "retries", "cron"],
+  "prompt": "Design a distributed job scheduler (like a managed cron / Airflow lite) that runs millions of one-off and recurring jobs on time, with retries.",
+  "functionalReqs": [
+    "Schedule one-off and cron jobs",
+    "Execute jobs on workers at the scheduled time",
+    "Retries with backoff on failure",
+    "Job status and history"
+  ],
+  "nonFunctionalReqs": [
+    "Jobs run at least once, close to their scheduled time (< 1 s skew)",
+    "No single point of failure",
+    "Jobs are not run twice concurrently"
+  ],
+  "scale": {
+    "qps": "~10K job executions/s peak",
+    "storage": "~100M scheduled jobs"
+  },
+  "outOfScope": ["DAG dependencies between jobs"],
+  "keyComponents": ["scheduler", "coordination", "sql_db", "message_queue", "worker"],
+  "deepDives": [
+    "Time-bucketed job tables",
+    "Leader election vs partitioned schedulers",
+    "Visibility timeouts and heartbeats",
+    "Idempotent jobs"
+  ],
+  "rubricFocus": [
+    "Finding due jobs efficiently",
+    "Avoiding duplicate dispatch",
+    "Failure recovery"
+  ],
+  "prerequisites": [
+    "distributed-locks-consensus",
+    "message-queues-vs-streams",
+    "fault-tolerance-retries"
+  ]
+}

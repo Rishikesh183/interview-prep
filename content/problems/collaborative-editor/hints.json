@@ -1,0 +1,5 @@
+[
+  "Two users type at the same position at the same time. Whose insert goes first, and do both clients agree?",
+  "All editors of a doc should talk to the same server, or share state somehow.",
+  "Replaying 1M ops to open a doc is slow."
+]

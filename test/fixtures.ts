@@ -1,11 +1,5 @@
 import { parseConfig } from "@/lib/catalog/components";
-import {
-  AttemptSchema,
-  type Attempt,
-  type EdgeData,
-  type GraphEdge,
-  type GraphNode,
-} from "@/lib/schema";
+import { AttemptSchema, type Attempt, type GraphEdge, type GraphNode } from "@/lib/schema";
 
 export const node = (
   id: string,
@@ -20,7 +14,11 @@ export const node = (
   data: { label, config: parseConfig(type, config), ...(note ? { note } : {}) },
 });
 
-export const edge = (source: string, target: string, data: Partial<EdgeData> = {}): GraphEdge => ({
+export const edge = (
+  source: string,
+  target: string,
+  data: Partial<Omit<GraphEdge, "id" | "source" | "target">> = {},
+): GraphEdge => ({
   id: `${source}-${target}`,
   source,
   target,

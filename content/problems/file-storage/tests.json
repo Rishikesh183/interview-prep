@@ -1,0 +1,119 @@
+[
+  {
+    "id": "chunking",
+    "title": "Files are split into chunks for resumable upload",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "chunk|block|resum|multipart"
+      }
+    },
+    "failHint": "A 10 GB upload fails at 90%. Does the user start over?"
+  },
+  {
+    "id": "blob-store",
+    "title": "File content lives in object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Where do the file bytes live?"
+  },
+  {
+    "id": "metadata",
+    "title": "File metadata is stored in a database",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do names, folders and versions live?"
+  },
+  {
+    "id": "upload-path",
+    "title": "Clients can get bytes into object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": "object_storage"
+      }
+    },
+    "failHint": "How do the bytes get from the client into storage?"
+  },
+  {
+    "id": "sync-notify",
+    "title": "Other devices are notified of changes",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "websocket_server"
+        },
+        {
+          "hasNode": "pub_sub"
+        },
+        {
+          "textMentions": {
+            "pattern": "long.?poll|notif"
+          }
+        }
+      ]
+    },
+    "failHint": "A file changes on the laptop. How does the phone find out?"
+  },
+  {
+    "id": "conflicts",
+    "title": "Concurrent edits / conflicts are handled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "conflict|version|vector clock|last.?writ"
+      }
+    },
+    "failHint": "Two devices edit the same file offline. What happens when both sync?"
+  },
+  {
+    "id": "dedup",
+    "title": "Identical chunks are deduplicated",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "dedup|hash|checksum|sha|content.?address"
+      }
+    },
+    "failHint": "Ten users upload the same 1 GB file. Do you store it ten times?"
+  },
+  {
+    "id": "upload-api",
+    "title": "An API starts or performs uploads",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "file|upload|chunk|block",
+        "method": ["POST", "PUT"]
+      }
+    },
+    "failHint": "Which endpoint starts or performs an upload?"
+  },
+  {
+    "id": "file-entity",
+    "title": "The data model tracks file versions / chunks",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "version|chunk|block|hash",
+        "in": ["entities"]
+      }
+    },
+    "failHint": "How does the data model describe a file's versions or chunks?"
+  }
+]

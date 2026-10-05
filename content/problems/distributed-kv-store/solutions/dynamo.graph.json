@@ -1,0 +1,77 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "coord",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Coordinator nodes",
+      "no": "Any node coordinates: consistent hashing with vnodes; N=3, W=2, R=2 quorum; vector clocks; hinted handoff, read repair, Merkle anti-entropy; gossip membership"
+    },
+    {
+      "i": "store",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 0,
+      "l": "Storage nodes",
+      "c": {
+        "partitionKey": "key"
+      },
+      "no": "Each key replicated to the next N-1 nodes on the ring"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "coord",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "coord",
+      "d": "store",
+      "o": "rw",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "coord",
+      "method": "GET",
+      "path": "/v1/kv/{key}",
+      "auth": true
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "coord",
+      "method": "PUT",
+      "path": "/v1/kv/{key}",
+      "auth": true,
+      "idempotent": true
+    }
+  ],
+  "entities": []
+}

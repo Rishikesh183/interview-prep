@@ -1,0 +1,115 @@
+[
+  {
+    "id": "streaming",
+    "title": "Responses are streamed to clients (SSE / WebSocket)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "websocket_server"
+        },
+        {
+          "textMentions": {
+            "pattern": "sse|server.?sent|stream"
+          }
+        }
+      ]
+    },
+    "failHint": "Generation takes 20 seconds. Does the user stare at a spinner the whole time?"
+  },
+  {
+    "id": "gpu-queue",
+    "title": "Inference requests are queued for GPU workers",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@queue",
+        "to": ["worker", "service"]
+      }
+    },
+    "failHint": "Requests arrive faster than GPUs can serve them. What holds them?"
+  },
+  {
+    "id": "gpu",
+    "title": "GPU inference fleet is modelled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "gpu|inference"
+      }
+    },
+    "failHint": "What actually runs the model?"
+  },
+  {
+    "id": "rate-limits",
+    "title": "Per-user / per-tier rate limits",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "rate_limiter"
+        },
+        {
+          "nodeConfig": {
+            "type": "api_gateway",
+            "where": {
+              "rateLimiting": true
+            }
+          }
+        }
+      ]
+    },
+    "failHint": "A free user sends 1,000 requests a minute. What stops them?"
+  },
+  {
+    "id": "history",
+    "title": "Conversations are persisted",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do conversations live?"
+  },
+  {
+    "id": "priority",
+    "title": "Paid tiers get priority / fairness under load",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "priorit|tier|fair"
+      }
+    },
+    "failHint": "Under heavy load, who gets served first?"
+  },
+  {
+    "id": "batching",
+    "title": "GPU efficiency: batching or caching",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "batch|kv.?cache|prompt cach"
+      }
+    },
+    "failHint": "How do you get more requests per GPU per second?"
+  },
+  {
+    "id": "message-api",
+    "title": "An API sends a message",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "message|chat|completion",
+        "method": "POST"
+      }
+    },
+    "failHint": "What does the UI call to send a message?"
+  }
+]

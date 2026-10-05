@@ -1,0 +1,44 @@
+{
+  "id": "ride-sharing",
+  "number": 22,
+  "title": "Uber / Ola",
+  "difficulty": "hard",
+  "priority": true,
+  "tags": ["geo-indexing", "high-write", "matching"],
+  "prompt": "Design a ride-hailing service like Uber. Drivers continuously report their location; riders request a ride and get matched with a nearby available driver; both see each other's live location during the trip.",
+  "functionalReqs": [
+    "Drivers send location every few seconds",
+    "Riders see nearby drivers and request a ride",
+    "Match rider with a nearby available driver",
+    "Live trip tracking and fare/payment at the end"
+  ],
+  "nonFunctionalReqs": [
+    "Matching within seconds",
+    "A driver is never assigned to two riders",
+    "Location ingestion handles very high write QPS",
+    "Highly available in each city"
+  ],
+  "scale": {
+    "dau": "~20M riders/day, ~5M active drivers",
+    "qps": "Drivers send location every 4 s → ~1.25M location writes/s",
+    "storage": "Live locations are small (in-memory); trip history ~1 KB per trip"
+  },
+  "outOfScope": ["Surge pricing models", "ETA ML", "Driver onboarding"],
+  "keyComponents": [
+    "load_balancer",
+    "websocket_server",
+    "geo_index",
+    "cache",
+    "service",
+    "sql_db",
+    "external_service"
+  ],
+  "deepDives": [
+    "Geo indexing (geohash/S2/H3) and sharding by region",
+    "Location ingestion path",
+    "Atomic driver assignment",
+    "Trip state machine"
+  ],
+  "rubricFocus": ["Handling location write load", "Spatial lookup", "Consistent matching"],
+  "prerequisites": ["geo-indexing", "websockets-realtime", "distributed-locks-consensus"]
+}

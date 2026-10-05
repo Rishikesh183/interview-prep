@@ -1,0 +1,5 @@
+[
+  "Where does ordering come from?",
+  "Who remembers how far each consumer got?",
+  "A broker dies right after acking. Is the message lost?"
+]

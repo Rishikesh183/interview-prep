@@ -1,0 +1,166 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Guests"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "search",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Search Service"
+    },
+    {
+      "i": "book",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Reservation Service",
+      "no": "Conditional UPDATE ... SET reserved = reserved + 1 WHERE reserved < total AND version = ? (no overbooking)"
+    },
+    {
+      "i": "es",
+      "t": "search_index",
+      "x": 780,
+      "y": 0,
+      "l": "Listings index"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 130,
+      "l": "Inventory DB",
+      "c": {
+        "replicas": 3,
+        "isolation": "repeatable-read"
+      }
+    },
+    {
+      "i": "cdc",
+      "t": "event_stream",
+      "x": 1040,
+      "y": 0,
+      "l": "CDC stream",
+      "c": {
+        "topic": "inventory-changes"
+      },
+      "no": "Change data capture (Debezium)"
+    },
+    {
+      "i": "indexer",
+      "t": "worker",
+      "x": 1300,
+      "y": 0,
+      "l": "Index updater"
+    },
+    {
+      "i": "psp",
+      "t": "external_service",
+      "x": 780,
+      "y": 260,
+      "l": "Payments",
+      "c": {
+        "provider": "Stripe"
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "search",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "book",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "search",
+      "d": "es",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "book",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "book",
+      "d": "psp",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "db",
+      "d": "cdc",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "cdc",
+      "d": "indexer",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "indexer",
+      "d": "es",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "search",
+      "method": "GET",
+      "path": "/v1/search",
+      "auth": false,
+      "pagination": "cursor"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "book",
+      "method": "POST",
+      "path": "/v1/reservations",
+      "auth": true,
+      "idempotent": true,
+      "statusCodes": "201, 409"
+    }
+  ],
+  "entities": [
+    {
+      "name": "RoomInventory",
+      "fields": "listing_id, date, total, reserved, version"
+    }
+  ]
+}

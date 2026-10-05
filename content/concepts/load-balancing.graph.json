@@ -1,0 +1,79 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Users"
+    },
+    {
+      "i": "dns",
+      "t": "dns",
+      "x": 260,
+      "y": 0,
+      "l": "Geo DNS"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 120,
+      "l": "L7 load balancer"
+    },
+    {
+      "i": "a",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Instance A"
+    },
+    {
+      "i": "b",
+      "t": "service",
+      "x": 520,
+      "y": 120,
+      "l": "Instance B"
+    },
+    {
+      "i": "sd",
+      "t": "service_discovery",
+      "x": 520,
+      "y": 240,
+      "l": "Registry"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "dns",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "c",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "b",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "lb",
+      "d": "sd",
+      "h": "r>l"
+    }
+  ]
+}

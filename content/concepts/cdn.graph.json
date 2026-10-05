@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "u",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "User in Mumbai"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "l": "Edge cache"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 520,
+      "y": 0,
+      "l": "Origin (S3)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "u",
+      "d": "cdn",
+      "l": "hit: served at the edge",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "cdn",
+      "d": "s3",
+      "l": "miss: fetch + cache",
+      "h": "r>l"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "limiter-in-path",
+    "title": "Requests pass through a limiter before reaching services",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "pathExists": {
+            "from": "@client",
+            "to": "service",
+            "via": "rate_limiter"
+          }
+        },
+        {
+          "pathExists": {
+            "from": "@client",
+            "to": "service",
+            "via": "api_gateway"
+          }
+        }
+      ]
+    },
+    "failHint": "Where in the request path does the check happen, before or after your services?"
+  },
+  {
+    "id": "shared-counters",
+    "title": "Counters live in a shared store so all limiter instances agree",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "edgeExists": {
+        "from": ["rate_limiter", "api_gateway", "service"],
+        "to": "cache"
+      }
+    },
+    "failHint": "If each server counts on its own, what happens to the limit with 20 servers?"
+  },
+  {
+    "id": "algorithm",
+    "title": "A limiting algorithm is chosen",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "token.?bucket|leaky.?bucket|sliding.?window|fixed.?window|sliding.?log"
+      }
+    },
+    "failHint": "Fixed window, sliding window, token bucket: which one, and why?"
+  },
+  {
+    "id": "atomic",
+    "title": "Counter updates are atomic",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "lua|atomic|incr|multi|compare.?and"
+      }
+    },
+    "failHint": "Two requests read the counter at the same moment. How do you avoid both getting through?"
+  },
+  {
+    "id": "reject-signal",
+    "title": "Rejected requests get 429 with retry information",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "429|retry.?after|x-ratelimit|too many"
+      }
+    },
+    "failHint": "What does a client receive when it's over the limit, and how does it know when to retry?"
+  },
+  {
+    "id": "failure-mode",
+    "title": "Behaviour when the limiter store is down is defined",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "fail.?open|fail.?closed|fallback|degrade"
+      }
+    },
+    "failHint": "If the counter store goes down, do you let traffic through or block it?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

@@ -1,0 +1,5 @@
+[
+  "Exact counts for 100M items per minute is expensive. Can you approximate?",
+  "How do you combine partial top-K lists from many workers?",
+  "Should queries compute anything?"
+]

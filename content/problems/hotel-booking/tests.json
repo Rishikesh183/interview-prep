@@ -1,0 +1,116 @@
+[
+  {
+    "id": "search-index",
+    "title": "A search index serves listing search",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "search_index"
+    },
+    "failHint": "What serves 'rooms in Goa, 3 nights, 2 guests' quickly?"
+  },
+  {
+    "id": "inventory-db",
+    "title": "Inventory and reservations live in a transactional DB",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "sql_db"
+    },
+    "failHint": "Where does the source of truth for availability live?"
+  },
+  {
+    "id": "inventory-model",
+    "title": "Inventory is modelled per date/night",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "date|night",
+            "in": ["entities"]
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "per.?(date|night)|calendar"
+          }
+        }
+      ]
+    },
+    "failHint": "How do you represent which nights are free for a room?"
+  },
+  {
+    "id": "overbooking",
+    "title": "Overbooking is prevented",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "overbook|optimistic|for update|unique|version|lock"
+      }
+    },
+    "failHint": "Two guests book the last room for the same night. Who gets it, and how?"
+  },
+  {
+    "id": "index-sync",
+    "title": "Search index is kept in sync with the DB",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "search_index"
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "cdc|change data|sync"
+          }
+        }
+      ]
+    },
+    "failHint": "A booking changes availability. How does search find out?"
+  },
+  {
+    "id": "payments",
+    "title": "Payments go through a provider",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "external_service"
+    },
+    "failHint": "Who charges the guest?"
+  },
+  {
+    "id": "reserve-api",
+    "title": "An idempotent reservation API",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "reserv|book",
+        "method": "POST",
+        "idempotent": true
+      }
+    },
+    "failHint": "The guest double-clicks 'Book'. How do you avoid two reservations?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

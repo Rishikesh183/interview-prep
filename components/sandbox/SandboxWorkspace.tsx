@@ -1,5 +1,6 @@
 "use client";
 
+import { AccountMenu } from "@/components/auth/AccountMenu";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -53,6 +54,7 @@ function SandboxLayout() {
         >
           {STATUS_TEXT[status]}
         </span>
+        <AccountMenu />
         <ShortcutsButton />
         <ThemeToggle />
       </header>

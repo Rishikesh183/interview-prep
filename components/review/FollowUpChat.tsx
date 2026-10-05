@@ -6,11 +6,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { requestFollowUp } from "@/lib/ai/client";
+import { MAX_FOLLOW_UPS } from "@/lib/ai/limits";
+import { refreshAiUsage } from "@/lib/ai/useAiUsage";
 import type { AiReview, FollowUp } from "@/lib/schema";
 import { snapshotAttempt, useAttemptStore } from "@/store/attempt";
 
 /** Keeps follow-up traffic bounded on free-tier rate limits. */
-export const MAX_FOLLOW_UPS = 5;
 const NONE: FollowUp[] = [];
 
 /** The review's questions plus any the interviewer asked in response to an answer. */
@@ -81,6 +82,7 @@ function QuestionCard({
       toast.error(err instanceof Error ? err.message : "Follow-up failed.");
     } finally {
       setBusy(false);
+      void refreshAiUsage();
     }
   };
 

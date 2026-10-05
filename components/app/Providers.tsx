@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeProvider } from "next-themes";
+import { AuthSync } from "@/components/auth/AuthSync";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useShortcuts } from "@/components/useShortcuts";
@@ -22,6 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <TooltipProvider>
         {children}
         <GlobalShortcuts />
+        <AuthSync />
       </TooltipProvider>
       <Toaster />
     </ThemeProvider>

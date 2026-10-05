@@ -1,0 +1,41 @@
+{
+  "id": "collaborative-editor",
+  "number": 24,
+  "title": "Google Docs",
+  "difficulty": "hard",
+  "tags": ["ot-crdt", "websockets", "consistency"],
+  "prompt": "Design a collaborative document editor like Google Docs where many users edit the same document simultaneously and see each other's changes and cursors in real time.",
+  "functionalReqs": [
+    "Concurrent editing by many users",
+    "Changes appear for others within ~100 ms",
+    "Show collaborators' cursors / presence",
+    "Version history and offline edits that merge later"
+  ],
+  "nonFunctionalReqs": [
+    "All replicas converge to the same document",
+    "No lost edits",
+    "Low latency per keystroke"
+  ],
+  "scale": {
+    "dau": "~50M DAU",
+    "qps": "~1M concurrent documents, up to 100 editors per doc",
+    "storage": "Ops log + periodic snapshots"
+  },
+  "outOfScope": ["Rich media embedding", "Comments/suggestions"],
+  "keyComponents": [
+    "load_balancer",
+    "websocket_server",
+    "service",
+    "pub_sub",
+    "nosql_kv",
+    "object_storage"
+  ],
+  "deepDives": [
+    "OT vs CRDT",
+    "Routing editors of one doc to one session server",
+    "Op log + snapshots",
+    "Offline merge"
+  ],
+  "rubricFocus": ["Conflict resolution algorithm", "Real-time transport", "Persistence model"],
+  "prerequisites": ["websockets-realtime", "consistency-models", "pub-sub"]
+}

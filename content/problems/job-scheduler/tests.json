@@ -1,0 +1,93 @@
+[
+  {
+    "id": "job-store",
+    "title": "Jobs are stored durably",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do 100M scheduled jobs live?"
+  },
+  {
+    "id": "dispatch-queue",
+    "title": "Due jobs are dispatched to workers via a queue",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@queue",
+        "to": "worker"
+      }
+    },
+    "failHint": "How does a due job get handed to a worker?"
+  },
+  {
+    "id": "coordination",
+    "title": "Scheduler instances coordinate (leader election or partitioning)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "coordination"
+        },
+        {
+          "textMentions": {
+            "pattern": "leader|partition|shard|lease"
+          }
+        }
+      ]
+    },
+    "failHint": "Two scheduler instances both see job 42 is due. Who dispatches it?"
+  },
+  {
+    "id": "retries",
+    "title": "Failed jobs are retried with backoff",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "retr|backoff"
+      }
+    },
+    "failHint": "A job fails. What happens next?"
+  },
+  {
+    "id": "at-least-once",
+    "title": "Delivery semantics / idempotency are explained",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "idempot|at.?least.?once|exactly.?once|dedup"
+      }
+    },
+    "failHint": "A worker might run a job twice. What makes that safe?"
+  },
+  {
+    "id": "worker-failure",
+    "title": "Worker crashes are detected (heartbeat/visibility timeout)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "heartbeat|visibility|timeout|lease"
+      }
+    },
+    "failHint": "A worker dies halfway through a job. How does anyone notice?"
+  },
+  {
+    "id": "schedule-api",
+    "title": "An API schedules jobs",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "job|schedule",
+        "method": "POST"
+      }
+    },
+    "failHint": "How does a user schedule a job?"
+  }
+]

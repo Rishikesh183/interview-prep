@@ -1,0 +1,120 @@
+[
+  {
+    "id": "partitions",
+    "title": "Topics are split into partitions",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "partition"
+      }
+    },
+    "failHint": "One log can't take 5M messages per second. How is a topic split?"
+  },
+  {
+    "id": "offsets",
+    "title": "Consumers track offsets",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "offset"
+      }
+    },
+    "failHint": "A consumer restarts. How does it know where it left off?"
+  },
+  {
+    "id": "replication",
+    "title": "Partitions are replicated (leader/followers, ISR)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "replica|isr|in.?sync|follower"
+      }
+    },
+    "failHint": "A broker dies right after acknowledging a message. Is the message lost?"
+  },
+  {
+    "id": "consumer-groups",
+    "title": "Consumer groups share work",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "consumer group|rebalanc"
+      }
+    },
+    "failHint": "Ten consumers read one topic. Does each message go to all ten, or one?"
+  },
+  {
+    "id": "metadata",
+    "title": "Cluster metadata / controller coordination",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "coordination"
+        },
+        {
+          "textMentions": {
+            "pattern": "controller|raft|kraft|zookeeper"
+          }
+        }
+      ]
+    },
+    "failHint": "Who decides which broker leads each partition?"
+  },
+  {
+    "id": "durability",
+    "title": "Producer acknowledgements and durability are defined",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "ack|fsync|durab|min.?insync"
+      }
+    },
+    "failHint": "When exactly is a write considered safe to acknowledge?"
+  },
+  {
+    "id": "retention",
+    "title": "Retention policy exists",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "retention|compaction|ttl"
+      }
+    },
+    "failHint": "How long are messages kept?"
+  },
+  {
+    "id": "brokers",
+    "title": "Brokers are modelled",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "event_stream"
+        },
+        {
+          "allOf": [
+            {
+              "hasNode": "service"
+            },
+            {
+              "textMentions": {
+                "pattern": "broker",
+                "in": ["notes", "labels"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "failHint": "Which servers store the logs?"
+  }
+]

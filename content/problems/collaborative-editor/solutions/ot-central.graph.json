@@ -1,0 +1,127 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Editor"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB",
+      "c": {
+        "algorithm": "consistent-hash"
+      },
+      "no": "Routes by document id: all editors of a doc share one session server"
+    },
+    {
+      "i": "collab",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "Collaboration servers",
+      "c": {
+        "instances": 20
+      },
+      "no": "Operational transform (OT) per document session; broadcasts ops, cursors and presence"
+    },
+    {
+      "i": "ops",
+      "t": "nosql_kv",
+      "x": 780,
+      "y": 0,
+      "l": "Op log",
+      "c": {
+        "partitionKey": "doc_id",
+        "sortKey": "seq",
+        "consistency": "strong"
+      }
+    },
+    {
+      "i": "snap",
+      "t": "object_storage",
+      "x": 780,
+      "y": 130,
+      "l": "Snapshots",
+      "no": "Snapshot every 500 ops; load = snapshot + tail of the op log"
+    },
+    {
+      "i": "docs",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Docs API"
+    },
+    {
+      "i": "meta",
+      "t": "sql_db",
+      "x": 780,
+      "y": 260,
+      "l": "Doc metadata",
+      "c": {
+        "replicas": 2
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "p": "WebSocket",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "collab",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "docs",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "collab",
+      "d": "ops",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "collab",
+      "d": "snap",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "docs",
+      "d": "meta",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "docs",
+      "d": "snap",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [],
+  "entities": [
+    {
+      "name": "Operation",
+      "fields": "doc_id, seq, author, op (insert/delete @pos), base_version"
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+[
+  {
+    "id": "seat-hold",
+    "title": "Seats are held/locked during checkout",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "lock|hold|reserv"
+      }
+    },
+    "failHint": "A user is paying for seat A5. What stops someone else picking A5 meanwhile?"
+  },
+  {
+    "id": "hold-expiry",
+    "title": "Holds expire and release seats",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "ttl|expir|timeout|release"
+      }
+    },
+    "failHint": "The user walks away mid-payment. When does A5 become available again?"
+  },
+  {
+    "id": "double-booking",
+    "title": "Double booking is prevented by the datastore or locks",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "double.?book|unique|optimistic|for update|serializ|compare.?and|setnx|atomic"
+      }
+    },
+    "failHint": "Two clicks on A5 in the same millisecond. What guarantees exactly one wins?"
+  },
+  {
+    "id": "strong-store",
+    "title": "Bookings use a strongly consistent store",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "sql_db"
+        },
+        {
+          "nodeConfig": {
+            "type": "nosql_kv",
+            "where": {
+              "consistency": "strong"
+            }
+          }
+        }
+      ]
+    },
+    "failHint": "Which kind of store can make that guarantee?"
+  },
+  {
+    "id": "payments",
+    "title": "A payment provider is integrated",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "external_service"
+    },
+    "failHint": "Who actually charges the card?"
+  },
+  {
+    "id": "idempotent-booking",
+    "title": "Booking/payment APIs are idempotent",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": ".",
+        "method": "POST",
+        "idempotent": true
+      }
+    },
+    "failHint": "The payment times out and the user retries. How do you avoid charging twice?"
+  },
+  {
+    "id": "spikes",
+    "title": "Traffic spikes are absorbed (queue, waiting room or rate limiting)",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "@queue"
+        },
+        {
+          "hasNode": "rate_limiter"
+        },
+        {
+          "textMentions": {
+            "pattern": "waiting room|virtual queue"
+          }
+        }
+      ]
+    },
+    "failHint": "A blockbuster opens and 500K people click at once. What absorbs that?"
+  },
+  {
+    "id": "booking-api",
+    "title": "An API books or holds seats",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "book|reserv|hold|seat",
+        "method": "POST"
+      }
+    },
+    "failHint": "Which endpoint holds or books seats?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

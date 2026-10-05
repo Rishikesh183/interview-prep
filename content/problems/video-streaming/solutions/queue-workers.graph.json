@@ -1,0 +1,240 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "creator",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Creator Studio",
+      "no": "Multipart upload with presigned URLs (resumable)"
+    },
+    {
+      "i": "viewer",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 130,
+      "l": "Player",
+      "no": "HLS adaptive bitrate: switches renditions by bandwidth"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "c": {
+        "content": ["media"],
+        "ttl": "30d"
+      }
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 130,
+      "l": "LB"
+    },
+    {
+      "i": "upload",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Upload Service"
+    },
+    {
+      "i": "video",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Video API",
+      "no": "Returns manifest URL + metadata"
+    },
+    {
+      "i": "raw",
+      "t": "object_storage",
+      "x": 260,
+      "y": 260,
+      "l": "Raw uploads"
+    },
+    {
+      "i": "out",
+      "t": "object_storage",
+      "x": 520,
+      "y": 260,
+      "l": "Renditions (HLS)",
+      "c": {
+        "lifecycle": "Infrequent access after 90d"
+      }
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 780,
+      "y": 0,
+      "l": "Transcode jobs"
+    },
+    {
+      "i": "tx",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Transcoders",
+      "c": {
+        "instances": 200,
+        "concurrency": 4
+      },
+      "no": "Split into segments, encode 240p–4K in parallel"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 1300,
+      "y": 0,
+      "l": "Video metadata",
+      "c": {
+        "readReplicas": true
+      }
+    },
+    {
+      "i": "mcache",
+      "t": "cache",
+      "x": 780,
+      "y": 130,
+      "l": "Metadata cache",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "1h"
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "creator",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "viewer",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "viewer",
+      "d": "cdn",
+      "o": "r",
+      "l": "segments",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "creator",
+      "d": "raw",
+      "o": "w",
+      "l": "presigned PUT",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "lb",
+      "d": "upload",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "lb",
+      "d": "video",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "upload",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "upload",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "q",
+      "d": "tx",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "tx",
+      "d": "raw",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "tx",
+      "d": "out",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "tx",
+      "d": "db",
+      "o": "w",
+      "l": "mark ready",
+      "h": "r>l"
+    },
+    {
+      "i": "e13",
+      "s": "cdn",
+      "d": "out",
+      "h": "r>l"
+    },
+    {
+      "i": "e14",
+      "s": "video",
+      "d": "mcache",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e15",
+      "s": "video",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "upload",
+      "method": "POST",
+      "path": "/v1/videos",
+      "auth": true,
+      "response": "{ videoId, uploadUrls[] }",
+      "statusCodes": "201"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "video",
+      "method": "GET",
+      "path": "/v1/videos/{id}/manifest",
+      "auth": false,
+      "response": "{ hlsUrl, renditions[] }"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Video",
+      "fields": "id, owner_id, title, status, duration, renditions[], created_at"
+    }
+  ]
+}

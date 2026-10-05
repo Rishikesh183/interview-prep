@@ -1,0 +1,5 @@
+[
+  "Scanning 100M rows every second won't work. How do you find due jobs?",
+  "Two scheduler instances must not both dispatch the same job.",
+  "What if a worker dies mid-job?"
+]

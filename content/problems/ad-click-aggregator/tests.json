@@ -1,0 +1,109 @@
+[
+  {
+    "id": "ingest",
+    "title": "Clicks are written to a stream",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "edgeExists": {
+        "from": "*",
+        "to": "event_stream"
+      }
+    },
+    "failHint": "Should counting happen inside the click request?"
+  },
+  {
+    "id": "aggregation",
+    "title": "A stream processor aggregates clicks in windows",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "nodeConfig": {
+        "type": "stream_processor",
+        "where": {
+          "windowing": "^(tumbling|sliding|session)$"
+        }
+      }
+    },
+    "failHint": "Advertisers want clicks per ad per minute. What computes that continuously?"
+  },
+  {
+    "id": "dedup",
+    "title": "Duplicate clicks are not double counted",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "dedup|idempot|exactly.?once|click.?id"
+      }
+    },
+    "failHint": "A user double-clicks, or a retry resends the event. Do you bill twice?"
+  },
+  {
+    "id": "olap",
+    "title": "Aggregates are stored for fast range queries",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": ["data_warehouse", "time_series_db", "wide_column", "sql_db"]
+    },
+    "failHint": "Where do aggregates live so time-range queries are fast?"
+  },
+  {
+    "id": "reconcile",
+    "title": "Batch reconciliation for billing accuracy",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "batch_processor"
+        },
+        {
+          "textMentions": {
+            "pattern": "reconcil"
+          }
+        }
+      ]
+    },
+    "failHint": "Stream counts drift slightly. How do you get billing-grade numbers?"
+  },
+  {
+    "id": "late-events",
+    "title": "Late events / watermarks are handled",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "late|watermark"
+      }
+    },
+    "failHint": "A click event arrives 3 minutes late. Which minute does it count in?"
+  },
+  {
+    "id": "redirect",
+    "title": "The click endpoint redirects to the advertiser",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "click|redirect",
+        "method": "GET"
+      }
+    },
+    "failHint": "What does the user's browser hit when they click the ad?"
+  },
+  {
+    "id": "query-api",
+    "title": "Advertisers query aggregates",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "metric|stat|count|aggregat|report",
+        "method": "GET"
+      }
+    },
+    "failHint": "How do advertisers fetch their numbers?"
+  }
+]

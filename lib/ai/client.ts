@@ -5,7 +5,7 @@ import {
   type Attempt,
   type FollowUpResponse,
 } from "@/lib/schema";
-import { AiErrorResponseSchema } from "@/lib/schema/ai-requests";
+import { AiErrorResponseSchema, AiUsageSchema, type AiUsage } from "@/lib/schema/ai-requests";
 import type { z } from "zod";
 
 /** Browser-side wrappers around the AI route handlers. The API key never leaves the server. */
@@ -29,8 +29,21 @@ async function post<S extends z.ZodType>(
   return parsed.data;
 }
 
-export function requestReview(problemId: string, attempt: Attempt): Promise<AiReview> {
-  return post("/api/review", { problemId, attempt }, AiReviewSchema);
+export type ReviewTier = "standard" | "deep";
+
+export function requestReview(
+  problemId: string,
+  attempt: Attempt,
+  tier: ReviewTier = "standard",
+): Promise<AiReview> {
+  return post("/api/review", { problemId, attempt, tier }, AiReviewSchema);
+}
+
+export async function fetchAiUsage(): Promise<AiUsage | null> {
+  const res = await fetch("/api/usage", { cache: "no-store" }).catch(() => null);
+  if (!res?.ok) return null;
+  const parsed = AiUsageSchema.safeParse(await res.json().catch(() => null));
+  return parsed.success ? parsed.data : null;
 }
 
 export function requestFollowUp(

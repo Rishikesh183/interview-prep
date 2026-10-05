@@ -1,0 +1,44 @@
+{
+  "id": "notification-system",
+  "number": 10,
+  "title": "Notification System",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["queues", "retries", "dlq", "idempotency"],
+  "prompt": "Design a notification service that other internal services call to send push, email and SMS notifications to users. It must respect user preferences, retry failures and never spam users with duplicates.",
+  "functionalReqs": [
+    "Send push / email / SMS via one API",
+    "Respect user channel preferences and opt-outs",
+    "Templates with variables",
+    "Scheduled and bulk notifications",
+    "Delivery status tracking"
+  ],
+  "nonFunctionalReqs": [
+    "At-least-once delivery with deduplication (no double sends)",
+    "One slow provider must not block other channels",
+    "Soft real-time: < 5 s for transactional messages"
+  ],
+  "scale": {
+    "qps": "~10M notifications/day avg, bursts of 100K/s for campaigns",
+    "dau": "~100M users",
+    "storage": "~1 KB per notification log entry, 90-day retention"
+  },
+  "outOfScope": ["Building the email/SMS providers themselves"],
+  "keyComponents": [
+    "api_gateway",
+    "service",
+    "message_queue",
+    "worker",
+    "external_service",
+    "sql_db",
+    "cache"
+  ],
+  "deepDives": [
+    "Queue per channel and isolation",
+    "Retries with backoff + DLQ",
+    "Idempotency keys",
+    "Preferences and rate limiting per user"
+  ],
+  "rubricFocus": ["Channel isolation", "Retry/DLQ strategy", "Deduplication"],
+  "prerequisites": ["message-queues-vs-streams", "idempotency", "fault-tolerance-retries"]
+}

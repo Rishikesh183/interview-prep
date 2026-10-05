@@ -1,0 +1,204 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "agents",
+      "t": "external_service",
+      "x": 0,
+      "y": 0,
+      "l": "Host agents",
+      "c": {
+        "provider": "push agent on every host"
+      }
+    },
+    {
+      "i": "users",
+      "t": "web_client",
+      "x": 0,
+      "y": 130,
+      "l": "Dashboards"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "collect",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Collectors"
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 780,
+      "y": 0,
+      "l": "Metrics stream",
+      "c": {
+        "partitions": 64,
+        "partitionKey": "series_id"
+      }
+    },
+    {
+      "i": "flink",
+      "t": "stream_processor",
+      "x": 1040,
+      "y": 0,
+      "l": "Rollups",
+      "c": {
+        "windowing": "tumbling"
+      },
+      "no": "1-min and 1-h rollups; downsampling for 1-year retention"
+    },
+    {
+      "i": "writer",
+      "t": "worker",
+      "x": 1040,
+      "y": 130,
+      "l": "TSDB writers"
+    },
+    {
+      "i": "tsdb",
+      "t": "time_series_db",
+      "x": 1300,
+      "y": 0,
+      "l": "TSDB",
+      "c": {
+        "retention": "15d raw, 1y rolled up"
+      }
+    },
+    {
+      "i": "alerts",
+      "t": "service",
+      "x": 1300,
+      "y": 130,
+      "l": "Alert evaluator"
+    },
+    {
+      "i": "notify",
+      "t": "notification_service",
+      "x": 1560,
+      "y": 0,
+      "l": "Notifier",
+      "c": {
+        "channels": ["email", "sms"]
+      }
+    },
+    {
+      "i": "pager",
+      "t": "external_service",
+      "x": 1820,
+      "y": 0,
+      "l": "PagerDuty"
+    },
+    {
+      "i": "query",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Query Service"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "agents",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "users",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "collect",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "query",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "collect",
+      "d": "kafka",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "kafka",
+      "d": "writer",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "kafka",
+      "d": "flink",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "writer",
+      "d": "tsdb",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "flink",
+      "d": "tsdb",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "flink",
+      "d": "alerts",
+      "p": "gRPC",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "alerts",
+      "d": "notify",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "notify",
+      "d": "pager",
+      "h": "r>l"
+    },
+    {
+      "i": "e13",
+      "s": "query",
+      "d": "tsdb",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "query",
+      "method": "GET",
+      "path": "/v1/query",
+      "auth": true,
+      "request": "?expr&start&end&step"
+    }
+  ],
+  "entities": []
+}

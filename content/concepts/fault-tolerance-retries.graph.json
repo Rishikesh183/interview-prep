@@ -1,0 +1,55 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "s",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 260,
+      "y": 0,
+      "l": "Retry queue (DLQ)"
+    },
+    {
+      "i": "w",
+      "t": "worker",
+      "x": 520,
+      "y": 0,
+      "l": "Sender (backoff)"
+    },
+    {
+      "i": "p",
+      "t": "external_service",
+      "x": 780,
+      "y": 0,
+      "l": "Provider"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "s",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "q",
+      "d": "w",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "w",
+      "d": "p",
+      "h": "r>l"
+    }
+  ]
+}

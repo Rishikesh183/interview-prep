@@ -1,0 +1,121 @@
+[
+  {
+    "id": "prefix-index",
+    "title": "Prefixes are served from a trie / prefix index",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "trie|prefix"
+      }
+    },
+    "failHint": "What structure answers 'everything starting with app' quickly?"
+  },
+  {
+    "id": "precompute",
+    "title": "Top-K is precomputed offline or in a stream",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "batch_processor"
+        },
+        {
+          "hasNode": "stream_processor"
+        }
+      ]
+    },
+    "failHint": "Ranking candidates on every keystroke is too slow. When could that work happen?"
+  },
+  {
+    "id": "hot-cache",
+    "title": "Hot prefixes are cached (server or CDN)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "cache"
+        },
+        {
+          "hasNode": "cdn"
+        }
+      ]
+    },
+    "failHint": "Everyone types 'f', 'fa', 'fac'... What serves those common prefixes?"
+  },
+  {
+    "id": "logging",
+    "title": "Search queries are collected for ranking",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": ["event_stream", "message_queue"]
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "query log|analytics log"
+          }
+        }
+      ]
+    },
+    "failHint": "Where does popularity data come from?"
+  },
+  {
+    "id": "api",
+    "title": "A suggestion API takes a prefix",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "suggest|complete|typeahead|search",
+        "method": "GET"
+      }
+    },
+    "failHint": "What does the search box call on each keystroke?"
+  },
+  {
+    "id": "client",
+    "title": "Client-side request reduction (debounce / browser cache)",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "debounc|throttl|browser cache|client.?side"
+      }
+    },
+    "failHint": "Can the browser avoid sending a request for every single keystroke?"
+  },
+  {
+    "id": "sharding",
+    "title": "Index sharding is addressed",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "shard|partition|replica"
+      }
+    },
+    "failHint": "The index doesn't fit on one machine. How do you split it?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

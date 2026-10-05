@@ -1,0 +1,114 @@
+[
+  {
+    "id": "unique-ids",
+    "title": "Short codes are generated without collisions",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "id_generator"
+        },
+        {
+          "textMentions": {
+            "pattern": "base62|counter|snowflake|hash|key.?gen",
+            "in": ["notes", "labels"]
+          }
+        }
+      ]
+    },
+    "failHint": "How do two app servers avoid generating the same short code?"
+  },
+  {
+    "id": "fast-redirect",
+    "title": "The redirect path can hit a cache before the database",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": "@database",
+        "via": "cache"
+      }
+    },
+    "failHint": "Reads outnumber writes 100:1. What absorbs that read traffic before the database?"
+  },
+  {
+    "id": "durable-store",
+    "title": "Mappings are stored durably",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": "@database"
+      }
+    },
+    "failHint": "Where does a mapping live so it survives a restart?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads incoming traffic across several service instances?"
+  },
+  {
+    "id": "create-api",
+    "title": "An API creates short URLs",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "url|link|shorten",
+        "method": "POST"
+      }
+    },
+    "failHint": "Which endpoint does a user call to get a short link?"
+  },
+  {
+    "id": "redirect-api",
+    "title": "A GET endpoint takes the short code as a path parameter",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "\\{[^}]+\\}|/:\\w+",
+        "method": "GET"
+      }
+    },
+    "failHint": "What does the browser request when someone opens a short link?"
+  },
+  {
+    "id": "mapping-entity",
+    "title": "The data model stores the long URL against the code",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "long|original|target|url",
+        "in": ["entities"]
+      }
+    },
+    "failHint": "What does a row need to store so a code can be turned back into a URL?"
+  },
+  {
+    "id": "redirect-status",
+    "title": "Chooses between 301 and 302 redirects",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "30[127]"
+      }
+    },
+    "failHint": "Which HTTP redirect would you return, and does the browser cache it?"
+  }
+]

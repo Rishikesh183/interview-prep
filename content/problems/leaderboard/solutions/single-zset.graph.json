@@ -1,0 +1,106 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Game client"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Leaderboard Service",
+      "no": "ZINCRBY on score updates; ZREVRANGE for top 100; ZREVRANK for own rank"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Redis sorted sets",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "24h",
+        "cluster": true
+      },
+      "no": "One ZSET per board; shard by score bucket past ~100M members"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 130,
+      "l": "Scores DB",
+      "c": {
+        "replicas": 2
+      },
+      "no": "Source of truth; rebuild ZSETs from here"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "svc",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "redis",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/scores",
+      "auth": true,
+      "idempotent": true,
+      "request": "{ playerId, delta, matchId }"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/leaderboards/{board}/top",
+      "auth": false,
+      "pagination": "offset"
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/leaderboards/{board}/rank/{playerId}",
+      "auth": true
+    }
+  ],
+  "entities": []
+}

@@ -1,0 +1,45 @@
+{
+  "id": "ad-click-aggregator",
+  "number": 27,
+  "title": "Ad Click Aggregator",
+  "difficulty": "hard",
+  "tags": ["stream-processing", "exactly-once"],
+  "prompt": "Design a system that records ad clicks, redirects users to the advertiser, and lets advertisers query click counts per ad per minute in near real time, accurate enough for billing.",
+  "functionalReqs": [
+    "Record clicks and redirect to the advertiser URL",
+    "Aggregate clicks per ad per minute",
+    "Query counts over time ranges with filters",
+    "Reconcile for billing"
+  ],
+  "nonFunctionalReqs": [
+    "No double counting (billing!)",
+    "Query results within ~1 minute of the click",
+    "Handle 10K+ clicks/s with spikes"
+  ],
+  "scale": {
+    "qps": "~10K clicks/s avg, 50K peak",
+    "storage": "~1 B clicks/day raw; aggregates much smaller"
+  },
+  "outOfScope": ["Ad serving / auctions", "Fraud ML"],
+  "keyComponents": [
+    "service",
+    "event_stream",
+    "stream_processor",
+    "data_warehouse",
+    "batch_processor",
+    "object_storage"
+  ],
+  "deepDives": [
+    "Windowed aggregation",
+    "Exactly-once / idempotent sinks",
+    "Late events and watermarks",
+    "Lambda vs Kappa reconciliation"
+  ],
+  "rubricFocus": [
+    "Ingestion via stream",
+    "Windowed aggregation",
+    "Dedup / exactly-once",
+    "OLAP query store"
+  ],
+  "prerequisites": ["message-queues-vs-streams", "idempotency", "back-of-envelope-estimation"]
+}

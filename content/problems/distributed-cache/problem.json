@@ -1,0 +1,33 @@
+{
+  "id": "distributed-cache",
+  "number": 5,
+  "title": "Distributed Cache",
+  "difficulty": "easy",
+  "tags": ["consistent-hashing", "eviction", "replication"],
+  "prompt": "Design a distributed in-memory cache like Memcached/Redis Cluster that application servers use for get/set with TTL. It should scale horizontally to hundreds of nodes.",
+  "functionalReqs": [
+    "get(key), set(key, value, ttl), delete(key)",
+    "Automatic eviction when memory is full",
+    "Add/remove nodes without downtime"
+  ],
+  "nonFunctionalReqs": [
+    "Sub-millisecond reads",
+    "Survives node failures with minimal misses",
+    "Even key distribution"
+  ],
+  "scale": {
+    "qps": "~5M ops/s",
+    "storage": "~10 TB total memory",
+    "notes": "Values avg 1 KB, hot keys exist"
+  },
+  "outOfScope": ["Persistence to disk", "Transactions"],
+  "keyComponents": ["cache", "coordination", "service_discovery"],
+  "deepDives": [
+    "Consistent hashing with virtual nodes",
+    "Replication and failover",
+    "Hot keys",
+    "Eviction policies"
+  ],
+  "rubricFocus": ["Partitioning scheme", "Membership & failure detection", "Eviction policy"],
+  "prerequisites": ["consistent-hashing", "caching-strategies", "replication"]
+}

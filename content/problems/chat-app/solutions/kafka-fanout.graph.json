@@ -1,0 +1,188 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB",
+      "c": {
+        "algorithm": "consistent-hash"
+      }
+    },
+    {
+      "i": "ws",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "Gateway nodes",
+      "c": {
+        "instances": 40
+      },
+      "no": "Tracks online presence via heartbeats; sends delivered/read receipt events"
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 780,
+      "y": 0,
+      "l": "Kafka",
+      "c": {
+        "topic": "messages",
+        "partitions": 256,
+        "partitionKey": "conversation_id"
+      },
+      "no": "Per-partition ordering"
+    },
+    {
+      "i": "deliver",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Delivery workers",
+      "c": {
+        "concurrency": 50
+      }
+    },
+    {
+      "i": "sessions",
+      "t": "cache",
+      "x": 1300,
+      "y": 0,
+      "l": "Session registry",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "5m"
+      },
+      "no": "user → gateway node, refreshed by heartbeats"
+    },
+    {
+      "i": "store",
+      "t": "nosql_kv",
+      "x": 1300,
+      "y": 130,
+      "l": "Message store",
+      "c": {
+        "partitionKey": "conversation_id",
+        "sortKey": "seq"
+      }
+    },
+    {
+      "i": "notif",
+      "t": "notification_service",
+      "x": 1300,
+      "y": 260,
+      "l": "Push",
+      "no": "Offline delivery via APNs/FCM"
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Sync API"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "p": "WebSocket",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "ws",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "api",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "ws",
+      "d": "kafka",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "kafka",
+      "d": "deliver",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "deliver",
+      "d": "store",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "deliver",
+      "d": "sessions",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "deliver",
+      "d": "ws",
+      "p": "gRPC",
+      "l": "push to recipient node",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "deliver",
+      "d": "notif",
+      "p": "gRPC",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "ws",
+      "d": "sessions",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "api",
+      "d": "store",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "api",
+      "method": "GET",
+      "path": "/v1/chats/{chatId}/history",
+      "auth": true,
+      "pagination": "cursor"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Message",
+      "fields": "conversation_id, seq, sender, body, sent_at"
+    }
+  ]
+}

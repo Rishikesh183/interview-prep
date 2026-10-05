@@ -1,0 +1,33 @@
+{
+  "id": "proximity-service",
+  "number": 14,
+  "title": "Proximity Service (Yelp)",
+  "difficulty": "medium",
+  "tags": ["geo-indexing", "read-heavy"],
+  "prompt": "Design a service like Yelp's 'nearby' search: given a location and radius, return nearby businesses. Business owners can add or update listings.",
+  "functionalReqs": [
+    "Search businesses within a radius of a point",
+    "View business details",
+    "Owners add/update businesses (changes visible next day is OK)"
+  ],
+  "nonFunctionalReqs": [
+    "Search < 200 ms",
+    "Read-heavy, highly available",
+    "Handles dense cities and empty areas"
+  ],
+  "scale": {
+    "dau": "~100M DAU",
+    "qps": "~5 searches/user/day → ~5K QPS avg, 15K peak",
+    "storage": "~200M businesses × 1 KB"
+  },
+  "outOfScope": ["Reviews", "Real-time moving objects"],
+  "keyComponents": ["load_balancer", "service", "geo_index", "cache", "sql_db"],
+  "deepDives": [
+    "Geohash vs quadtree vs S2",
+    "Boundary handling (neighbour cells)",
+    "Read replicas and caching",
+    "Index rebuild cadence"
+  ],
+  "rubricFocus": ["Spatial index choice", "Read scaling", "Update path"],
+  "prerequisites": ["geo-indexing", "replication", "caching-strategies"]
+}

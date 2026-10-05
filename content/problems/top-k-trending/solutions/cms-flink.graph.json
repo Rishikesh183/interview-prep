@@ -1,0 +1,167 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Apps"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "ingest",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Event ingest"
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 780,
+      "y": 0,
+      "l": "Events",
+      "c": {
+        "partitionKey": "item_id"
+      }
+    },
+    {
+      "i": "flink",
+      "t": "stream_processor",
+      "x": 1040,
+      "y": 0,
+      "l": "Counters",
+      "c": {
+        "windowing": "sliding"
+      },
+      "no": "Count-min sketch + min-heap per partition, partial top-K every minute"
+    },
+    {
+      "i": "merge",
+      "t": "worker",
+      "x": 1300,
+      "y": 0,
+      "l": "Top-K merger",
+      "no": "Merges partial lists into the global top 100 per window"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 1560,
+      "y": 0,
+      "l": "Trending cache",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "2m"
+      }
+    },
+    {
+      "i": "archive",
+      "t": "worker",
+      "x": 1040,
+      "y": 130,
+      "l": "Archiver"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 1300,
+      "y": 130,
+      "l": "Raw events"
+    },
+    {
+      "i": "trends",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Trends API"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "ingest",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "trends",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "ingest",
+      "d": "kafka",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "kafka",
+      "d": "flink",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "kafka",
+      "d": "archive",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "flink",
+      "d": "merge",
+      "p": "internal",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "merge",
+      "d": "redis",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "archive",
+      "d": "s3",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "trends",
+      "d": "redis",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "trends",
+      "method": "GET",
+      "path": "/v1/trending",
+      "auth": false,
+      "request": "?window=1h|1d|1w"
+    }
+  ],
+  "entities": []
+}

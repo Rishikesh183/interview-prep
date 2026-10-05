@@ -1,0 +1,62 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Client"
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 260,
+      "y": 0,
+      "l": "Upload API (presign)"
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 260,
+      "y": 120,
+      "l": "Bucket"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 240,
+      "l": "CDN"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "api",
+      "l": "1. get URL",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "c",
+      "d": "s3",
+      "l": "2. PUT bytes",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "c",
+      "d": "cdn",
+      "l": "3. read",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "cdn",
+      "d": "s3",
+      "h": "r>l"
+    }
+  ]
+}

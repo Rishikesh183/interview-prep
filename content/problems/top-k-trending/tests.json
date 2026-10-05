@@ -1,0 +1,96 @@
+[
+  {
+    "id": "stream",
+    "title": "Events flow through a stream",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "event_stream"
+    },
+    "failHint": "How do billions of view events reach your counters?"
+  },
+  {
+    "id": "processor",
+    "title": "A stream processor computes counts",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "event_stream",
+        "to": "stream_processor"
+      }
+    },
+    "failHint": "What turns the stream into counts continuously?"
+  },
+  {
+    "id": "approx",
+    "title": "Heavy-hitter / approximate counting is used",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "count.?min|sketch|heavy.?hitter|space.?saving|misra|heap"
+      }
+    },
+    "failHint": "Exact counts for 100M items every minute is expensive. Can you approximate?"
+  },
+  {
+    "id": "windows",
+    "title": "Multiple time windows are maintained",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "nodeConfig": {
+            "type": "stream_processor",
+            "where": {
+              "windowing": "^(tumbling|sliding)$"
+            }
+          }
+        },
+        {
+          "textMentions": {
+            "pattern": "window"
+          }
+        }
+      ]
+    },
+    "failHint": "Trending in the last hour vs the last week: how do you keep both?"
+  },
+  {
+    "id": "merge",
+    "title": "Partial results from partitions are merged",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "merge|combine|aggregat"
+      }
+    },
+    "failHint": "Each partition has its own top 100. How do you get the global top 100?"
+  },
+  {
+    "id": "serving",
+    "title": "Precomputed top-K served from cache/store",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": ["cache", "nosql_kv", "sql_db"]
+    },
+    "failHint": "Should a query compute anything, or read a ready answer?"
+  },
+  {
+    "id": "api",
+    "title": "A top-K query API",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "trend|top",
+        "method": "GET"
+      }
+    },
+    "failHint": "What does the app call to show what's trending?"
+  }
+]

@@ -1,0 +1,47 @@
+{
+  "id": "ticket-booking",
+  "number": 15,
+  "title": "Ticket Booking (BookMyShow)",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["locking", "concurrency", "idempotency"],
+  "prompt": "Design a movie/event ticket booking system like BookMyShow. Users browse shows, pick specific seats, hold them for a few minutes while paying, and get a confirmed booking. Popular shows sell out in minutes.",
+  "functionalReqs": [
+    "Browse events and see the seat map",
+    "Select seats and hold them for ~10 minutes",
+    "Pay and confirm the booking",
+    "Release seats if payment fails or the hold expires"
+  ],
+  "nonFunctionalReqs": [
+    "No double booking, ever",
+    "Seat map reads are fast and highly available",
+    "Survives traffic spikes for popular releases",
+    "Payments are not charged twice"
+  ],
+  "scale": {
+    "dau": "~10M DAU",
+    "qps": "~1K bookings/s at peak; seat-map reads ~50K/s",
+    "storage": "~1M shows × 300 seats"
+  },
+  "outOfScope": ["Dynamic pricing", "Recommendations"],
+  "keyComponents": [
+    "load_balancer",
+    "service",
+    "sql_db",
+    "cache",
+    "external_service",
+    "message_queue"
+  ],
+  "deepDives": [
+    "Pessimistic vs optimistic locking",
+    "Distributed locks with TTL",
+    "Payment idempotency",
+    "Waiting room for flash traffic"
+  ],
+  "rubricFocus": [
+    "Concurrency control preventing double booking",
+    "Hold expiry",
+    "Payment idempotency"
+  ],
+  "prerequisites": ["distributed-locks-consensus", "idempotency", "consistency-models"]
+}

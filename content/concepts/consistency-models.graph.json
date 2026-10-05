@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "u",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "User"
+    },
+    {
+      "i": "s",
+      "t": "service",
+      "x": 260,
+      "y": 0,
+      "l": "Service"
+    },
+    {
+      "i": "lead",
+      "t": "sql_db",
+      "x": 520,
+      "y": 0,
+      "l": "Leader (own writes)"
+    },
+    {
+      "i": "rep",
+      "t": "sql_db",
+      "x": 520,
+      "y": 120,
+      "l": "Replica (others' reads)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "u",
+      "d": "s",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "s",
+      "d": "lead",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "s",
+      "d": "rep",
+      "h": "r>l"
+    }
+  ]
+}

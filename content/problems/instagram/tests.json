@@ -1,0 +1,111 @@
+[
+  {
+    "id": "blob",
+    "title": "Photos are stored in object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Where do the photo files themselves live?"
+  },
+  {
+    "id": "cdn",
+    "title": "Photos are delivered through a CDN",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": "cdn"
+      }
+    },
+    "failHint": "A user in Mumbai opens a photo stored in Virginia. How does it load fast?"
+  },
+  {
+    "id": "async-processing",
+    "title": "Thumbnails / processing happen asynchronously",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "@queue",
+            "mode": "async"
+          }
+        },
+        {
+          "pathExists": {
+            "from": "@queue",
+            "to": ["worker", "serverless_fn"]
+          }
+        }
+      ]
+    },
+    "failHint": "Should the upload request wait while thumbnails are generated?"
+  },
+  {
+    "id": "upload",
+    "title": "Uploads use presigned URLs or a dedicated upload path",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "presign|signed url|direct upload|multipart"
+      }
+    },
+    "failHint": "Should multi-megabyte photos stream through your app servers?"
+  },
+  {
+    "id": "feed-cache",
+    "title": "Feeds are cached",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "cache"
+    },
+    "failHint": "What keeps feed loads fast?"
+  },
+  {
+    "id": "feed-api",
+    "title": "A paginated feed API exists",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "feed",
+        "method": "GET",
+        "pagination": ["cursor", "offset"]
+      }
+    },
+    "failHint": "How does the app load the feed a page at a time?"
+  },
+  {
+    "id": "counters",
+    "title": "Like counts are handled at scale",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "counter|like count|approximate|batch"
+      }
+    },
+    "failHint": "A post gets 10K likes per second. How do you count them without a hot row?"
+  },
+  {
+    "id": "scale-out",
+    "title": "Every service sits behind a load balancer or API gateway",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "via": "@entry",
+        "to": "service"
+      }
+    },
+    "failHint": "What spreads traffic across several service instances?"
+  }
+]

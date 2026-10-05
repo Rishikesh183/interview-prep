@@ -1,0 +1,41 @@
+{
+  "id": "web-crawler",
+  "number": 12,
+  "title": "Web Crawler",
+  "difficulty": "medium",
+  "tags": ["url-frontier", "dedup", "politeness"],
+  "prompt": "Design a web crawler that downloads billions of pages per month for a search engine, starting from seed URLs and following links.",
+  "functionalReqs": [
+    "Crawl from seed URLs, extract and follow links",
+    "Store raw page content",
+    "Re-crawl pages periodically",
+    "Respect robots.txt"
+  ],
+  "nonFunctionalReqs": [
+    "Polite: don't overload any single host",
+    "Scalable to ~1B pages/month",
+    "Robust to spider traps and malformed pages"
+  ],
+  "scale": {
+    "qps": "~1B pages/month → ~400 pages/s avg",
+    "storage": "~500 KB avg page → ~500 TB/month raw"
+  },
+  "outOfScope": ["Indexing and ranking", "JavaScript rendering"],
+  "keyComponents": [
+    "message_queue",
+    "worker",
+    "object_storage",
+    "nosql_kv",
+    "cache",
+    "dns",
+    "scheduler"
+  ],
+  "deepDives": [
+    "URL frontier with priority and per-host queues",
+    "Politeness and robots.txt",
+    "Bloom filters for dedup",
+    "DNS caching"
+  ],
+  "rubricFocus": ["Frontier design", "Politeness", "Deduplication"],
+  "prerequisites": ["message-queues-vs-streams", "object-storage-blobs", "fault-tolerance-retries"]
+}

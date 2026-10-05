@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Rider"
+    },
+    {
+      "i": "s",
+      "t": "service",
+      "x": 260,
+      "y": 0,
+      "l": "Nearby search"
+    },
+    {
+      "i": "g",
+      "t": "geo_index",
+      "x": 520,
+      "y": 0,
+      "l": "Geo index (geohash)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "s",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "s",
+      "d": "g",
+      "h": "r>l"
+    }
+  ]
+}

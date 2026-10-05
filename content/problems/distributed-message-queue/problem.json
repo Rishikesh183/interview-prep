@@ -1,0 +1,33 @@
+{
+  "id": "distributed-message-queue",
+  "number": 26,
+  "title": "Distributed Message Queue (Kafka)",
+  "difficulty": "hard",
+  "tags": ["partitions", "offsets", "replication"],
+  "prompt": "Design a distributed, durable message queue / log like Kafka: producers append messages to topics; consumer groups read them in order at their own pace.",
+  "functionalReqs": [
+    "Create topics with partitions",
+    "Produce messages (with keys)",
+    "Consumer groups with independent offsets",
+    "Retention by time/size"
+  ],
+  "nonFunctionalReqs": [
+    "Durable: acknowledged messages survive broker failure",
+    "Ordering per partition",
+    "Millions of messages/s throughput"
+  ],
+  "scale": {
+    "qps": "~5M messages/s, avg 1 KB",
+    "storage": "~400 TB/day; 7-day retention"
+  },
+  "outOfScope": ["Stream processing", "Exactly-once transactions across topics"],
+  "keyComponents": ["event_stream", "coordination", "service"],
+  "deepDives": [
+    "Partitioned append-only logs on disk",
+    "Leader/follower replication and ISR",
+    "Consumer group rebalancing",
+    "acks=all and min.insync.replicas"
+  ],
+  "rubricFocus": ["Log/partition design", "Replication", "Consumer offsets"],
+  "prerequisites": ["message-queues-vs-streams", "replication", "distributed-locks-consensus"]
+}

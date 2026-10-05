@@ -1,25 +1,37 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import type { RawProblemDir } from "@/lib/content/problemDir";
 import type { Problem, ProblemSummary } from "@/lib/schema";
-import { validateProblems, type ProblemFile } from "./validate";
+import { validateContent } from "./validate";
 
-/** Server-only: reads content/problems/*.json. Adding a problem means dropping in a file. */
+/** Server-only: content/problems/<id>/... Adding a problem means adding a folder. */
 export const PROBLEMS_DIR = path.join(process.cwd(), "content", "problems");
 
-export function readProblemFiles(dir = PROBLEMS_DIR): ProblemFile[] {
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
+function readTree(dir: string, base = ""): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const name of readdirSync(dir)) {
+    const full = path.join(dir, name);
+    const rel = base ? `${base}/${name}` : name;
+    if (statSync(full).isDirectory()) Object.assign(files, readTree(full, rel));
+    else files[rel] = readFileSync(full, "utf8");
+  }
+  return files;
+}
+
+export function readProblemDirs(root = PROBLEMS_DIR): RawProblemDir[] {
+  return readdirSync(root)
+    .filter((name) => statSync(path.join(root, name)).isDirectory())
     .sort()
-    .map((file) => ({ file, json: JSON.parse(readFileSync(path.join(dir, file), "utf8")) }));
+    .map((dir) => ({ dir, files: readTree(path.join(root, dir)) }));
 }
 
 let cache: Problem[] | null = null;
 
 export function loadProblems(): Problem[] {
   if (cache) return cache;
-  const { problems, errors } = validateProblems(readProblemFiles());
+  const { problems, errors } = validateContent(readProblemDirs());
   if (errors.length) {
-    throw new Error(`Invalid problem files (run pnpm validate:problems):\n${errors.join("\n")}`);
+    throw new Error(`Invalid content (run pnpm validate:content):\n${errors.join("\n")}`);
   }
   cache = problems;
   return problems;

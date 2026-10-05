@@ -1,0 +1,158 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Shoppers"
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 0,
+      "no": "Sale page is static"
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 260,
+      "y": 130,
+      "l": "Gateway",
+      "no": "Per-user rate limit rejects excess early"
+    },
+    {
+      "i": "sale",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Sale Service",
+      "no": "Lua: DECR stock only if > 0, so we never oversell"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 780,
+      "y": 0,
+      "l": "Stock counter",
+      "c": {
+        "strategy": "write-through",
+        "eviction": "TTL",
+        "ttl": "2h"
+      }
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 780,
+      "y": 130,
+      "l": "Orders"
+    },
+    {
+      "i": "orders",
+      "t": "worker",
+      "x": 1040,
+      "y": 0,
+      "l": "Order workers"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 1300,
+      "y": 0,
+      "l": "Orders DB",
+      "c": {
+        "replicas": 2
+      }
+    },
+    {
+      "i": "sweeper",
+      "t": "scheduler",
+      "x": 0,
+      "y": 130,
+      "l": "Unpaid sweeper",
+      "c": {
+        "cron": "* * * * *"
+      },
+      "no": "Release stock (INCR) after a 10 min payment timeout"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "client",
+      "d": "gw",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "gw",
+      "d": "sale",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "sale",
+      "d": "redis",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "sale",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "q",
+      "d": "orders",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "orders",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "sweeper",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "sweeper",
+      "d": "redis",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "sale",
+      "method": "POST",
+      "path": "/v1/sales/{saleId}/buy",
+      "auth": true,
+      "idempotent": true,
+      "rateLimited": true,
+      "statusCodes": "202, 409, 429"
+    }
+  ],
+  "entities": []
+}

@@ -1,0 +1,93 @@
+[
+  {
+    "id": "signaling",
+    "title": "A signaling channel (WebSockets) sets up sessions",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "websocket_server"
+    },
+    "failHint": "Before any video flows, how do participants find each other and agree on formats?"
+  },
+  {
+    "id": "media-arch",
+    "title": "SFU or MCU media servers are chosen",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "\\bsfu\\b|\\bmcu\\b|selective forwarding|media server"
+      }
+    },
+    "failHint": "With 50 participants, does everyone send video to everyone?"
+  },
+  {
+    "id": "nat",
+    "title": "NAT traversal via STUN/TURN",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "stun|turn|ice|nat"
+      }
+    },
+    "failHint": "Most users are behind home routers. How does media get through?"
+  },
+  {
+    "id": "adaptive",
+    "title": "Quality adapts to bandwidth (simulcast/SVC)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "simulcast|svc|adaptive|bandwidth"
+      }
+    },
+    "failHint": "One participant is on a weak connection. Do they get the same stream as everyone?"
+  },
+  {
+    "id": "recording",
+    "title": "Recordings are stored in object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Where do meeting recordings go?"
+  },
+  {
+    "id": "meeting-store",
+    "title": "Meetings and participants are stored",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do meetings and participant lists live?"
+  },
+  {
+    "id": "regions",
+    "title": "Users are routed to nearby media servers",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "region|geo|nearest|latency.?based"
+      }
+    },
+    "failHint": "A meeting has people in Mumbai and London. Which server handles their media?"
+  },
+  {
+    "id": "join-api",
+    "title": "An API creates or joins meetings",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "meeting|room|join",
+        "method": "POST"
+      }
+    },
+    "failHint": "What does a client call to create or join a meeting?"
+  }
+]

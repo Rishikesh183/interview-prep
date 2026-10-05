@@ -10,6 +10,8 @@ import { statusByProblem, type ProblemStatus } from "@/lib/attempts/status";
 import type { Difficulty, ProblemSummary } from "@/lib/schema";
 import { DifficultyBadge } from "./DifficultyBadge";
 import { useAttempts } from "./useAttempts";
+import { useProgress } from "./useProgress";
+import { BASE_POINTS } from "@/lib/points";
 
 const STATUS_OPTIONS = [
   { value: "todo", label: "To do" },
@@ -30,6 +32,7 @@ function StatusIcon({ status }: { status: ProblemStatus }) {
 export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
   const attempts = useAttempts();
   const statuses = useMemo(() => statusByProblem(attempts ?? []), [attempts]);
+  const progress = useProgress();
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>();
   const [status, setStatus] = useState<ProblemStatus>();
@@ -48,6 +51,8 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
     );
   });
   const solved = problems.filter((p) => statuses.get(p.id) === "solved").length;
+  const totalPoints = [...(progress?.values() ?? [])].reduce((sum, p) => sum + p.bestPoints, 0);
+  const maxPoints = problems.reduce((sum, p) => sum + BASE_POINTS[p.difficulty], 0);
 
   return (
     <div className="space-y-4">
@@ -87,7 +92,9 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
           Do these first
         </label>
         <span className="text-muted-foreground ml-auto text-sm">
-          {solved}/{problems.length} solved
+          {solved}/{problems.length} solved ·{" "}
+          <span className="text-foreground font-medium tabular-nums">{totalPoints}</span> /{" "}
+          {maxPoints} points
         </span>
       </div>
 
@@ -101,6 +108,7 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
               <th className="px-3 py-2">Difficulty</th>
               <th className="hidden px-3 py-2 md:table-cell">Tags</th>
               <th className="px-3 py-2 text-right">Tests</th>
+              <th className="px-3 py-2 text-right">Points</th>
             </tr>
           </thead>
           <tbody>
@@ -142,11 +150,21 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
                 <td className="text-muted-foreground px-3 py-2.5 text-right tabular-nums">
                   {p.testCount}
                 </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  <span
+                    className={
+                      progress?.get(p.id)?.bestPoints ? "font-medium" : "text-muted-foreground"
+                    }
+                  >
+                    {progress?.get(p.id)?.bestPoints ?? 0}
+                  </span>
+                  <span className="text-muted-foreground"> / {BASE_POINTS[p.difficulty]}</span>
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-muted-foreground px-3 py-10 text-center">
+                <td colSpan={7} className="text-muted-foreground px-3 py-10 text-center">
                   No problems match these filters.
                 </td>
               </tr>

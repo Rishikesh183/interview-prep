@@ -1,0 +1,195 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "user",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Ad viewer"
+    },
+    {
+      "i": "adv",
+      "t": "web_client",
+      "x": 0,
+      "y": 130,
+      "l": "Advertisers"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "click",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Click Service",
+      "no": "Logs {click_id, ad_id, ts} then 302-redirects"
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 780,
+      "y": 0,
+      "l": "Clicks",
+      "c": {
+        "partitionKey": "ad_id"
+      }
+    },
+    {
+      "i": "flink",
+      "t": "stream_processor",
+      "x": 1040,
+      "y": 0,
+      "l": "Aggregator",
+      "c": {
+        "windowing": "tumbling"
+      },
+      "no": "Dedup by click_id, 1-min tumbling windows, watermarks for late events, exactly-once sinks"
+    },
+    {
+      "i": "olap",
+      "t": "data_warehouse",
+      "x": 1300,
+      "y": 0,
+      "l": "OLAP store"
+    },
+    {
+      "i": "sink",
+      "t": "worker",
+      "x": 1040,
+      "y": 130,
+      "l": "S3 sink"
+    },
+    {
+      "i": "raw",
+      "t": "object_storage",
+      "x": 1300,
+      "y": 130,
+      "l": "Raw clicks"
+    },
+    {
+      "i": "recon",
+      "t": "batch_processor",
+      "x": 0,
+      "y": 260,
+      "l": "Reconciliation",
+      "c": {
+        "schedule": "nightly"
+      },
+      "no": "Recomputes from raw clicks for billing"
+    },
+    {
+      "i": "query",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Query Service"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "user",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "adv",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "click",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "query",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "click",
+      "d": "kafka",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "kafka",
+      "d": "flink",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "kafka",
+      "d": "sink",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "flink",
+      "d": "olap",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "sink",
+      "d": "raw",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "recon",
+      "d": "raw",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "recon",
+      "d": "olap",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "query",
+      "d": "olap",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "click",
+      "method": "GET",
+      "path": "/c/{clickId}",
+      "auth": false,
+      "response": "302 Location: advertiser URL"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "query",
+      "method": "GET",
+      "path": "/v1/ads/{adId}/metrics",
+      "auth": true,
+      "request": "?from&to&granularity=minute"
+    }
+  ],
+  "entities": []
+}

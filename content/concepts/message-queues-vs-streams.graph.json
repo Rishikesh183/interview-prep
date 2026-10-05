@@ -1,0 +1,70 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "api",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "API"
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 260,
+      "y": 0,
+      "l": "Queue (tasks)"
+    },
+    {
+      "i": "w",
+      "t": "worker",
+      "x": 520,
+      "y": 0,
+      "l": "Workers"
+    },
+    {
+      "i": "k",
+      "t": "event_stream",
+      "x": 260,
+      "y": 120,
+      "l": "Stream (events)"
+    },
+    {
+      "i": "f",
+      "t": "stream_processor",
+      "x": 520,
+      "y": 120,
+      "l": "Stream processor"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "api",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "q",
+      "d": "w",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "api",
+      "d": "k",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "k",
+      "d": "f",
+      "m": "a",
+      "h": "r>l"
+    }
+  ]
+}

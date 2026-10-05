@@ -1,0 +1,175 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Desktop client",
+      "no": "Chunks files into 4 MB blocks, SHA-256 each"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "meta",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Metadata Service",
+      "no": "Returns presigned URLs for missing blocks; commit creates new version; conflicts → conflicted copy"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 0,
+      "l": "Metadata DB",
+      "c": {
+        "replicas": 3,
+        "sharding": "hash",
+        "shardKey": "namespace_id"
+      }
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 260,
+      "y": 130,
+      "l": "Block store",
+      "no": "Content-addressed by hash (dedup)"
+    },
+    {
+      "i": "q",
+      "t": "pub_sub",
+      "x": 780,
+      "y": 130,
+      "l": "Change events",
+      "no": "Fan-out: every notifier node gets each change"
+    },
+    {
+      "i": "notify",
+      "t": "websocket_server",
+      "x": 1040,
+      "y": 0,
+      "l": "Sync notifier",
+      "c": {
+        "instances": 10
+      }
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 260,
+      "y": 260,
+      "c": {
+        "content": ["media"]
+      }
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "meta",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "notify",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "meta",
+      "d": "db",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "client",
+      "d": "s3",
+      "o": "w",
+      "l": "PUT presigned",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "cdn",
+      "d": "s3",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "meta",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "q",
+      "d": "notify",
+      "m": "a",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "meta",
+      "method": "POST",
+      "path": "/v1/files/{path}/upload-session",
+      "auth": true,
+      "response": "{ missingBlocks: [{hash, presignedUrl}] }"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "meta",
+      "method": "POST",
+      "path": "/v1/files/{path}/commit",
+      "auth": true,
+      "idempotent": true,
+      "request": "{ blockHashes[], baseVersion }",
+      "statusCodes": "200, 409"
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "meta",
+      "method": "GET",
+      "path": "/v1/changes",
+      "auth": true,
+      "pagination": "cursor"
+    }
+  ],
+  "entities": [
+    {
+      "name": "FileVersion",
+      "fields": "file_id, version, block_hashes[], size, modified_by"
+    },
+    {
+      "name": "Block",
+      "fields": "hash PK, size, s3_key, ref_count"
+    }
+  ]
+}

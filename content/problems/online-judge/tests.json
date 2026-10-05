@@ -1,0 +1,115 @@
+[
+  {
+    "id": "async",
+    "title": "Submissions are queued for execution",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "@queue",
+            "mode": "async"
+          }
+        },
+        {
+          "pathExists": {
+            "from": "@queue",
+            "to": "worker"
+          }
+        }
+      ]
+    },
+    "failHint": "Should the submit request wait for 50 test cases to run?"
+  },
+  {
+    "id": "sandbox",
+    "title": "Code runs in an isolated sandbox",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "sandbox|container|isolat|gvisor|firecracker|seccomp|nsjail"
+      }
+    },
+    "failHint": "Someone submits code that deletes files. What contains it?"
+  },
+  {
+    "id": "limits",
+    "title": "Time and memory limits are enforced",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "time limit|memory limit|timeout|cgroup|tle"
+      }
+    },
+    "failHint": "Someone submits an infinite loop. What stops it?"
+  },
+  {
+    "id": "testdata",
+    "title": "Hidden test data is stored in object storage",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "object_storage"
+    },
+    "failHint": "Where do the hidden test inputs live?"
+  },
+  {
+    "id": "results",
+    "title": "Results are stored",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where is the verdict stored?"
+  },
+  {
+    "id": "submit-api",
+    "title": "A submit API exists",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": "submi",
+        "method": "POST"
+      }
+    },
+    "failHint": "Which endpoint accepts a submission?"
+  },
+  {
+    "id": "verdict-delivery",
+    "title": "Clients get the verdict via polling or push",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "apiMatch": {
+            "path": "submi|result|status",
+            "method": "GET"
+          }
+        },
+        {
+          "hasNode": "websocket_server"
+        }
+      ]
+    },
+    "failHint": "How does the browser find out the verdict?"
+  },
+  {
+    "id": "autoscale",
+    "title": "Workers autoscale with queue depth",
+    "kind": "bonus",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "autoscal|queue depth|scale out"
+      }
+    },
+    "failHint": "A contest starts and submissions jump 10x. What grows to match?"
+  }
+]

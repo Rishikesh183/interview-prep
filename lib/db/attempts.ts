@@ -1,9 +1,14 @@
-import { nanoid } from "nanoid";
 import { AttemptSchema, type Attempt } from "@/lib/schema";
 import { db } from "./dexie";
 
 export function newAttempt(problemId: string, now = Date.now()): Attempt {
-  return AttemptSchema.parse({ id: nanoid(10), problemId, startedAt: now, updatedAt: now });
+  // UUIDs because attempts sync to Supabase (uuid primary key).
+  return AttemptSchema.parse({
+    id: crypto.randomUUID(),
+    problemId,
+    startedAt: now,
+    updatedAt: now,
+  });
 }
 
 /** Rows written by older versions are upgraded with defaults; unreadable rows are skipped. */
@@ -37,5 +42,11 @@ export async function saveAttempt(attempt: Attempt): Promise<void> {
 }
 
 export async function deleteAttempt(id: string): Promise<void> {
-  await db().attempts.delete(id);
+  const d = db();
+  await d.transaction("rw", d.attempts, d.tombstones, d.syncState, async () => {
+    await d.attempts.delete(id);
+    await d.syncState.delete(id);
+    // Remembered so the sync worker can delete it on the server too.
+    await d.tombstones.put({ id, deletedAt: Date.now() });
+  });
 }

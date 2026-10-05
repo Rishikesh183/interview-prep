@@ -1,0 +1,5 @@
+[
+  "1M+ location writes per second into a relational DB is painful. Do you need durability for every ping?",
+  "Find drivers within 2 km quickly: what index?",
+  "Two riders' requests race for the same driver. How do you make the assignment atomic?"
+]

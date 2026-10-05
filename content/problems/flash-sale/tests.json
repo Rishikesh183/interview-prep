@@ -1,0 +1,125 @@
+[
+  {
+    "id": "early-reject",
+    "title": "Excess traffic is rejected early (rate limit / gateway / waiting room)",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "anyOf": [
+        {
+          "hasNode": "rate_limiter"
+        },
+        {
+          "hasNode": "api_gateway"
+        },
+        {
+          "textMentions": {
+            "pattern": "waiting room"
+          }
+        }
+      ]
+    },
+    "failHint": "Most of the 1M requests will fail. Where should they be turned away cheaply?"
+  },
+  {
+    "id": "static-cdn",
+    "title": "Sale page / static assets come from a CDN",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "cdn"
+    },
+    "failHint": "Everyone loads the sale page at noon. Should your servers render it?"
+  },
+  {
+    "id": "atomic-stock",
+    "title": "Stock is decremented atomically in memory",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "hasNode": "cache"
+        },
+        {
+          "textMentions": {
+            "pattern": "decr|atomic|lua|compare.?and"
+          }
+        }
+      ]
+    },
+    "failHint": "1M buyers decrement one stock count. Where can that happen fast and safely?"
+  },
+  {
+    "id": "no-oversell",
+    "title": "Overselling is explicitly prevented",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "oversell|never more|stock.*(0|zero)|negative"
+      }
+    },
+    "failHint": "What guarantees you never sell unit 10,001?"
+  },
+  {
+    "id": "queue-buffer",
+    "title": "Orders are buffered through a queue",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "allOf": [
+        {
+          "edgeExists": {
+            "from": "*",
+            "to": "@queue",
+            "mode": "async"
+          }
+        },
+        {
+          "pathExists": {
+            "from": "@queue",
+            "to": ["worker", "service"]
+          }
+        }
+      ]
+    },
+    "failHint": "Accepted orders arrive faster than the database can write. What absorbs them?"
+  },
+  {
+    "id": "order-db",
+    "title": "Orders are persisted",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "hasNode": "@database"
+    },
+    "failHint": "Where do confirmed orders live?"
+  },
+  {
+    "id": "release",
+    "title": "Unpaid orders release stock after a timeout",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "textMentions": {
+        "pattern": "timeout|expir|release|ttl"
+      }
+    },
+    "failHint": "A winner never pays. What happens to their unit?"
+  },
+  {
+    "id": "buy-api",
+    "title": "An idempotent buy API",
+    "kind": "core",
+    "weight": 1,
+    "check": {
+      "apiMatch": {
+        "path": ".",
+        "method": "POST",
+        "idempotent": true
+      }
+    },
+    "failHint": "The buy button is double-clicked. How do you avoid two orders?"
+  }
+]

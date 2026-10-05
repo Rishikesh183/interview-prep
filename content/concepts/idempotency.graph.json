@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "c",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Client (retries)"
+    },
+    {
+      "i": "s",
+      "t": "service",
+      "x": 260,
+      "y": 0,
+      "l": "Payment API"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 520,
+      "y": 0,
+      "l": "Payments (UNIQUE idempotency_key)"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "c",
+      "d": "s",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "s",
+      "d": "db",
+      "h": "r>l"
+    }
+  ]
+}

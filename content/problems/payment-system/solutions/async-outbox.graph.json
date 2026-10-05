@@ -1,0 +1,170 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "auth",
+      "t": "auth_service",
+      "x": 520,
+      "y": 0,
+      "l": "Auth",
+      "c": {
+        "method": "OAuth"
+      }
+    },
+    {
+      "i": "orders",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Payment Orders",
+      "no": "Order + outbox row in one transaction"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 0,
+      "l": "Payments + ledger",
+      "no": "Double-entry ledger, append-only"
+    },
+    {
+      "i": "relay",
+      "t": "worker",
+      "x": 0,
+      "y": 130,
+      "l": "Outbox relay"
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 260,
+      "y": 130,
+      "l": "Payment commands"
+    },
+    {
+      "i": "exec",
+      "t": "worker",
+      "x": 520,
+      "y": 260,
+      "l": "Payment executors",
+      "no": "Calls PSP with idempotency key; retries with backoff"
+    },
+    {
+      "i": "psp",
+      "t": "external_service",
+      "x": 780,
+      "y": 130,
+      "l": "PSP"
+    },
+    {
+      "i": "recon",
+      "t": "scheduler",
+      "x": 0,
+      "y": 260,
+      "l": "Reconciliation job",
+      "c": {
+        "cron": "0 2 * * *"
+      },
+      "no": "Daily reconcile against PSP reports"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "auth",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "orders",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "orders",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "relay",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "relay",
+      "d": "q",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "q",
+      "d": "exec",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "exec",
+      "d": "psp",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "exec",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "recon",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "orders",
+      "method": "POST",
+      "path": "/v1/payment-orders",
+      "auth": true,
+      "idempotent": true,
+      "statusCodes": "202, 409"
+    }
+  ],
+  "entities": [
+    {
+      "name": "LedgerEntry",
+      "fields": "entry_id, account, amount, direction, txn_id"
+    }
+  ]
+}

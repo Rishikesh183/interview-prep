@@ -1,0 +1,56 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "pub",
+      "t": "service",
+      "x": 0,
+      "y": 0,
+      "l": "Publisher"
+    },
+    {
+      "i": "ps",
+      "t": "pub_sub",
+      "x": 260,
+      "y": 0,
+      "l": "Channel"
+    },
+    {
+      "i": "a",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 0,
+      "l": "Subscriber A"
+    },
+    {
+      "i": "b",
+      "t": "websocket_server",
+      "x": 520,
+      "y": 120,
+      "l": "Subscriber B"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "pub",
+      "d": "ps",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "ps",
+      "d": "a",
+      "m": "a",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "ps",
+      "d": "b",
+      "m": "a",
+      "h": "r>l"
+    }
+  ]
+}

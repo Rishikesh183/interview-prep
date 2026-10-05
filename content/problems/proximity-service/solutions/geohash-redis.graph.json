@@ -1,0 +1,155 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 260,
+      "y": 0,
+      "l": "LB"
+    },
+    {
+      "i": "search",
+      "t": "service",
+      "x": 520,
+      "y": 0,
+      "l": "Search Service",
+      "no": "Queries the target geohash cell plus its 8 neighbours (boundaries)"
+    },
+    {
+      "i": "biz",
+      "t": "service",
+      "x": 520,
+      "y": 130,
+      "l": "Business Service"
+    },
+    {
+      "i": "geo",
+      "t": "geo_index",
+      "x": 780,
+      "y": 0,
+      "l": "Geohash index"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 780,
+      "y": 130,
+      "l": "Cell cache",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "10m"
+      }
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 780,
+      "y": 260,
+      "l": "Businesses",
+      "c": {
+        "replicas": 3,
+        "readReplicas": true
+      }
+    },
+    {
+      "i": "rebuild",
+      "t": "batch_processor",
+      "x": 0,
+      "y": 130,
+      "l": "Nightly index rebuild",
+      "c": {
+        "schedule": "nightly"
+      },
+      "no": "Owner edits show up the next day"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "search",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "biz",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "search",
+      "d": "geo",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "search",
+      "d": "cache",
+      "o": "rw",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "search",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "biz",
+      "d": "db",
+      "o": "w",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "rebuild",
+      "d": "db",
+      "o": "r",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "rebuild",
+      "d": "geo",
+      "o": "w",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "search",
+      "method": "GET",
+      "path": "/v1/search/nearby",
+      "auth": false,
+      "pagination": "cursor",
+      "request": "?lat&lng&radius"
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "biz",
+      "method": "POST",
+      "path": "/v1/businesses",
+      "auth": true
+    }
+  ],
+  "entities": []
+}

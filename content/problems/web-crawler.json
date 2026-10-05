@@ -1,0 +1,295 @@
+{
+  "id": "web-crawler",
+  "number": 12,
+  "title": "Web Crawler",
+  "difficulty": "medium",
+  "tags": ["url-frontier", "politeness", "dedup", "distributed-workers"],
+  "prompt": "Design a web crawler that downloads billions of pages per month for a search engine, starting from seed URLs and following links.",
+  "functionalReqs": [
+    "Crawl from seed URLs, extract and follow links",
+    "Store raw page content",
+    "Re-crawl pages periodically",
+    "Respect robots.txt"
+  ],
+  "nonFunctionalReqs": [
+    "Polite: don't overload any single host",
+    "Scalable to ~1B pages/month",
+    "Robust to spider traps and malformed pages"
+  ],
+  "scale": {
+    "qps": "~1B pages/month → ~400 pages/s avg",
+    "storage": "~500 KB avg page → ~500 TB/month raw"
+  },
+  "outOfScope": ["Indexing and ranking", "JavaScript rendering"],
+  "hints": [
+    "What decides which URL to fetch next, and when?",
+    "How do you know you've already seen a URL (or the same content)?",
+    "Thousands of workers hitting the same host is a DoS."
+  ],
+  "keyComponents": [
+    "message_queue",
+    "worker",
+    "object_storage",
+    "nosql_kv",
+    "cache",
+    "dns",
+    "scheduler"
+  ],
+  "deepDives": [
+    "URL frontier with priority and per-host queues",
+    "Politeness and robots.txt",
+    "Bloom filters for dedup",
+    "DNS caching"
+  ],
+  "rubricFocus": ["Frontier design", "Politeness", "Deduplication"],
+  "tests": [
+    {
+      "id": "frontier",
+      "desc": "A URL frontier queue feeds fetchers",
+      "check": {
+        "pathExists": {
+          "from": "queue",
+          "to": "worker"
+        }
+      }
+    },
+    {
+      "id": "workers",
+      "desc": "Fetching is distributed across workers",
+      "check": {
+        "hasNode": "worker"
+      }
+    },
+    {
+      "id": "content-store",
+      "desc": "Raw pages go to object storage",
+      "check": {
+        "hasNode": "object_storage"
+      }
+    },
+    {
+      "id": "politeness",
+      "desc": "Per-host politeness and robots.txt are respected",
+      "check": {
+        "mentions": "politeness|robots|per.?host|crawl.?delay"
+      }
+    },
+    {
+      "id": "dedup",
+      "desc": "Duplicate URLs / content are detected",
+      "check": {
+        "mentions": "bloom|dedup|fingerprint|checksum|simhash|seen"
+      }
+    },
+    {
+      "id": "url-store",
+      "desc": "Seen URLs / crawl state are stored",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "dns",
+      "desc": "DNS resolution is cached",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "dns"
+          },
+          {
+            "mentions": "dns"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recrawl",
+      "desc": "Re-crawl scheduling exists",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "scheduler"
+          },
+          {
+            "mentions": "re.?crawl|freshness|priority"
+          }
+        ]
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "mercator",
+      "name": "Mercator-style frontier",
+      "summary": "Front queues by priority, back queues one per host with a min delay; fetcher workers pull from back queues, resolve via a DNS cache, store pages in S3, extract links, check a Bloom filter + URL DB, and enqueue new ones.",
+      "tradeoffs": ["Politeness by construction", "Complex frontier state"],
+      "graph": {
+        "nodes": [
+          {
+            "id": "sched",
+            "type": "scheduler",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Re-crawl scheduler",
+              "config": {
+                "cron": "",
+                "purpose": "Re-enqueue stale URLs by priority"
+              }
+            }
+          },
+          {
+            "id": "frontier",
+            "type": "message_queue",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "URL frontier",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              },
+              "note": "Front queues by priority, back queues per host (politeness, robots.txt, crawl delay)"
+            }
+          },
+          {
+            "id": "fetch",
+            "type": "worker",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Fetchers",
+              "config": {
+                "instances": 50,
+                "concurrency": 10
+              }
+            }
+          },
+          {
+            "id": "dns",
+            "type": "dns",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "DNS cache",
+              "config": {
+                "geoRouting": false
+              }
+            }
+          },
+          {
+            "id": "seen",
+            "type": "nosql_kv",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Seen URLs",
+              "config": {
+                "engine": "DynamoDB",
+                "partitionKey": "url_hash",
+                "sortKey": "",
+                "consistency": "eventual"
+              },
+              "note": "Bloom filter in front + content fingerprint dedup"
+            }
+          },
+          {
+            "id": "s3",
+            "type": "object_storage",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Raw pages",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "sched",
+            "target": "frontier",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e2",
+            "source": "frontier",
+            "target": "fetch",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e3",
+            "source": "fetch",
+            "target": "dns",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e4",
+            "source": "fetch",
+            "target": "seen",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e5",
+            "source": "fetch",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e6",
+            "source": "fetch",
+            "target": "frontier",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async",
+            "label": "new links"
+          }
+        ]
+      },
+      "apis": [],
+      "entities": []
+    },
+    {
+      "id": "kafka-partitioned",
+      "name": "Kafka partitioned by host",
+      "summary": "URLs are produced to Kafka keyed by host so one consumer handles a host at a time and rate-limits locally; content hashes dedupe pages.",
+      "tradeoffs": ["Simple scaling", "Hot hosts create hot partitions"]
+    }
+  ]
+}

@@ -1,0 +1,342 @@
+{
+  "id": "llm-chat-service",
+  "number": 30,
+  "title": "LLM Chat Service (ChatGPT)",
+  "difficulty": "hard",
+  "tags": ["token-streaming", "gpu-scheduling", "rate-limits"],
+  "prompt": "Design a chat service like ChatGPT: users send messages in conversations and receive streamed model responses. Inference runs on a limited, expensive GPU fleet.",
+  "functionalReqs": [
+    "Create conversations and send messages",
+    "Stream the response token by token",
+    "Conversation history",
+    "Per-user / per-tier usage limits"
+  ],
+  "nonFunctionalReqs": [
+    "Time-to-first-token < 1 s for paid users",
+    "Fair use of scarce GPUs; graceful degradation under load",
+    "No lost conversations"
+  ],
+  "scale": {
+    "dau": "~100M DAU",
+    "qps": "~50K concurrent generations at peak; ~500 tokens per response",
+    "storage": "~10 KB per conversation turn"
+  },
+  "outOfScope": ["Model training", "Plugins / tools"],
+  "hints": [
+    "How do tokens get to the browser as they're generated?",
+    "GPUs are the bottleneck. What sits between the API and the GPUs?",
+    "A free user sends 1,000 requests a minute."
+  ],
+  "keyComponents": [
+    "api_gateway",
+    "rate_limiter",
+    "service",
+    "message_queue",
+    "worker",
+    "nosql_document",
+    "cache"
+  ],
+  "deepDives": [
+    "SSE/WebSocket streaming",
+    "Request queueing and batching on GPUs",
+    "Priority by tier",
+    "KV-cache / prompt caching",
+    "Token-based rate limits"
+  ],
+  "rubricFocus": ["Streaming transport", "GPU scheduling", "Rate limiting and fairness"],
+  "tests": [
+    {
+      "id": "streaming",
+      "desc": "Responses are streamed to clients (SSE / WebSocket)",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "websocket_server"
+          },
+          {
+            "mentions": "sse|server.?sent|stream"
+          }
+        ]
+      }
+    },
+    {
+      "id": "gpu-queue",
+      "desc": "Inference requests are queued for GPU workers",
+      "check": {
+        "pathExists": {
+          "from": "queue",
+          "to": ["worker", "service"]
+        }
+      }
+    },
+    {
+      "id": "gpu",
+      "desc": "GPU inference fleet is modelled",
+      "check": {
+        "mentions": "gpu|inference"
+      }
+    },
+    {
+      "id": "rate-limits",
+      "desc": "Per-user / per-tier rate limits",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "rate_limiter"
+          },
+          {
+            "nodeConfig": {
+              "type": "api_gateway",
+              "config": {
+                "rateLimiting": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "history",
+      "desc": "Conversations are persisted",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "priority",
+      "desc": "Paid tiers get priority / fairness under load",
+      "check": {
+        "mentions": "priorit|tier|fair"
+      }
+    },
+    {
+      "id": "batching",
+      "desc": "GPU efficiency: batching or caching",
+      "check": {
+        "mentions": "batch|kv.?cache|prompt cach"
+      }
+    },
+    {
+      "id": "message-api",
+      "desc": "An API sends a message",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "path~": "message|chat|completion"
+        }
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "queue-sse",
+      "name": "Gateway + priority queue + SSE",
+      "summary": "Gateway authenticates and applies token-based limits per tier; chat service stores the message and enqueues an inference request on a priority queue; GPU workers do continuous batching and stream tokens back through the chat service to the browser via SSE.",
+      "tradeoffs": [
+        "Smooth degradation (queue grows, free tier waits)",
+        "Streaming path is long-lived; needs connection-aware LB"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Chat UI",
+              "config": {}
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "API Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              },
+              "note": "Token-based limits per user tier"
+            }
+          },
+          {
+            "id": "chat",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Chat Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Streams tokens to the browser over SSE"
+            }
+          },
+          {
+            "id": "db",
+            "type": "nosql_document",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Conversations",
+              "config": {
+                "engine": "MongoDB",
+                "shardKey": "user_id"
+              }
+            }
+          },
+          {
+            "id": "q",
+            "type": "message_queue",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Inference queue",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              },
+              "note": "Priority by tier; fair share under load"
+            }
+          },
+          {
+            "id": "gpu",
+            "type": "worker",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "GPU workers",
+              "config": {
+                "instances": 2,
+                "concurrency": 8
+              },
+              "note": "Continuous batching; KV cache / prompt caching"
+            }
+          },
+          {
+            "id": "tokens",
+            "type": "pub_sub",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Token stream",
+              "config": {
+                "engine": "Redis Pub/Sub",
+                "fanOut": true
+              },
+              "note": "Per-request channel back to the chat node"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "gw",
+            "target": "chat",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "chat",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e4",
+            "source": "chat",
+            "target": "q",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e5",
+            "source": "q",
+            "target": "gpu",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e6",
+            "source": "gpu",
+            "target": "tokens",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e7",
+            "source": "tokens",
+            "target": "chat",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "chat",
+          "method": "POST",
+          "path": "/v1/conversations/{id}/messages",
+          "auth": true,
+          "response": "text/event-stream",
+          "rateLimited": true
+        }
+      ],
+      "entities": []
+    },
+    {
+      "id": "direct-router",
+      "name": "Load-aware router to model servers",
+      "summary": "A router picks the least-loaded GPU server directly (no queue) and proxies the gRPC token stream back over WebSockets; overload returns 429.",
+      "tradeoffs": ["Lower latency", "Harsh behaviour under overload"]
+    }
+  ]
+}

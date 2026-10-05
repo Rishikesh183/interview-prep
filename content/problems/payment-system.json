@@ -1,0 +1,721 @@
+{
+  "id": "payment-system",
+  "number": 23,
+  "title": "Payment System / Wallet",
+  "difficulty": "hard",
+  "priority": true,
+  "tags": ["idempotency", "ledger", "reconciliation", "consistency"],
+  "prompt": "Design the payment backend for an e-commerce company: it charges customers through external payment service providers (PSPs), keeps an internal wallet/ledger, pays out to sellers, and reconciles with the PSPs daily.",
+  "functionalReqs": [
+    "Charge a customer for an order via a PSP",
+    "Maintain wallet balances via a ledger",
+    "Pay out sellers",
+    "Handle PSP webhooks (success/failure/refund)",
+    "Daily reconciliation with PSP reports"
+  ],
+  "nonFunctionalReqs": [
+    "Never double-charge or lose money",
+    "Every balance change is auditable",
+    "Strong consistency for balances",
+    "Tolerate PSP timeouts and retries"
+  ],
+  "scale": {
+    "qps": "~1K payments/s peak",
+    "storage": "~10M transactions/day; ledger entries kept 7+ years",
+    "notes": "PSP calls take 1–5 s and sometimes time out"
+  },
+  "outOfScope": ["Fraud detection models", "Building a card network/PSP"],
+  "hints": [
+    "The PSP call times out. Did the charge happen? What does the retry send?",
+    "How do you store money movements so balances can always be recomputed and audited?",
+    "Your records and the PSP's records disagree. How do you find out?"
+  ],
+  "keyComponents": [
+    "api_gateway",
+    "service",
+    "sql_db",
+    "message_queue",
+    "worker",
+    "external_service",
+    "batch_processor"
+  ],
+  "deepDives": [
+    "Idempotency keys end-to-end",
+    "Double-entry ledger",
+    "Outbox pattern / exactly-once effects",
+    "Reconciliation"
+  ],
+  "rubricFocus": [
+    "Idempotency",
+    "Ledger correctness",
+    "Failure handling with PSPs",
+    "Reconciliation"
+  ],
+  "tests": [
+    {
+      "id": "idempotent",
+      "desc": "Payment APIs are idempotent",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "idempotent": true
+        }
+      },
+      "hint": "Accept an idempotency key and return the original result on retries."
+    },
+    {
+      "id": "ledger",
+      "desc": "Money movements are recorded in a double-entry ledger",
+      "check": {
+        "anyOf": [
+          {
+            "entityMatch": {
+              "name~": "ledger|entry|journal"
+            }
+          },
+          {
+            "mentions": "double.?entry|ledger"
+          }
+        ]
+      }
+    },
+    {
+      "id": "consistency",
+      "desc": "Balances use a strongly consistent store",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "sql_db"
+          },
+          {
+            "nodeConfig": {
+              "type": "nosql_kv",
+              "config": {
+                "consistency": "strong"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "psp",
+      "desc": "External PSPs are integrated",
+      "check": {
+        "hasNode": "external_service"
+      }
+    },
+    {
+      "id": "reconcile",
+      "desc": "Daily reconciliation with PSP reports",
+      "check": {
+        "mentions": "reconcil"
+      }
+    },
+    {
+      "id": "async-retries",
+      "desc": "Webhooks / PSP failures are processed with retries",
+      "check": {
+        "anyOf": [
+          {
+            "pathExists": {
+              "from": "queue",
+              "to": "worker"
+            }
+          },
+          {
+            "mentions": "retr|webhook"
+          }
+        ]
+      }
+    },
+    {
+      "id": "audit",
+      "desc": "Ledger is append-only and auditable",
+      "check": {
+        "mentions": "append.?only|immutable|audit"
+      }
+    },
+    {
+      "id": "auth",
+      "desc": "APIs are authenticated",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "auth_service"
+          },
+          {
+            "apiMatch": {
+              "auth": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "sync-psp-ledger",
+      "name": "Payment service + double-entry ledger",
+      "summary": "The payment service stores a payment row (status=PENDING) keyed by idempotency key, calls the PSP with the same key, then writes balanced ledger entries in one SQL transaction. PSP webhooks go through a queue to workers that update status idempotently. A nightly batch job reconciles ledger vs PSP settlement files.",
+      "tradeoffs": [
+        "Simple request flow",
+        "Synchronous PSP latency on the request path",
+        "Idempotency key at every hop makes retries safe"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Checkout",
+              "config": {}
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "API Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              }
+            }
+          },
+          {
+            "id": "pay",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Payment Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Idempotency key → payment row; retries return stored result"
+            }
+          },
+          {
+            "id": "ledger",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Ledger DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 3,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": "",
+                "isolation": "serializable"
+              },
+              "note": "Append-only double-entry ledger; immutable, audit trail"
+            }
+          },
+          {
+            "id": "psp",
+            "type": "external_service",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "PSP",
+              "config": {
+                "provider": "Stripe, Adyen"
+              }
+            }
+          },
+          {
+            "id": "webhooks",
+            "type": "message_queue",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Webhook queue",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              }
+            }
+          },
+          {
+            "id": "wh",
+            "type": "worker",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Webhook processors",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              },
+              "note": "Retry with backoff; idempotent status transitions"
+            }
+          },
+          {
+            "id": "recon",
+            "type": "batch_processor",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Reconciliation",
+              "config": {
+                "engine": "Spark",
+                "schedule": "daily"
+              },
+              "note": "Reconcile ledger vs PSP settlement reports"
+            }
+          },
+          {
+            "id": "files",
+            "type": "object_storage",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "Settlement files",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "gw",
+            "target": "pay",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "pay",
+            "target": "ledger",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e4",
+            "source": "pay",
+            "target": "psp",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "psp",
+            "target": "webhooks",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "async",
+            "label": "webhooks"
+          },
+          {
+            "id": "e6",
+            "source": "webhooks",
+            "target": "wh",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e7",
+            "source": "wh",
+            "target": "ledger",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e8",
+            "source": "recon",
+            "target": "files",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e9",
+            "source": "recon",
+            "target": "ledger",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "pay",
+          "method": "POST",
+          "path": "/v1/payments",
+          "auth": true,
+          "idempotent": true,
+          "request": "{ orderId, amount, currency, idempotencyKey }",
+          "statusCodes": "201, 402, 409"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Payment",
+          "fields": "id, idempotency_key UNIQUE, order_id, amount, status, psp_ref"
+        },
+        {
+          "name": "LedgerEntry",
+          "fields": "id, txn_id, account_id, debit, credit, created_at (append-only)"
+        }
+      ]
+    },
+    {
+      "id": "async-outbox",
+      "name": "Async executor with outbox",
+      "summary": "Checkout writes a payment order and an outbox event in one transaction. A relay publishes outbox events to a queue; payment executors call the PSP with retries and the idempotency key; results update the ledger. Wallet balances are derived from ledger entries.",
+      "tradeoffs": [
+        "Checkout returns fast; PSP slowness doesn't block users",
+        "Outbox guarantees the event is published if the order commits",
+        "UI must handle 'processing' state"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "App",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "auth",
+            "type": "auth_service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Auth",
+              "config": {
+                "method": "OAuth"
+              }
+            }
+          },
+          {
+            "id": "orders",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Payment Orders",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Order + outbox row in one transaction"
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Payments + ledger",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 1,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": ""
+              },
+              "note": "Double-entry ledger, append-only"
+            }
+          },
+          {
+            "id": "relay",
+            "type": "worker",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Outbox relay",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              }
+            }
+          },
+          {
+            "id": "q",
+            "type": "message_queue",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "Payment commands",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              }
+            }
+          },
+          {
+            "id": "exec",
+            "type": "worker",
+            "position": {
+              "x": 520,
+              "y": 260
+            },
+            "data": {
+              "label": "Payment executors",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              },
+              "note": "Calls PSP with idempotency key; retries with backoff"
+            }
+          },
+          {
+            "id": "psp",
+            "type": "external_service",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "PSP",
+              "config": {
+                "provider": ""
+              }
+            }
+          },
+          {
+            "id": "recon",
+            "type": "scheduler",
+            "position": {
+              "x": 0,
+              "y": 260
+            },
+            "data": {
+              "label": "Reconciliation job",
+              "config": {
+                "cron": "0 2 * * *",
+                "purpose": ""
+              },
+              "note": "Daily reconcile against PSP reports"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "auth",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "orders",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "orders",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e5",
+            "source": "relay",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e6",
+            "source": "relay",
+            "target": "q",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e7",
+            "source": "q",
+            "target": "exec",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e8",
+            "source": "exec",
+            "target": "psp",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e9",
+            "source": "exec",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e10",
+            "source": "recon",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "orders",
+          "method": "POST",
+          "path": "/v1/payment-orders",
+          "auth": true,
+          "idempotent": true,
+          "statusCodes": "202, 409"
+        }
+      ],
+      "entities": [
+        {
+          "name": "LedgerEntry",
+          "fields": "entry_id, account, amount, direction, txn_id"
+        }
+      ]
+    }
+  ]
+}

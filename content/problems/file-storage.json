@@ -1,0 +1,598 @@
+{
+  "id": "file-storage",
+  "number": 13,
+  "title": "Dropbox / Google Drive",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["chunking", "presigned-urls", "sync", "metadata"],
+  "prompt": "Design a file storage and sync service like Dropbox. Users upload files from any device, files sync to all their devices, and they can share files with others.",
+  "functionalReqs": [
+    "Upload and download files up to 50 GB",
+    "Automatic sync across a user's devices",
+    "Share files/folders with other users",
+    "File version history"
+  ],
+  "nonFunctionalReqs": [
+    "Files are never lost (11 nines durability)",
+    "Uploads resume after network failures",
+    "Sync latency a few seconds",
+    "Minimize bandwidth for small edits to large files"
+  ],
+  "scale": {
+    "dau": "~50M DAU",
+    "qps": "~2 file changes/user/day → ~1.2K writes/s; reads ~5×",
+    "storage": "~500 PB total, avg file 1 MB"
+  },
+  "outOfScope": ["Real-time collaborative editing", "Full-text search in files"],
+  "hints": [
+    "Uploading a 10 GB file in one request fails often. Split it?",
+    "If only 1 MB of a 1 GB file changed, what needs to be uploaded?",
+    "How do the other devices learn that something changed?"
+  ],
+  "keyComponents": [
+    "service",
+    "object_storage",
+    "sql_db",
+    "message_queue",
+    "websocket_server",
+    "cdn"
+  ],
+  "deepDives": [
+    "Chunking and content-addressed blocks",
+    "Presigned URLs",
+    "Metadata DB design",
+    "Sync protocol and conflict resolution"
+  ],
+  "rubricFocus": [
+    "Chunked, resumable uploads",
+    "Metadata vs blob separation",
+    "Sync notification mechanism",
+    "Conflict handling"
+  ],
+  "tests": [
+    {
+      "id": "chunking",
+      "desc": "Files are split into chunks for resumable upload",
+      "check": {
+        "mentions": "chunk|block|resum|multipart"
+      }
+    },
+    {
+      "id": "blob-store",
+      "desc": "File content lives in object storage",
+      "check": {
+        "hasNode": "object_storage"
+      }
+    },
+    {
+      "id": "metadata",
+      "desc": "File metadata is stored in a database",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "upload-path",
+      "desc": "Clients can get bytes into object storage",
+      "check": {
+        "pathExists": {
+          "from": "client",
+          "to": "object_storage"
+        }
+      }
+    },
+    {
+      "id": "sync-notify",
+      "desc": "Other devices are notified of changes",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "websocket_server"
+          },
+          {
+            "hasNode": "pub_sub"
+          },
+          {
+            "mentions": "long.?poll|notif"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conflicts",
+      "desc": "Concurrent edits / conflicts are handled",
+      "check": {
+        "mentions": "conflict|version|vector clock|last.?writ"
+      }
+    },
+    {
+      "id": "dedup",
+      "desc": "Identical chunks are deduplicated",
+      "check": {
+        "mentions": "dedup|hash|checksum|sha|content.?address"
+      }
+    },
+    {
+      "id": "upload-api",
+      "desc": "An API starts or performs uploads",
+      "check": {
+        "apiMatch": {
+          "method": ["POST", "PUT"],
+          "path~": "file|upload|chunk|block"
+        }
+      }
+    },
+    {
+      "id": "file-entity",
+      "desc": "The data model tracks file versions / chunks",
+      "check": {
+        "entityMatch": {
+          "fields~": "version|chunk|block|hash"
+        }
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "presigned-blocks",
+      "name": "Block server with presigned URLs",
+      "summary": "Client splits files into 4 MB blocks and hashes each (SHA-256). It asks the metadata service which blocks are missing, uploads only those directly to S3 using presigned URLs, then commits a new file version. A notification service pushes change events to the user's other devices over WebSockets.",
+      "tradeoffs": [
+        "Only changed blocks are uploaded (delta sync)",
+        "Content-addressed blocks dedupe across users",
+        "Commit step must be atomic in the metadata DB"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Desktop client",
+              "config": {},
+              "note": "Chunks files into 4 MB blocks, SHA-256 each"
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "meta",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Metadata Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Returns presigned URLs for missing blocks; commit creates new version; conflicts → conflicted copy"
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Metadata DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 3,
+                "readReplicas": false,
+                "sharding": "hash",
+                "shardKey": "namespace_id"
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "type": "object_storage",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "Block store",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              },
+              "note": "Content-addressed by hash (dedup)"
+            }
+          },
+          {
+            "id": "q",
+            "type": "pub_sub",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Change events",
+              "config": {
+                "engine": "Redis Pub/Sub",
+                "fanOut": true
+              },
+              "note": "Fan-out: every notifier node gets each change"
+            }
+          },
+          {
+            "id": "notify",
+            "type": "websocket_server",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Sync notifier",
+              "config": {
+                "instances": 10,
+                "stickySessions": true,
+                "connectionsPerNode": 50000
+              }
+            }
+          },
+          {
+            "id": "cdn",
+            "type": "cdn",
+            "position": {
+              "x": 260,
+              "y": 260
+            },
+            "data": {
+              "label": "CDN",
+              "config": {
+                "content": ["media"],
+                "ttl": "1d"
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "notify",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "meta",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e5",
+            "source": "client",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write",
+            "label": "PUT presigned"
+          },
+          {
+            "id": "e6",
+            "source": "client",
+            "target": "cdn",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e7",
+            "source": "cdn",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e8",
+            "source": "meta",
+            "target": "q",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e9",
+            "source": "q",
+            "target": "notify",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "meta",
+          "method": "POST",
+          "path": "/v1/files/{path}/upload-session",
+          "auth": true,
+          "response": "{ missingBlocks: [{hash, presignedUrl}] }"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "meta",
+          "method": "POST",
+          "path": "/v1/files/{path}/commit",
+          "auth": true,
+          "idempotent": true,
+          "request": "{ blockHashes[], baseVersion }",
+          "statusCodes": "200, 409"
+        },
+        {
+          "id": "a3",
+          "ownerNodeId": "meta",
+          "method": "GET",
+          "path": "/v1/changes",
+          "auth": true,
+          "pagination": "cursor"
+        }
+      ],
+      "entities": [
+        {
+          "name": "FileVersion",
+          "fields": "file_id, version, block_hashes[], size, modified_by"
+        },
+        {
+          "name": "Block",
+          "fields": "hash PK, size, s3_key, ref_count"
+        }
+      ]
+    },
+    {
+      "id": "upload-service",
+      "name": "Upload service streaming chunks",
+      "summary": "Clients send resumable chunked uploads to an upload service that writes chunks to object storage and records them in metadata. Devices long-poll a changes endpoint for sync. Conflicts are resolved by keeping both versions.",
+      "tradeoffs": [
+        "Easier to validate and scan content",
+        "Upload bandwidth flows through your fleet",
+        "Long-polling is simpler than WebSockets but less instant"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Clients",
+              "config": {}
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              }
+            }
+          },
+          {
+            "id": "up",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Upload Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Resumable chunked upload; SHA-1 per chunk for dedup"
+            }
+          },
+          {
+            "id": "sync",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Sync Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Long-poll /changes; conflicting edits keep both versions"
+            }
+          },
+          {
+            "id": "blobs",
+            "type": "object_storage",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Chunk storage",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          },
+          {
+            "id": "meta",
+            "type": "nosql_document",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Metadata",
+              "config": {
+                "engine": "MongoDB",
+                "shardKey": "user_id"
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "gw",
+            "target": "up",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "gw",
+            "target": "sync",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "up",
+            "target": "blobs",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e5",
+            "source": "up",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e6",
+            "source": "sync",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "up",
+          "method": "PUT",
+          "path": "/v1/uploads/{id}/chunks/{n}",
+          "auth": true,
+          "idempotent": true
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "sync",
+          "method": "GET",
+          "path": "/v1/changes",
+          "auth": true,
+          "pagination": "cursor"
+        }
+      ],
+      "entities": [
+        {
+          "name": "File",
+          "fields": "id, owner, path, latest_version, chunk_list"
+        }
+      ]
+    }
+  ]
+}

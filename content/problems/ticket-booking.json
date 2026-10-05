@@ -1,0 +1,665 @@
+{
+  "id": "ticket-booking",
+  "number": 15,
+  "title": "Ticket Booking (BookMyShow)",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["seat-locking", "concurrency", "payments", "idempotency"],
+  "prompt": "Design a movie/event ticket booking system like BookMyShow. Users browse shows, pick specific seats, hold them for a few minutes while paying, and get a confirmed booking. Popular shows sell out in minutes.",
+  "functionalReqs": [
+    "Browse events and see the seat map",
+    "Select seats and hold them for ~10 minutes",
+    "Pay and confirm the booking",
+    "Release seats if payment fails or the hold expires"
+  ],
+  "nonFunctionalReqs": [
+    "No double booking, ever",
+    "Seat map reads are fast and highly available",
+    "Survives traffic spikes for popular releases",
+    "Payments are not charged twice"
+  ],
+  "scale": {
+    "dau": "~10M DAU",
+    "qps": "~1K bookings/s at peak; seat-map reads ~50K/s",
+    "storage": "~1M shows × 300 seats"
+  },
+  "outOfScope": ["Dynamic pricing", "Recommendations"],
+  "hints": [
+    "Two users click the same seat at the same millisecond. Who wins, and how is that enforced?",
+    "Where does the 10-minute hold live, and what removes it?",
+    "Payment provider times out. The user retries. What prevents a double charge?"
+  ],
+  "keyComponents": [
+    "load_balancer",
+    "service",
+    "sql_db",
+    "cache",
+    "external_service",
+    "message_queue"
+  ],
+  "deepDives": [
+    "Pessimistic vs optimistic locking",
+    "Distributed locks with TTL",
+    "Payment idempotency",
+    "Waiting room for flash traffic"
+  ],
+  "rubricFocus": [
+    "Concurrency control preventing double booking",
+    "Hold expiry",
+    "Payment idempotency"
+  ],
+  "tests": [
+    {
+      "id": "seat-hold",
+      "desc": "Seats are held/locked during checkout",
+      "check": {
+        "mentions": "lock|hold|reserv"
+      }
+    },
+    {
+      "id": "hold-expiry",
+      "desc": "Holds expire and release seats",
+      "check": {
+        "mentions": "ttl|expir|timeout|release"
+      }
+    },
+    {
+      "id": "double-booking",
+      "desc": "Double booking is prevented by the datastore or locks",
+      "check": {
+        "mentions": "double.?book|unique|optimistic|for update|serializ|compare.?and|setnx|atomic"
+      },
+      "hint": "Explain the exact mechanism that guarantees one winner per seat."
+    },
+    {
+      "id": "strong-store",
+      "desc": "Bookings use a strongly consistent store",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "sql_db"
+          },
+          {
+            "nodeConfig": {
+              "type": "nosql_kv",
+              "config": {
+                "consistency": "strong"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "payments",
+      "desc": "A payment provider is integrated",
+      "check": {
+        "hasNode": "external_service"
+      }
+    },
+    {
+      "id": "idempotent-booking",
+      "desc": "Booking/payment APIs are idempotent",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "idempotent": true
+        }
+      }
+    },
+    {
+      "id": "spikes",
+      "desc": "Traffic spikes are absorbed (queue, waiting room or rate limiting)",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "queue"
+          },
+          {
+            "hasNode": "rate_limiter"
+          },
+          {
+            "mentions": "waiting room|virtual queue"
+          }
+        ]
+      }
+    },
+    {
+      "id": "booking-api",
+      "desc": "An API books or holds seats",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "path~": "book|reserv|hold|seat"
+        }
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "redis-holds",
+      "name": "Redis seat holds + SQL commit",
+      "summary": "Selecting seats does SET seat:{show}:{seat} user NX EX 600 in Redis (atomic, auto-expiring hold). Checkout calls the payment provider with an idempotency key; on success a SQL transaction inserts bookings with UNIQUE(show_id, seat_id) as the final guard against double booking.",
+      "tradeoffs": [
+        "Fast holds without DB row locks",
+        "Two sources of truth: Redis for holds, SQL for bookings",
+        "Unique constraint catches any race Redis misses"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "App",
+              "config": {}
+            }
+          },
+          {
+            "id": "cdn",
+            "type": "cdn",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "CDN",
+              "config": {
+                "content": ["static", "api"],
+                "ttl": "5s"
+              },
+              "note": "Seat maps cached briefly"
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "rl",
+            "type": "rate_limiter",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Rate limiter",
+              "config": {
+                "algorithm": "token-bucket",
+                "limit": "10/min",
+                "key": "user"
+              }
+            }
+          },
+          {
+            "id": "svc",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Booking Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Holds via SETNX with TTL 600s; releases on expiry"
+            }
+          },
+          {
+            "id": "redis",
+            "type": "cache",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Seat holds (Redis)",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "TTL",
+                "ttl": "10m",
+                "cluster": false
+              },
+              "note": "SET NX EX — atomic lock per seat"
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 1040,
+              "y": 130
+            },
+            "data": {
+              "label": "Bookings DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 3,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": "",
+                "isolation": "serializable"
+              },
+              "note": "UNIQUE(show_id, seat_id) prevents double booking"
+            }
+          },
+          {
+            "id": "pay",
+            "type": "external_service",
+            "position": {
+              "x": 1040,
+              "y": 260
+            },
+            "data": {
+              "label": "Payment gateway",
+              "config": {
+                "provider": "Stripe"
+              }
+            }
+          },
+          {
+            "id": "q",
+            "type": "message_queue",
+            "position": {
+              "x": 1040,
+              "y": 390
+            },
+            "data": {
+              "label": "Booking events",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              }
+            }
+          },
+          {
+            "id": "mail",
+            "type": "worker",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Confirmation sender",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "cdn",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e2",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "rl",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "rl",
+            "target": "svc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "svc",
+            "target": "redis",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e6",
+            "source": "svc",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e7",
+            "source": "svc",
+            "target": "pay",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "note": "Idempotency-Key header"
+          },
+          {
+            "id": "e8",
+            "source": "svc",
+            "target": "q",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e9",
+            "source": "q",
+            "target": "mail",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "svc",
+          "method": "POST",
+          "path": "/v1/shows/{showId}/holds",
+          "auth": true,
+          "request": "{ seatIds[] }",
+          "statusCodes": "201, 409",
+          "idempotent": true
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "svc",
+          "method": "POST",
+          "path": "/v1/bookings",
+          "auth": true,
+          "request": "{ holdId, paymentToken }",
+          "idempotent": true,
+          "statusCodes": "201, 402, 409, 410"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Booking",
+          "fields": "id, show_id, seat_id, user_id, status, payment_id — UNIQUE(show_id, seat_id)"
+        },
+        {
+          "name": "Show",
+          "fields": "id, venue_id, starts_at"
+        }
+      ]
+    },
+    {
+      "id": "db-row-locks",
+      "name": "Database row locks + waiting room",
+      "summary": "Seats are rows with status. Holding runs SELECT ... FOR UPDATE then sets status=HELD with held_until. A sweeper job releases expired holds. For hot shows a virtual waiting room (queue) admits users in batches so the DB isn't overwhelmed.",
+      "tradeoffs": [
+        "Single source of truth",
+        "Row locks limit throughput on hot shows",
+        "Waiting room gives fairness"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Web",
+              "config": {}
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              }
+            }
+          },
+          {
+            "id": "wr",
+            "type": "message_queue",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Waiting room queue",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": true
+              },
+              "note": "Virtual queue admits users in batches"
+            }
+          },
+          {
+            "id": "svc",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Booking Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "SELECT ... FOR UPDATE; status=HELD, held_until=now+10m"
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Seats DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 1,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": "",
+                "isolation": "repeatable-read"
+              }
+            }
+          },
+          {
+            "id": "sweeper",
+            "type": "scheduler",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Hold sweeper",
+              "config": {
+                "cron": "* * * * *",
+                "purpose": ""
+              },
+              "note": "Release expired holds"
+            }
+          },
+          {
+            "id": "pay",
+            "type": "external_service",
+            "position": {
+              "x": 1040,
+              "y": 130
+            },
+            "data": {
+              "label": "PSP",
+              "config": {
+                "provider": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "gw",
+            "target": "wr",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e3",
+            "source": "wr",
+            "target": "svc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e4",
+            "source": "gw",
+            "target": "svc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "svc",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e6",
+            "source": "sweeper",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e7",
+            "source": "svc",
+            "target": "pay",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "svc",
+          "method": "POST",
+          "path": "/v1/seats/hold",
+          "auth": true,
+          "idempotent": true
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "svc",
+          "method": "POST",
+          "path": "/v1/bookings/{holdId}/confirm",
+          "auth": true,
+          "idempotent": true
+        }
+      ],
+      "entities": [
+        {
+          "name": "Seat",
+          "fields": "show_id, seat_id, status, held_by, held_until, version"
+        }
+      ]
+    }
+  ]
+}

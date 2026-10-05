@@ -1,0 +1,420 @@
+{
+  "id": "rate-limiter",
+  "number": 3,
+  "title": "Rate Limiter",
+  "difficulty": "easy",
+  "priority": true,
+  "tags": ["algorithms", "redis", "distributed-counters"],
+  "prompt": "Design a distributed rate limiter that protects a public API. Limits are configurable per user / API key (e.g. 100 requests per minute). Requests over the limit are rejected. The limiter runs across many API servers.",
+  "functionalReqs": [
+    "Limit requests per client key (user, IP or API key) per time window",
+    "Configurable rules per endpoint / tier",
+    "Reject over-limit requests with a clear error",
+    "Expose remaining quota to clients"
+  ],
+  "nonFunctionalReqs": [
+    "Adds < 5 ms latency per request",
+    "Accurate across many limiter instances",
+    "Highly available: limiter failure must not take down the API"
+  ],
+  "scale": {
+    "qps": "~1M requests/s across the fleet",
+    "dau": "~10M API keys",
+    "storage": "Counter state only: ~100 B per key per window"
+  },
+  "outOfScope": ["Billing for overages", "DDoS protection at the network layer"],
+  "hints": [
+    "Token bucket, leaky bucket, fixed window, sliding log, sliding window counter: which trade-off fits?",
+    "If each API server counts locally, limits are multiplied by the number of servers.",
+    "Read-then-write on a shared counter has a race. How do you make it atomic?"
+  ],
+  "keyComponents": ["api_gateway", "rate_limiter", "cache", "service"],
+  "deepDives": [
+    "Token bucket vs sliding window trade-offs",
+    "Atomic counters in Redis with Lua scripts",
+    "Fail-open vs fail-closed when Redis is down",
+    "Multi-region limits"
+  ],
+  "rubricFocus": [
+    "Correct algorithm choice with justification",
+    "Shared atomic state",
+    "Failure behaviour"
+  ],
+  "tests": [
+    {
+      "id": "limiter-in-path",
+      "desc": "Requests pass through a limiter before reaching services",
+      "check": {
+        "anyOf": [
+          {
+            "pathExists": {
+              "from": "client",
+              "via": ["rate_limiter"],
+              "to": "service"
+            }
+          },
+          {
+            "pathExists": {
+              "from": "client",
+              "via": ["api_gateway"],
+              "to": "service"
+            }
+          }
+        ]
+      },
+      "hint": "Place a rate limiter (or gateway with rate limiting) between clients and services."
+    },
+    {
+      "id": "shared-counters",
+      "desc": "Counters live in a shared store so all limiter instances agree",
+      "check": {
+        "edgeMatch": {
+          "from": ["rate_limiter", "api_gateway", "service"],
+          "to": "cache"
+        }
+      },
+      "hint": "Store counters in Redis (or similar) instead of local memory."
+    },
+    {
+      "id": "algorithm",
+      "desc": "A limiting algorithm is chosen",
+      "check": {
+        "mentions": "token.?bucket|leaky.?bucket|sliding.?window|fixed.?window|sliding.?log"
+      }
+    },
+    {
+      "id": "atomic",
+      "desc": "Counter updates are atomic",
+      "check": {
+        "mentions": "lua|atomic|incr|multi|compare.?and"
+      },
+      "hint": "Use INCR/EXPIRE or a Lua script so concurrent requests don't race."
+    },
+    {
+      "id": "reject-signal",
+      "desc": "Rejected requests get 429 with retry information",
+      "check": {
+        "mentions": "429|retry.?after|x-ratelimit|too many"
+      }
+    },
+    {
+      "id": "failure-mode",
+      "desc": "Behaviour when the limiter store is down is defined",
+      "check": {
+        "mentions": "fail.?open|fail.?closed|fallback|degrade"
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "gateway-redis",
+      "name": "Gateway middleware + Redis token bucket",
+      "summary": "The API gateway runs the limiter as middleware. Token buckets per API key live in a Redis cluster and are refilled lazily inside a Lua script (atomic read-modify-write). Over-limit → 429 with Retry-After.",
+      "tradeoffs": [
+        "No extra network hop beyond Redis",
+        "Token bucket allows bursts up to bucket size",
+        "Fail open if Redis is unavailable to protect availability"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "API clients",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "API Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              },
+              "note": "Token bucket per API key via Lua script; 429 + Retry-After; fail open on Redis errors"
+            }
+          },
+          {
+            "id": "redis",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Redis cluster",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "TTL",
+                "ttl": "60s",
+                "cluster": true
+              },
+              "note": "Bucket state: tokens + last_refill, atomic Lua"
+            }
+          },
+          {
+            "id": "rules",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Rules DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 1,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": ""
+              },
+              "note": "Per-tier limits, cached in gateway memory"
+            }
+          },
+          {
+            "id": "svc",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Backend API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "gw",
+            "target": "redis",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write",
+            "label": "EVALSHA bucket.lua"
+          },
+          {
+            "id": "e4",
+            "source": "gw",
+            "target": "rules",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e5",
+            "source": "gw",
+            "target": "svc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          }
+        ]
+      }
+    },
+    {
+      "id": "limiter-service-sliding",
+      "name": "Dedicated limiter tier, sliding window",
+      "summary": "A separate rate-limiter tier sits in front of services and keeps a sliding window counter (current + previous window weighted) in Redis using atomic INCR with EXPIRE.",
+      "tradeoffs": [
+        "Smoother than fixed windows, cheaper than sliding logs",
+        "Extra hop, but independently scalable and reusable",
+        "Fail closed for expensive endpoints, fail open elsewhere"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Clients",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L4",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "rl",
+            "type": "rate_limiter",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Rate Limiter",
+              "config": {
+                "algorithm": "sliding-window",
+                "limit": "100/min",
+                "key": "api-key"
+              },
+              "note": "Sliding window counter; returns 429 with X-RateLimit-Remaining"
+            }
+          },
+          {
+            "id": "redis",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Redis",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "2m",
+                "cluster": false
+              },
+              "note": "INCR + EXPIRE per window key (atomic)"
+            }
+          },
+          {
+            "id": "svc",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Services",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "rl",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "rl",
+            "target": "redis",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e4",
+            "source": "rl",
+            "target": "svc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "note": "fail open if Redis times out (> 5 ms)"
+          }
+        ]
+      }
+    }
+  ]
+}

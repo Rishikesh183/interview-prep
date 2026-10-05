@@ -1,0 +1,404 @@
+{
+  "id": "instagram",
+  "number": 9,
+  "title": "Instagram",
+  "difficulty": "medium",
+  "tags": ["media-upload", "cdn", "feed"],
+  "prompt": "Design a photo-sharing app like Instagram: users upload photos with captions, follow others, see a feed of followed users' photos, and like/comment.",
+  "functionalReqs": [
+    "Upload photos with captions",
+    "Follow users",
+    "Home feed of followed users' photos",
+    "Like and comment"
+  ],
+  "nonFunctionalReqs": [
+    "Photos load fast worldwide",
+    "Uploads must not be lost",
+    "Feed loads < 300 ms"
+  ],
+  "scale": {
+    "dau": "~500M DAU",
+    "qps": "~100M uploads/day (~1.2K/s), ~50K feed reads/s",
+    "storage": "~2 MB per photo (+ thumbnails) → ~200 TB/day"
+  },
+  "outOfScope": ["Stories", "Reels", "DMs"],
+  "hints": [
+    "Should photo bytes go through your app servers?",
+    "Generate thumbnails synchronously or asynchronously?",
+    "Feed design is the Twitter problem again."
+  ],
+  "keyComponents": [
+    "cdn",
+    "object_storage",
+    "service",
+    "message_queue",
+    "worker",
+    "cache",
+    "nosql_kv"
+  ],
+  "deepDives": ["Presigned uploads", "Thumbnail pipeline", "Feed fan-out", "Like counters"],
+  "rubricFocus": ["Upload path", "Media delivery via CDN", "Feed generation"],
+  "tests": [
+    {
+      "id": "blob",
+      "desc": "Photos are stored in object storage",
+      "check": {
+        "hasNode": "object_storage"
+      }
+    },
+    {
+      "id": "cdn",
+      "desc": "Photos are delivered through a CDN",
+      "check": {
+        "pathExists": {
+          "from": "client",
+          "to": "cdn"
+        }
+      }
+    },
+    {
+      "id": "async-processing",
+      "desc": "Thumbnails / processing happen asynchronously",
+      "check": {
+        "allOf": [
+          {
+            "edgeMatch": {
+              "to": "queue",
+              "mode": "async"
+            }
+          },
+          {
+            "pathExists": {
+              "from": "queue",
+              "to": ["worker", "serverless_fn"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "upload",
+      "desc": "Uploads use presigned URLs or a dedicated upload path",
+      "check": {
+        "mentions": "presign|signed url|direct upload|multipart"
+      }
+    },
+    {
+      "id": "feed-cache",
+      "desc": "Feeds are cached",
+      "check": {
+        "hasNode": "cache"
+      }
+    },
+    {
+      "id": "feed-api",
+      "desc": "A paginated feed API exists",
+      "check": {
+        "apiMatch": {
+          "method": "GET",
+          "path~": "feed",
+          "pagination": ["cursor", "offset"]
+        }
+      }
+    },
+    {
+      "id": "counters",
+      "desc": "Like counts are handled at scale",
+      "check": {
+        "mentions": "counter|like count|approximate|batch"
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "presigned-pipeline",
+      "name": "Presigned upload + async thumbnails",
+      "summary": "Client asks the API for a presigned S3 URL, uploads directly, then confirms. S3 event → queue → workers produce thumbnails. CDN serves all sizes. Feed uses hybrid fan-out into Redis.",
+      "tradeoffs": [
+        "App servers never touch photo bytes",
+        "Post visible only after thumbnails exist (or show placeholder)"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "App",
+              "config": {},
+              "note": "Uploads photos straight to S3 with a presigned URL"
+            }
+          },
+          {
+            "id": "cdn",
+            "type": "cdn",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "CDN",
+              "config": {
+                "content": ["media"],
+                "ttl": "30d"
+              }
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "api",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Media API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Issues presigned URLs; like counts are Redis counters flushed in batch"
+            }
+          },
+          {
+            "id": "s3",
+            "type": "object_storage",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Photos",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          },
+          {
+            "id": "q",
+            "type": "message_queue",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Thumbnail jobs",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              }
+            }
+          },
+          {
+            "id": "thumb",
+            "type": "worker",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Thumbnailers",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              }
+            }
+          },
+          {
+            "id": "meta",
+            "type": "nosql_kv",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Posts",
+              "config": {
+                "engine": "DynamoDB",
+                "partitionKey": "user_id",
+                "sortKey": "created_at",
+                "consistency": "eventual"
+              }
+            }
+          },
+          {
+            "id": "feed",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Feed cache",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "7d",
+                "cluster": true
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "cdn",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e2",
+            "source": "cdn",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "client",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write",
+            "label": "presigned PUT"
+          },
+          {
+            "id": "e4",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "lb",
+            "target": "api",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e6",
+            "source": "api",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e7",
+            "source": "api",
+            "target": "feed",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e8",
+            "source": "api",
+            "target": "q",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e9",
+            "source": "q",
+            "target": "thumb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e10",
+            "source": "thumb",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "api",
+          "method": "POST",
+          "path": "/v1/uploads",
+          "auth": true,
+          "response": "{ uploadUrl, postId }"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "api",
+          "method": "GET",
+          "path": "/v1/feed",
+          "auth": true,
+          "pagination": "cursor"
+        }
+      ],
+      "entities": []
+    },
+    {
+      "id": "upload-service",
+      "name": "Upload service proxy",
+      "summary": "A dedicated upload service streams photos to S3 and enqueues processing; simpler auth and validation, more bandwidth on your fleet.",
+      "tradeoffs": ["Easier validation/virus scanning", "Expensive egress through app tier"]
+    }
+  ]
+}

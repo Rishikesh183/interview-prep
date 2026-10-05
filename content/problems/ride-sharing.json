@@ -1,0 +1,804 @@
+{
+  "id": "ride-sharing",
+  "number": 22,
+  "title": "Uber / Ola",
+  "difficulty": "hard",
+  "priority": true,
+  "tags": ["geo-index", "high-write-qps", "matching", "consistency"],
+  "prompt": "Design a ride-hailing service like Uber. Drivers continuously report their location; riders request a ride and get matched with a nearby available driver; both see each other's live location during the trip.",
+  "functionalReqs": [
+    "Drivers send location every few seconds",
+    "Riders see nearby drivers and request a ride",
+    "Match rider with a nearby available driver",
+    "Live trip tracking and fare/payment at the end"
+  ],
+  "nonFunctionalReqs": [
+    "Matching within seconds",
+    "A driver is never assigned to two riders",
+    "Location ingestion handles very high write QPS",
+    "Highly available in each city"
+  ],
+  "scale": {
+    "dau": "~20M riders/day, ~5M active drivers",
+    "qps": "Drivers send location every 4 s → ~1.25M location writes/s",
+    "storage": "Live locations are small (in-memory); trip history ~1 KB per trip"
+  },
+  "outOfScope": ["Surge pricing models", "ETA ML", "Driver onboarding"],
+  "hints": [
+    "1M+ location writes per second into a relational DB is painful. Do you need durability for every ping?",
+    "Find drivers within 2 km quickly: what index?",
+    "Two riders' requests race for the same driver. How do you make the assignment atomic?"
+  ],
+  "keyComponents": [
+    "load_balancer",
+    "websocket_server",
+    "geo_index",
+    "cache",
+    "service",
+    "sql_db",
+    "external_service"
+  ],
+  "deepDives": [
+    "Geo indexing (geohash/S2/H3) and sharding by region",
+    "Location ingestion path",
+    "Atomic driver assignment",
+    "Trip state machine"
+  ],
+  "rubricFocus": ["Handling location write load", "Spatial lookup", "Consistent matching"],
+  "tests": [
+    {
+      "id": "location-ingest",
+      "desc": "Driver locations stream in over persistent connections or a stream",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "websocket_server"
+          },
+          {
+            "edgeMatch": {
+              "to": "event_stream"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "geo",
+      "desc": "A spatial index finds nearby drivers",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "geo_index"
+          },
+          {
+            "mentions": "geohash|quadtree|\\bs2\\b|\\bh3\\b|geosearch|georadius"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hot-writes",
+      "desc": "Hot location writes avoid the primary transactional DB",
+      "check": {
+        "anyOf": [
+          {
+            "edgeMatch": {
+              "to": "cache"
+            }
+          },
+          {
+            "edgeMatch": {
+              "to": "geo_index"
+            }
+          },
+          {
+            "edgeMatch": {
+              "to": "event_stream"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "matching",
+      "desc": "A matching / dispatch service exists",
+      "check": {
+        "nodeConfig": {
+          "type": "service",
+          "text~": "match|dispatch"
+        }
+      }
+    },
+    {
+      "id": "trip-store",
+      "desc": "Trips are stored durably",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "atomic-assign",
+      "desc": "A driver can only be assigned once",
+      "check": {
+        "mentions": "lock|atomic|compare.?and|cas|transaction|exactly one|setnx|conditional"
+      }
+    },
+    {
+      "id": "payments",
+      "desc": "Payment provider is integrated",
+      "check": {
+        "hasNode": "external_service"
+      }
+    },
+    {
+      "id": "ride-api",
+      "desc": "An API requests a ride",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "path~": "ride|trip"
+        }
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "ws-redis-geo",
+      "name": "WebSockets + Redis GEO",
+      "summary": "Driver apps hold WebSockets to a location gateway which writes to Redis GEO sets sharded by city (GEOADD, 30 s TTL per driver). The matching service queries GEOSEARCH for nearby available drivers and assigns atomically with a Lua script that flips the driver from available to busy. Trips are stored in SQL; payments via a PSP.",
+      "tradeoffs": [
+        "Redis handles the write rate in memory",
+        "Location loss on Redis failure is acceptable (next ping repairs it)",
+        "City-level sharding keeps hot spots contained"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "driver",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Driver app",
+              "config": {}
+            }
+          },
+          {
+            "id": "rider",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Rider app",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L4",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "loc",
+            "type": "websocket_server",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Location gateway",
+              "config": {
+                "instances": 100,
+                "stickySessions": true,
+                "connectionsPerNode": 50000
+              }
+            }
+          },
+          {
+            "id": "geo",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Redis GEO (per city)",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-back",
+                "eviction": "LRU",
+                "ttl": "30s",
+                "cluster": true
+              },
+              "note": "GEOADD / GEOSEARCH, sharded by city"
+            }
+          },
+          {
+            "id": "match",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Matching Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Atomic Lua: available → assigned (exactly one rider)"
+            }
+          },
+          {
+            "id": "trip",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Trip Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Trips DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 3,
+                "readReplicas": false,
+                "sharding": "hash",
+                "shardKey": "city_id"
+              }
+            }
+          },
+          {
+            "id": "pay",
+            "type": "external_service",
+            "position": {
+              "x": 1040,
+              "y": 130
+            },
+            "data": {
+              "label": "Payments",
+              "config": {
+                "provider": "Stripe/Adyen"
+              }
+            }
+          },
+          {
+            "id": "notif",
+            "type": "notification_service",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Push",
+              "config": {
+                "channels": ["push"]
+              }
+            }
+          },
+          {
+            "id": "trips",
+            "type": "pub_sub",
+            "position": {
+              "x": 780,
+              "y": 390
+            },
+            "data": {
+              "label": "Trip channels",
+              "config": {
+                "engine": "Redis Pub/Sub",
+                "fanOut": true
+              },
+              "note": "Live driver location fanned out to the rider's gateway node"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "driver",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "rider",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "loc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "lb",
+            "target": "match",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "lb",
+            "target": "trip",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e6",
+            "source": "loc",
+            "target": "geo",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e7",
+            "source": "match",
+            "target": "geo",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e8",
+            "source": "match",
+            "target": "trip",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "gRPC",
+            "mode": "sync"
+          },
+          {
+            "id": "e9",
+            "source": "trip",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e10",
+            "source": "trip",
+            "target": "pay",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e11",
+            "source": "match",
+            "target": "notif",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "gRPC",
+            "mode": "sync"
+          },
+          {
+            "id": "e12",
+            "source": "loc",
+            "target": "trips",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "internal",
+            "mode": "async"
+          },
+          {
+            "id": "e13",
+            "source": "trips",
+            "target": "loc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "internal",
+            "mode": "async"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "match",
+          "method": "POST",
+          "path": "/v1/rides",
+          "auth": true,
+          "idempotent": true,
+          "request": "{ pickup, dropoff, product }",
+          "statusCodes": "201, 409"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "loc",
+          "method": "WS",
+          "path": "/v1/driver/location",
+          "auth": true
+        }
+      ],
+      "entities": [
+        {
+          "name": "Trip",
+          "fields": "id, rider_id, driver_id, status, pickup, dropoff, fare, city_id"
+        },
+        {
+          "name": "DriverLocation",
+          "fields": "driver_id, lat, lng, geohash, updated_at (in Redis)"
+        }
+      ]
+    },
+    {
+      "id": "kafka-geo-index",
+      "name": "Location stream + sharded geo index",
+      "summary": "Location pings are produced to Kafka partitioned by geohash prefix. Geo-index workers consume and maintain in-memory H3 cell → drivers maps, sharded by region. Dispatch queries the owning shard and claims a driver with a conditional write on the driver's state row.",
+      "tradeoffs": [
+        "Replayable stream feeds analytics/ETA too",
+        "More components, slightly higher latency",
+        "Conditional write gives exactly one assignment"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "driver",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Drivers",
+              "config": {}
+            }
+          },
+          {
+            "id": "rider",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Riders",
+              "config": {}
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              }
+            }
+          },
+          {
+            "id": "ingest",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Location ingest",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "kafka",
+            "type": "event_stream",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Locations",
+              "config": {
+                "engine": "Kafka",
+                "topic": "",
+                "partitions": 512,
+                "partitionKey": "geohash prefix",
+                "retention": "7d"
+              }
+            }
+          },
+          {
+            "id": "indexer",
+            "type": "worker",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Geo indexers",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              },
+              "note": "Consume pings, update cells"
+            }
+          },
+          {
+            "id": "geo",
+            "type": "geo_index",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Geo index shards",
+              "config": {
+                "strategy": "S2"
+              },
+              "note": "In-memory H3/S2 cells → drivers"
+            }
+          },
+          {
+            "id": "dispatch",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Dispatch Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Conditional write on driver state: claim exactly one"
+            }
+          },
+          {
+            "id": "state",
+            "type": "nosql_kv",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Driver state",
+              "config": {
+                "engine": "DynamoDB",
+                "partitionKey": "",
+                "sortKey": "",
+                "consistency": "strong"
+              }
+            }
+          },
+          {
+            "id": "trips",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Trips",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 1,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": ""
+              }
+            }
+          },
+          {
+            "id": "psp",
+            "type": "external_service",
+            "position": {
+              "x": 780,
+              "y": 390
+            },
+            "data": {
+              "label": "PSP",
+              "config": {
+                "provider": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "driver",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "rider",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "gw",
+            "target": "ingest",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "gw",
+            "target": "dispatch",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "ingest",
+            "target": "kafka",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e6",
+            "source": "kafka",
+            "target": "indexer",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e7",
+            "source": "indexer",
+            "target": "geo",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e8",
+            "source": "dispatch",
+            "target": "geo",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e9",
+            "source": "dispatch",
+            "target": "state",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e10",
+            "source": "dispatch",
+            "target": "trips",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e11",
+            "source": "dispatch",
+            "target": "psp",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "dispatch",
+          "method": "POST",
+          "path": "/v1/trips",
+          "auth": true,
+          "idempotent": true
+        }
+      ],
+      "entities": [
+        {
+          "name": "Trip",
+          "fields": "trip_id, rider, driver, state"
+        }
+      ]
+    }
+  ]
+}

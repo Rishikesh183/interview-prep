@@ -1,0 +1,370 @@
+{
+  "id": "proximity-service",
+  "number": 14,
+  "title": "Proximity Service (Yelp)",
+  "difficulty": "medium",
+  "tags": ["geohash", "quadtree", "read-heavy"],
+  "prompt": "Design a service like Yelp's 'nearby' search: given a location and radius, return nearby businesses. Business owners can add or update listings.",
+  "functionalReqs": [
+    "Search businesses within a radius of a point",
+    "View business details",
+    "Owners add/update businesses (changes visible next day is OK)"
+  ],
+  "nonFunctionalReqs": [
+    "Search < 200 ms",
+    "Read-heavy, highly available",
+    "Handles dense cities and empty areas"
+  ],
+  "scale": {
+    "dau": "~100M DAU",
+    "qps": "~5 searches/user/day → ~5K QPS avg, 15K peak",
+    "storage": "~200M businesses × 1 KB"
+  },
+  "outOfScope": ["Reviews", "Real-time moving objects"],
+  "hints": [
+    "A SQL range query on lat AND lng doesn't use one index well.",
+    "Geohash, quadtree, S2: what are the trade-offs at city boundaries?",
+    "How often does the index really need to change?"
+  ],
+  "keyComponents": ["load_balancer", "service", "geo_index", "cache", "sql_db"],
+  "deepDives": [
+    "Geohash vs quadtree vs S2",
+    "Boundary handling (neighbour cells)",
+    "Read replicas and caching",
+    "Index rebuild cadence"
+  ],
+  "rubricFocus": ["Spatial index choice", "Read scaling", "Update path"],
+  "tests": [
+    {
+      "id": "geo-index",
+      "desc": "A spatial index answers radius queries",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "geo_index"
+          },
+          {
+            "mentions": "geohash|quadtree|s2|h3|r-?tree|postgis"
+          }
+        ]
+      }
+    },
+    {
+      "id": "business-store",
+      "desc": "Business data is stored in a database",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "read-scale",
+      "desc": "Reads scale via replicas or caching",
+      "check": {
+        "anyOf": [
+          {
+            "nodeConfig": {
+              "type": "sql_db",
+              "config": {
+                "readReplicas": true
+              }
+            }
+          },
+          {
+            "hasNode": "cache"
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-api",
+      "desc": "A nearby-search API with pagination",
+      "check": {
+        "apiMatch": {
+          "method": "GET",
+          "path~": "search|nearby",
+          "pagination": ["cursor", "offset"]
+        }
+      }
+    },
+    {
+      "id": "boundaries",
+      "desc": "Neighbouring cells / boundaries are handled",
+      "check": {
+        "mentions": "neighbo|boundar|adjacent|expand"
+      }
+    },
+    {
+      "id": "updates",
+      "desc": "Index updates are batched or async",
+      "check": {
+        "mentions": "nightly|batch|rebuild|async|next day"
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "geohash-redis",
+      "name": "Geohash in Redis / DB index",
+      "summary": "Store geohash (precision 6) per business; query the target cell plus 8 neighbours; cache cell → business IDs in Redis; business details from read replicas.",
+      "tradeoffs": ["Simple, works in any DB", "Fixed cell sizes are uneven in dense areas"],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "App",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "search",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Search Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Queries the target geohash cell plus its 8 neighbours (boundaries)"
+            }
+          },
+          {
+            "id": "biz",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Business Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "geo",
+            "type": "geo_index",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Geohash index",
+              "config": {
+                "strategy": "geohash"
+              }
+            }
+          },
+          {
+            "id": "cache",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Cell cache",
+              "config": {
+                "engine": "Redis",
+                "strategy": "cache-aside",
+                "eviction": "LRU",
+                "ttl": "10m",
+                "cluster": false
+              }
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Businesses",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 3,
+                "readReplicas": true,
+                "sharding": "none",
+                "shardKey": ""
+              }
+            }
+          },
+          {
+            "id": "rebuild",
+            "type": "batch_processor",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Nightly index rebuild",
+              "config": {
+                "engine": "Spark",
+                "schedule": "nightly"
+              },
+              "note": "Owner edits show up the next day"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "search",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "biz",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "search",
+            "target": "geo",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e5",
+            "source": "search",
+            "target": "cache",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e6",
+            "source": "search",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e7",
+            "source": "biz",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e8",
+            "source": "rebuild",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e9",
+            "source": "rebuild",
+            "target": "geo",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "search",
+          "method": "GET",
+          "path": "/v1/search/nearby",
+          "auth": false,
+          "pagination": "cursor",
+          "request": "?lat&lng&radius"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "biz",
+          "method": "POST",
+          "path": "/v1/businesses",
+          "auth": true
+        }
+      ],
+      "entities": []
+    },
+    {
+      "id": "quadtree",
+      "name": "In-memory quadtree",
+      "summary": "Each search server builds an in-memory quadtree (leaf ≤ 100 businesses) at startup from the DB; rebuilt nightly with rolling restarts.",
+      "tradeoffs": ["Adapts to density", "Startup build time; memory per server (~2 GB)"]
+    }
+  ]
+}

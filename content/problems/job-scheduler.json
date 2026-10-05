@@ -1,0 +1,343 @@
+{
+  "id": "job-scheduler",
+  "number": 18,
+  "title": "Distributed Job Scheduler",
+  "difficulty": "medium",
+  "tags": ["leader-election", "retries", "cron"],
+  "prompt": "Design a distributed job scheduler (like a managed cron / Airflow lite) that runs millions of one-off and recurring jobs on time, with retries.",
+  "functionalReqs": [
+    "Schedule one-off and cron jobs",
+    "Execute jobs on workers at the scheduled time",
+    "Retries with backoff on failure",
+    "Job status and history"
+  ],
+  "nonFunctionalReqs": [
+    "Jobs run at least once, close to their scheduled time (< 1 s skew)",
+    "No single point of failure",
+    "Jobs are not run twice concurrently"
+  ],
+  "scale": {
+    "qps": "~10K job executions/s peak",
+    "storage": "~100M scheduled jobs"
+  },
+  "outOfScope": ["DAG dependencies between jobs"],
+  "hints": [
+    "Scanning 100M rows every second won't work. How do you find due jobs?",
+    "Two scheduler instances must not both dispatch the same job.",
+    "What if a worker dies mid-job?"
+  ],
+  "keyComponents": ["scheduler", "coordination", "sql_db", "message_queue", "worker"],
+  "deepDives": [
+    "Time-bucketed job tables",
+    "Leader election vs partitioned schedulers",
+    "Visibility timeouts and heartbeats",
+    "Idempotent jobs"
+  ],
+  "rubricFocus": [
+    "Finding due jobs efficiently",
+    "Avoiding duplicate dispatch",
+    "Failure recovery"
+  ],
+  "tests": [
+    {
+      "id": "job-store",
+      "desc": "Jobs are stored durably",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "dispatch-queue",
+      "desc": "Due jobs are dispatched to workers via a queue",
+      "check": {
+        "pathExists": {
+          "from": "queue",
+          "to": "worker"
+        }
+      }
+    },
+    {
+      "id": "coordination",
+      "desc": "Scheduler instances coordinate (leader election or partitioning)",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "coordination"
+          },
+          {
+            "mentions": "leader|partition|shard|lease"
+          }
+        ]
+      }
+    },
+    {
+      "id": "retries",
+      "desc": "Failed jobs are retried with backoff",
+      "check": {
+        "mentions": "retr|backoff"
+      }
+    },
+    {
+      "id": "at-least-once",
+      "desc": "Delivery semantics / idempotency are explained",
+      "check": {
+        "mentions": "idempot|at.?least.?once|exactly.?once|dedup"
+      }
+    },
+    {
+      "id": "worker-failure",
+      "desc": "Worker crashes are detected (heartbeat/visibility timeout)",
+      "check": {
+        "mentions": "heartbeat|visibility|timeout|lease"
+      }
+    },
+    {
+      "id": "schedule-api",
+      "desc": "An API schedules jobs",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "path~": "job|schedule"
+        }
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "time-buckets",
+      "name": "Time-bucketed table + partitioned schedulers",
+      "summary": "Jobs are stored by next_run minute bucket and partition. Each scheduler owns partitions (leased via etcd), polls the current bucket, and pushes due jobs to SQS. Workers ack on completion; visibility timeout handles crashes.",
+      "tradeoffs": ["Horizontally scalable", "Partition rebalancing complexity"],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Job owners",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "api",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Job API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "db",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Jobs",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 3,
+                "readReplicas": false,
+                "sharding": "hash",
+                "shardKey": "partition_id"
+              },
+              "note": "Indexed by (partition, next_run minute bucket)"
+            }
+          },
+          {
+            "id": "sched",
+            "type": "scheduler",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Scheduler shards",
+              "config": {
+                "cron": "",
+                "purpose": "Poll due jobs per owned partition"
+              }
+            }
+          },
+          {
+            "id": "etcd",
+            "type": "coordination",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "etcd",
+              "config": {
+                "engine": "ZooKeeper",
+                "purpose": "locks"
+              },
+              "note": "Partition leases so only one scheduler dispatches a job"
+            }
+          },
+          {
+            "id": "q",
+            "type": "message_queue",
+            "position": {
+              "x": 260,
+              "y": 260
+            },
+            "data": {
+              "label": "Dispatch queue",
+              "config": {
+                "engine": "SQS",
+                "delivery": "at-least-once",
+                "dlq": true,
+                "fifo": false
+              }
+            }
+          },
+          {
+            "id": "workers",
+            "type": "worker",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Workers",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              },
+              "note": "At-least-once; handlers must be idempotent; retry with backoff; visibility timeout covers crashes"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "api",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "api",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e4",
+            "source": "sched",
+            "target": "etcd",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e5",
+            "source": "sched",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e6",
+            "source": "sched",
+            "target": "q",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e7",
+            "source": "q",
+            "target": "workers",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async"
+          },
+          {
+            "id": "e8",
+            "source": "workers",
+            "target": "db",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write",
+            "label": "status"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "api",
+          "method": "POST",
+          "path": "/v1/jobs",
+          "auth": true,
+          "idempotent": true,
+          "request": "{ cron | runAt, payload, retries }"
+        }
+      ],
+      "entities": []
+    },
+    {
+      "id": "single-leader",
+      "name": "Single leader with hot standby",
+      "summary": "One leader (elected via ZooKeeper) scans a min-heap/ordered index of next_run and dispatches; standby takes over on failure.",
+      "tradeoffs": ["Simple", "Leader throughput caps the system"]
+    }
+  ]
+}

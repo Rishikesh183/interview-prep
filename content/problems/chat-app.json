@@ -1,0 +1,751 @@
+{
+  "id": "chat-app",
+  "number": 7,
+  "title": "Chat App (WhatsApp)",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["websockets", "pub-sub", "ordering", "write-heavy"],
+  "prompt": "Design a 1:1 and small-group chat service like WhatsApp. Users send text messages in real time, see delivery/read receipts and online presence, and receive messages sent while they were offline.",
+  "functionalReqs": [
+    "1:1 and group chats (up to 256 members)",
+    "Real-time message delivery",
+    "Offline delivery when the recipient reconnects (+ push notification)",
+    "Sent / delivered / read receipts",
+    "Online presence / last seen",
+    "Message history sync across devices"
+  ],
+  "nonFunctionalReqs": [
+    "Low latency delivery (< 200 ms p99 within a region)",
+    "Messages are never lost and arrive in order per conversation",
+    "Highly available; tolerate WebSocket node failures"
+  ],
+  "scale": {
+    "dau": "~500M DAU",
+    "qps": "~40 messages/user/day → ~230K messages/s avg, ~700K/s peak",
+    "storage": "~100 B per message → ~2 TB/day",
+    "notes": "~50M concurrent connections"
+  },
+  "outOfScope": ["Voice / video calls", "End-to-end encryption key exchange details"],
+  "hints": [
+    "Recipients may be connected to a different WebSocket server than the sender. How does the message get there?",
+    "Messages are write-heavy and read by conversation + time. Which store fits that access pattern?",
+    "Ordering per conversation: who assigns the sequence?"
+  ],
+  "keyComponents": [
+    "load_balancer",
+    "websocket_server",
+    "pub_sub",
+    "wide_column",
+    "cache",
+    "notification_service"
+  ],
+  "deepDives": [
+    "Routing messages across WebSocket nodes (pub/sub, session registry)",
+    "Per-conversation ordering and message IDs",
+    "Offline delivery and push notifications",
+    "Read receipts and presence at scale"
+  ],
+  "rubricFocus": [
+    "Real-time transport",
+    "Cross-node delivery",
+    "Message storage model",
+    "Delivery guarantees"
+  ],
+  "tests": [
+    {
+      "id": "realtime",
+      "desc": "Clients hold persistent connections for real-time delivery",
+      "check": {
+        "hasNode": "websocket_server"
+      },
+      "hint": "Use WebSocket servers for bidirectional real-time messaging."
+    },
+    {
+      "id": "cross-node",
+      "desc": "Messages can reach users connected to a different WebSocket node",
+      "check": {
+        "anyOf": [
+          {
+            "edgeMatch": {
+              "from": "websocket_server",
+              "to": "queue"
+            }
+          },
+          {
+            "edgeMatch": {
+              "from": "queue",
+              "to": "websocket_server"
+            }
+          }
+        ]
+      },
+      "hint": "Connect WebSocket servers through pub/sub or a stream so a message can hop between nodes."
+    },
+    {
+      "id": "message-store",
+      "desc": "Messages are persisted",
+      "check": {
+        "pathExists": {
+          "from": "websocket_server",
+          "to": "db"
+        }
+      }
+    },
+    {
+      "id": "offline",
+      "desc": "Offline users get messages later (and a push notification)",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "notification_service"
+          },
+          {
+            "mentions": "offline|push notif|apns|fcm"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ordering",
+      "desc": "Per-conversation ordering is addressed",
+      "check": {
+        "mentions": "order|sequence|monotonic|snowflake"
+      }
+    },
+    {
+      "id": "presence",
+      "desc": "Presence / last seen is handled",
+      "check": {
+        "mentions": "presence|online|heartbeat|last.?seen"
+      }
+    },
+    {
+      "id": "receipts",
+      "desc": "Delivery and read receipts are handled",
+      "check": {
+        "mentions": "receipt|delivered|ack"
+      }
+    },
+    {
+      "id": "history-api",
+      "desc": "Message history is fetched with cursor pagination",
+      "check": {
+        "apiMatch": {
+          "method": "GET",
+          "path~": "message|history|conversation|chat",
+          "pagination": "cursor"
+        }
+      }
+    },
+    {
+      "id": "ws-entry",
+      "desc": "WebSocket servers sit behind a load balancer",
+      "check": {
+        "upstreamOf": "websocket_server",
+        "anyType": "entry"
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "ws-pubsub-cassandra",
+      "name": "WebSockets + Redis pub/sub + Cassandra",
+      "summary": "Clients keep a WebSocket to a chat server (sticky via L4 LB). A message is assigned a per-conversation sequence, written to Cassandra (partition = conversation_id, clustering = message_id) and published to a Redis channel per user; whichever server holds the recipient's socket delivers it. If the recipient is offline the message waits in storage and a push notification goes out.",
+      "tradeoffs": [
+        "Redis pub/sub is fire-and-forget; durability comes from writing to Cassandra first",
+        "Cassandra handles the write-heavy load and time-ordered reads per conversation",
+        "Presence via heartbeats in Redis with short TTLs"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Mobile app",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "L4 LB",
+              "config": {
+                "layer": "L4",
+                "algorithm": "least-conn",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "ws",
+            "type": "websocket_server",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Chat servers",
+              "config": {
+                "instances": 50,
+                "stickySessions": true,
+                "connectionsPerNode": 50000
+              },
+              "note": "Heartbeats update presence; ACKs drive delivered/read receipts"
+            }
+          },
+          {
+            "id": "ps",
+            "type": "pub_sub",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Redis Pub/Sub",
+              "config": {
+                "engine": "Redis Pub/Sub",
+                "fanOut": true
+              },
+              "note": "Channel per user id; the node holding the socket subscribes"
+            }
+          },
+          {
+            "id": "msg",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Message Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Assigns per-conversation sequence (snowflake) for ordering"
+            }
+          },
+          {
+            "id": "cass",
+            "type": "wide_column",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Cassandra",
+              "config": {
+                "engine": "Cassandra",
+                "partitionKey": "conversation_id",
+                "clusteringKey": "message_id",
+                "replicationFactor": 3,
+                "consistencyLevel": "LOCAL_QUORUM"
+              }
+            }
+          },
+          {
+            "id": "presence",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Presence Redis",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "60s",
+                "cluster": false
+              },
+              "note": "online / last seen"
+            }
+          },
+          {
+            "id": "notif",
+            "type": "notification_service",
+            "position": {
+              "x": 1040,
+              "y": 130
+            },
+            "data": {
+              "label": "Push Notifications",
+              "config": {
+                "channels": ["push"]
+              },
+              "note": "Offline users"
+            }
+          },
+          {
+            "id": "apns",
+            "type": "external_service",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "APNs / FCM",
+              "config": {
+                "provider": "APNs, FCM"
+              }
+            }
+          },
+          {
+            "id": "hist",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "History API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "ws",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "hist",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "ws",
+            "target": "msg",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "gRPC",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "msg",
+            "target": "cass",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e6",
+            "source": "msg",
+            "target": "ps",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async",
+            "label": "publish to recipient channel"
+          },
+          {
+            "id": "e7",
+            "source": "ps",
+            "target": "ws",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "AMQP",
+            "mode": "async",
+            "label": "deliver"
+          },
+          {
+            "id": "e8",
+            "source": "ws",
+            "target": "presence",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e9",
+            "source": "msg",
+            "target": "notif",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "gRPC",
+            "mode": "sync",
+            "label": "recipient offline",
+            "note": "Notification service enqueues internally"
+          },
+          {
+            "id": "e10",
+            "source": "notif",
+            "target": "apns",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e11",
+            "source": "hist",
+            "target": "cass",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "ws",
+          "method": "WS",
+          "path": "/v1/connect",
+          "auth": true,
+          "request": "send {conversationId, clientMsgId, body}",
+          "response": "ack {messageId, seq}"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "hist",
+          "method": "GET",
+          "path": "/v1/conversations/{id}/messages",
+          "auth": true,
+          "pagination": "cursor",
+          "response": "{ messages, nextCursor }"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Message",
+          "fields": "conversation_id (partition), message_id (clustering, snowflake), sender_id, body, status"
+        },
+        {
+          "name": "Conversation",
+          "fields": "id, members[], type (direct/group)"
+        }
+      ]
+    },
+    {
+      "id": "kafka-fanout",
+      "name": "Kafka-backed delivery",
+      "summary": "Chat servers append every message to Kafka partitioned by conversation_id (ordering per partition). Delivery workers consume, persist to storage and route to the recipient's chat server via a session registry; offline recipients get a push.",
+      "tradeoffs": [
+        "Durable, replayable log; consumers can be added (search, analytics)",
+        "Higher latency than direct pub/sub",
+        "Session registry must be kept fresh on reconnects"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Clients",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "consistent-hash",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "ws",
+            "type": "websocket_server",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Gateway nodes",
+              "config": {
+                "instances": 40,
+                "stickySessions": true,
+                "connectionsPerNode": 50000
+              },
+              "note": "Tracks online presence via heartbeats; sends delivered/read receipt events"
+            }
+          },
+          {
+            "id": "kafka",
+            "type": "event_stream",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Kafka",
+              "config": {
+                "engine": "Kafka",
+                "topic": "messages",
+                "partitions": 256,
+                "partitionKey": "conversation_id",
+                "retention": "7d"
+              },
+              "note": "Per-partition ordering"
+            }
+          },
+          {
+            "id": "deliver",
+            "type": "worker",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Delivery workers",
+              "config": {
+                "instances": 2,
+                "concurrency": 50
+              }
+            }
+          },
+          {
+            "id": "sessions",
+            "type": "cache",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Session registry",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "5m",
+                "cluster": false
+              },
+              "note": "user → gateway node, refreshed by heartbeats"
+            }
+          },
+          {
+            "id": "store",
+            "type": "nosql_kv",
+            "position": {
+              "x": 1300,
+              "y": 130
+            },
+            "data": {
+              "label": "Message store",
+              "config": {
+                "engine": "DynamoDB",
+                "partitionKey": "conversation_id",
+                "sortKey": "seq",
+                "consistency": "eventual"
+              }
+            }
+          },
+          {
+            "id": "notif",
+            "type": "notification_service",
+            "position": {
+              "x": 1300,
+              "y": 260
+            },
+            "data": {
+              "label": "Push",
+              "config": {
+                "channels": ["push"]
+              },
+              "note": "Offline delivery via APNs/FCM"
+            }
+          },
+          {
+            "id": "api",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Sync API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "ws",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "api",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "ws",
+            "target": "kafka",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e5",
+            "source": "kafka",
+            "target": "deliver",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e6",
+            "source": "deliver",
+            "target": "store",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e7",
+            "source": "deliver",
+            "target": "sessions",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e8",
+            "source": "deliver",
+            "target": "ws",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "gRPC",
+            "mode": "sync",
+            "label": "push to recipient node"
+          },
+          {
+            "id": "e9",
+            "source": "deliver",
+            "target": "notif",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "gRPC",
+            "mode": "sync"
+          },
+          {
+            "id": "e10",
+            "source": "ws",
+            "target": "sessions",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e11",
+            "source": "api",
+            "target": "store",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "api",
+          "method": "GET",
+          "path": "/v1/chats/{chatId}/history",
+          "auth": true,
+          "pagination": "cursor"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Message",
+          "fields": "conversation_id, seq, sender, body, sent_at"
+        }
+      ]
+    }
+  ]
+}

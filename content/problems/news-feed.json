@@ -1,0 +1,739 @@
+{
+  "id": "news-feed",
+  "number": 8,
+  "title": "News Feed (Twitter)",
+  "difficulty": "medium",
+  "priority": true,
+  "tags": ["fan-out", "caching", "celebrity-problem", "read-heavy"],
+  "prompt": "Design the home timeline for a Twitter-like service. Users post short text (with optional images) and follow other users. The home feed shows recent posts from people they follow.",
+  "functionalReqs": [
+    "Create a post (text + optional media)",
+    "Follow / unfollow users",
+    "View home timeline (reverse chronological, paginated)",
+    "View a user's own posts"
+  ],
+  "nonFunctionalReqs": [
+    "Timeline loads in < 200 ms p99",
+    "Eventual consistency OK: a post may take a few seconds to show up",
+    "Highly available"
+  ],
+  "scale": {
+    "dau": "~200M DAU",
+    "qps": "~5 timeline reads/user/day → ~12K reads/s avg; ~500M posts/day → ~6K writes/s",
+    "storage": "~300 B per post → ~150 GB/day (media separate)",
+    "notes": "Average 200 followers; some accounts have 100M+"
+  },
+  "outOfScope": ["Ranking ML models", "Ads", "Search"],
+  "hints": [
+    "Push (fan-out on write) makes reads cheap. What does it cost for an account with 100M followers?",
+    "Pull (fan-out on read) makes writes cheap. What does it cost on every timeline load?",
+    "Can you mix the two?"
+  ],
+  "keyComponents": [
+    "load_balancer",
+    "service",
+    "cache",
+    "event_stream",
+    "worker",
+    "nosql_kv",
+    "object_storage",
+    "cdn"
+  ],
+  "deepDives": [
+    "Fan-out on write vs read vs hybrid",
+    "Celebrity problem",
+    "Timeline cache sizing",
+    "Media delivery"
+  ],
+  "rubricFocus": ["Fan-out strategy with trade-offs", "Timeline caching", "Handling celebrities"],
+  "tests": [
+    {
+      "id": "post-store",
+      "desc": "Posts are stored durably",
+      "check": {
+        "pathExists": {
+          "from": "client",
+          "to": "db"
+        }
+      }
+    },
+    {
+      "id": "timeline-cache",
+      "desc": "Timelines or recent posts are served from a cache",
+      "check": {
+        "hasNode": "cache"
+      }
+    },
+    {
+      "id": "media",
+      "desc": "Media is served from object storage / CDN",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "cdn"
+          },
+          {
+            "hasNode": "object_storage"
+          }
+        ]
+      }
+    },
+    {
+      "id": "celebrity",
+      "desc": "The celebrity (huge follower count) case is handled",
+      "check": {
+        "mentions": "celebrit|hybrid|high.?follower|fan.?out on read|pull model"
+      },
+      "hint": "Explain what happens when an account with 100M followers posts."
+    },
+    {
+      "id": "follow-graph",
+      "desc": "The follow graph is modelled",
+      "check": {
+        "anyOf": [
+          {
+            "entityMatch": {
+              "name~": "follow"
+            }
+          },
+          {
+            "mentions": "follow"
+          }
+        ]
+      }
+    },
+    {
+      "id": "feed-api",
+      "desc": "The timeline API uses cursor pagination",
+      "check": {
+        "apiMatch": {
+          "method": "GET",
+          "path~": "feed|timeline|home",
+          "pagination": "cursor"
+        }
+      }
+    },
+    {
+      "id": "post-api",
+      "desc": "An API creates posts",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "path~": "post|tweet|status"
+        }
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "hybrid-push",
+      "name": "Fan-out on write (hybrid for celebrities)",
+      "summary": "Post Service stores the post and emits an event. Fan-out workers push the post ID into each follower's timeline list in Redis (capped at ~800 IDs). Accounts above ~10K followers are skipped; their posts are merged in at read time (hybrid).",
+      "tradeoffs": [
+        "Timeline reads are a single Redis lookup",
+        "Write amplification: avg 200 cache writes per post",
+        "Hybrid merge adds read-time work only for celebrity followees"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "App",
+              "config": {}
+            }
+          },
+          {
+            "id": "cdn",
+            "type": "cdn",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "CDN",
+              "config": {
+                "content": ["media"],
+                "ttl": "1d"
+              }
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 130
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "post",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Post Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "tl",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Timeline Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Reads Redis timeline; merges celebrity posts on read (hybrid)"
+            }
+          },
+          {
+            "id": "posts",
+            "type": "nosql_kv",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Posts",
+              "config": {
+                "engine": "DynamoDB",
+                "partitionKey": "post_id",
+                "sortKey": "",
+                "consistency": "eventual"
+              }
+            }
+          },
+          {
+            "id": "graphdb",
+            "type": "sql_db",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Follow graph",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 1,
+                "readReplicas": true,
+                "sharding": "none",
+                "shardKey": ""
+              },
+              "note": "follows(follower_id, followee_id)"
+            }
+          },
+          {
+            "id": "kafka",
+            "type": "event_stream",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Post events",
+              "config": {
+                "engine": "Kafka",
+                "topic": "posts",
+                "partitions": 12,
+                "partitionKey": "",
+                "retention": "7d"
+              }
+            }
+          },
+          {
+            "id": "fanout",
+            "type": "worker",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Fan-out workers",
+              "config": {
+                "instances": 30,
+                "concurrency": 10
+              },
+              "note": "Skip celebrities (> 10K followers)"
+            }
+          },
+          {
+            "id": "tcache",
+            "type": "cache",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Timeline cache",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "7d",
+                "cluster": true
+              },
+              "note": "List of post IDs per user"
+            }
+          },
+          {
+            "id": "media",
+            "type": "object_storage",
+            "position": {
+              "x": 520,
+              "y": 260
+            },
+            "data": {
+              "label": "Media",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "cdn",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e2",
+            "source": "cdn",
+            "target": "media",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "lb",
+            "target": "post",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "lb",
+            "target": "tl",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e6",
+            "source": "post",
+            "target": "posts",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e7",
+            "source": "post",
+            "target": "kafka",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e8",
+            "source": "kafka",
+            "target": "fanout",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e9",
+            "source": "fanout",
+            "target": "graphdb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e10",
+            "source": "fanout",
+            "target": "tcache",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e11",
+            "source": "tl",
+            "target": "tcache",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e12",
+            "source": "tl",
+            "target": "posts",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "post",
+          "method": "POST",
+          "path": "/v1/posts",
+          "auth": true,
+          "idempotent": true,
+          "statusCodes": "201, 400"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "tl",
+          "method": "GET",
+          "path": "/v1/timeline/home",
+          "auth": true,
+          "pagination": "cursor"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Post",
+          "fields": "post_id, author_id, text, media_urls, created_at"
+        },
+        {
+          "name": "Follow",
+          "fields": "follower_id, followee_id, created_at"
+        }
+      ]
+    },
+    {
+      "id": "pull",
+      "name": "Fan-out on read (pull)",
+      "summary": "Writes only store the post. On timeline load the service fetches recent post IDs for each followee from a per-author cache and merges them (k-way merge). Works well when follow counts are modest; celebrities are naturally cheap.",
+      "tradeoffs": [
+        "Cheap writes, no write amplification",
+        "Read latency grows with followee count",
+        "Heavy caching of per-author recent posts required"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Web",
+              "config": {}
+            }
+          },
+          {
+            "id": "gw",
+            "type": "api_gateway",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "Gateway",
+              "config": {
+                "auth": true,
+                "rateLimiting": true,
+                "routing": true
+              }
+            }
+          },
+          {
+            "id": "post",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Post Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "feed",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Feed Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Pull model: merge recent posts of followees; celebrity posts cost nothing extra"
+            }
+          },
+          {
+            "id": "authorCache",
+            "type": "cache",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Recent posts per author",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "48h",
+                "cluster": false
+              }
+            }
+          },
+          {
+            "id": "posts",
+            "type": "wide_column",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Posts",
+              "config": {
+                "engine": "Cassandra",
+                "partitionKey": "author_id",
+                "clusteringKey": "created_at",
+                "replicationFactor": 3,
+                "consistencyLevel": "QUORUM"
+              }
+            }
+          },
+          {
+            "id": "follows",
+            "type": "graph_db",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Follow graph",
+              "config": {}
+            }
+          },
+          {
+            "id": "media",
+            "type": "object_storage",
+            "position": {
+              "x": 780,
+              "y": 390
+            },
+            "data": {
+              "label": "Media",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "gw",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "gw",
+            "target": "post",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "gw",
+            "target": "feed",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "post",
+            "target": "posts",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e5",
+            "source": "post",
+            "target": "authorCache",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e6",
+            "source": "post",
+            "target": "media",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e7",
+            "source": "feed",
+            "target": "follows",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e8",
+            "source": "feed",
+            "target": "authorCache",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e9",
+            "source": "feed",
+            "target": "posts",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "post",
+          "method": "POST",
+          "path": "/v1/tweets",
+          "auth": true
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "feed",
+          "method": "GET",
+          "path": "/v1/feed",
+          "auth": true,
+          "pagination": "cursor"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Tweet",
+          "fields": "author_id, created_at, tweet_id, text"
+        },
+        {
+          "name": "Follows",
+          "fields": "follower, followee"
+        }
+      ]
+    }
+  ]
+}

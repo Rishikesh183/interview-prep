@@ -1,0 +1,343 @@
+{
+  "id": "collaborative-editor",
+  "number": 24,
+  "title": "Google Docs",
+  "difficulty": "hard",
+  "tags": ["ot", "crdt", "real-time-collaboration"],
+  "prompt": "Design a collaborative document editor like Google Docs where many users edit the same document simultaneously and see each other's changes and cursors in real time.",
+  "functionalReqs": [
+    "Concurrent editing by many users",
+    "Changes appear for others within ~100 ms",
+    "Show collaborators' cursors / presence",
+    "Version history and offline edits that merge later"
+  ],
+  "nonFunctionalReqs": [
+    "All replicas converge to the same document",
+    "No lost edits",
+    "Low latency per keystroke"
+  ],
+  "scale": {
+    "dau": "~50M DAU",
+    "qps": "~1M concurrent documents, up to 100 editors per doc",
+    "storage": "Ops log + periodic snapshots"
+  },
+  "outOfScope": ["Rich media embedding", "Comments/suggestions"],
+  "hints": [
+    "Two users type at the same position at the same time. Whose insert goes first, and do both clients agree?",
+    "All editors of a doc should talk to the same server, or share state somehow.",
+    "Replaying 1M ops to open a doc is slow."
+  ],
+  "keyComponents": [
+    "load_balancer",
+    "websocket_server",
+    "service",
+    "pub_sub",
+    "nosql_kv",
+    "object_storage"
+  ],
+  "deepDives": [
+    "OT vs CRDT",
+    "Routing editors of one doc to one session server",
+    "Op log + snapshots",
+    "Offline merge"
+  ],
+  "rubricFocus": ["Conflict resolution algorithm", "Real-time transport", "Persistence model"],
+  "tests": [
+    {
+      "id": "realtime",
+      "desc": "Editors connect over WebSockets",
+      "check": {
+        "hasNode": "websocket_server"
+      }
+    },
+    {
+      "id": "algorithm",
+      "desc": "Concurrent edits converge via OT or CRDT",
+      "check": {
+        "mentions": "\\bot\\b|operational transform|crdt|yjs|automerge"
+      }
+    },
+    {
+      "id": "op-log",
+      "desc": "Operations are logged durably",
+      "check": {
+        "anyOf": [
+          {
+            "entityMatch": {
+              "name~": "op|operation|change"
+            }
+          },
+          {
+            "mentions": "op.?log|operation log|event log"
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshots",
+      "desc": "Periodic snapshots speed up loading",
+      "check": {
+        "mentions": "snapshot|checkpoint|compact"
+      }
+    },
+    {
+      "id": "doc-routing",
+      "desc": "Editors of a document share a session (sticky routing or pub/sub)",
+      "check": {
+        "anyOf": [
+          {
+            "nodeConfig": {
+              "type": "load_balancer",
+              "config": {
+                "algorithm": "consistent-hash"
+              }
+            }
+          },
+          {
+            "hasNode": "pub_sub"
+          },
+          {
+            "mentions": "sticky|route by doc|session server"
+          }
+        ]
+      }
+    },
+    {
+      "id": "presence",
+      "desc": "Cursors / presence are shown",
+      "check": {
+        "mentions": "cursor|presence"
+      }
+    },
+    {
+      "id": "storage",
+      "desc": "Documents are persisted",
+      "check": {
+        "hasNode": "storage"
+      }
+    },
+    {
+      "id": "ws-entry",
+      "desc": "WebSocket servers sit behind a load balancer",
+      "check": {
+        "upstreamOf": "websocket_server",
+        "anyType": "entry"
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "ot-central",
+      "name": "Central OT session per document",
+      "summary": "A consistent-hash LB routes all editors of a doc to one collaboration server which orders ops, transforms them (OT) and broadcasts; ops appended to a log, snapshots every N ops to object storage.",
+      "tradeoffs": [
+        "Simple total ordering",
+        "Session server is a per-doc bottleneck and needs failover"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Editor",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "consistent-hash",
+                "healthChecks": true
+              },
+              "note": "Routes by document id: all editors of a doc share one session server"
+            }
+          },
+          {
+            "id": "collab",
+            "type": "websocket_server",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Collaboration servers",
+              "config": {
+                "instances": 20,
+                "stickySessions": true,
+                "connectionsPerNode": 50000
+              },
+              "note": "Operational transform (OT) per document session; broadcasts ops, cursors and presence"
+            }
+          },
+          {
+            "id": "ops",
+            "type": "nosql_kv",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Op log",
+              "config": {
+                "engine": "DynamoDB",
+                "partitionKey": "doc_id",
+                "sortKey": "seq",
+                "consistency": "strong"
+              }
+            }
+          },
+          {
+            "id": "snap",
+            "type": "object_storage",
+            "position": {
+              "x": 780,
+              "y": 130
+            },
+            "data": {
+              "label": "Snapshots",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              },
+              "note": "Snapshot every 500 ops; load = snapshot + tail of the op log"
+            }
+          },
+          {
+            "id": "docs",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Docs API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "meta",
+            "type": "sql_db",
+            "position": {
+              "x": 780,
+              "y": 260
+            },
+            "data": {
+              "label": "Doc metadata",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 2,
+                "readReplicas": false,
+                "sharding": "none",
+                "shardKey": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "collab",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "WebSocket",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "docs",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "collab",
+            "target": "ops",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e5",
+            "source": "collab",
+            "target": "snap",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e6",
+            "source": "docs",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e7",
+            "source": "docs",
+            "target": "snap",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [],
+      "entities": [
+        {
+          "name": "Operation",
+          "fields": "doc_id, seq, author, op (insert/delete @pos), base_version"
+        }
+      ]
+    },
+    {
+      "id": "crdt",
+      "name": "CRDT with pub/sub relay",
+      "summary": "Clients apply CRDT ops locally (Yjs/Automerge) and send them through any WebSocket node; Redis pub/sub relays per doc; ops stored in a KV log; snapshots compacted periodically.",
+      "tradeoffs": [
+        "Offline edits merge naturally",
+        "Metadata overhead of CRDTs grows; needs compaction"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,395 @@
+{
+  "id": "top-k-trending",
+  "number": 28,
+  "title": "Top-K Trending",
+  "difficulty": "hard",
+  "tags": ["heavy-hitters", "count-min-sketch", "streaming"],
+  "prompt": "Design a service that shows the top 100 trending hashtags/videos over the last 1 hour, 1 day and 1 week, updated every minute, from a stream of billions of events/day.",
+  "functionalReqs": [
+    "Ingest view/mention events",
+    "Return top-K for several time windows",
+    "Results update about every minute"
+  ],
+  "nonFunctionalReqs": [
+    "Approximate counts are OK for the 1-hour view",
+    "Query latency < 50 ms",
+    "Scales with event volume"
+  ],
+  "scale": {
+    "qps": "~100K events/s",
+    "storage": "~100M distinct items/day"
+  },
+  "outOfScope": ["Personalized trends", "Spam detection"],
+  "hints": [
+    "Exact counts for 100M items per minute is expensive. Can you approximate?",
+    "How do you combine partial top-K lists from many workers?",
+    "Should queries compute anything?"
+  ],
+  "keyComponents": ["event_stream", "stream_processor", "cache", "batch_processor", "service"],
+  "deepDives": [
+    "Count-min sketch + heap",
+    "Sliding windows",
+    "Merging partial top-K",
+    "Lambda architecture for exact daily counts"
+  ],
+  "rubricFocus": [
+    "Streaming aggregation",
+    "Approximate algorithms",
+    "Precomputed results for reads"
+  ],
+  "tests": [
+    {
+      "id": "stream",
+      "desc": "Events flow through a stream",
+      "check": {
+        "hasNode": "event_stream"
+      }
+    },
+    {
+      "id": "processor",
+      "desc": "A stream processor computes counts",
+      "check": {
+        "pathExists": {
+          "from": "event_stream",
+          "to": "stream_processor"
+        }
+      }
+    },
+    {
+      "id": "approx",
+      "desc": "Heavy-hitter / approximate counting is used",
+      "check": {
+        "mentions": "count.?min|sketch|heavy.?hitter|space.?saving|misra|heap"
+      }
+    },
+    {
+      "id": "windows",
+      "desc": "Multiple time windows are maintained",
+      "check": {
+        "anyOf": [
+          {
+            "nodeConfig": {
+              "type": "stream_processor",
+              "config": {
+                "windowing": ["tumbling", "sliding"]
+              }
+            }
+          },
+          {
+            "mentions": "window"
+          }
+        ]
+      }
+    },
+    {
+      "id": "merge",
+      "desc": "Partial results from partitions are merged",
+      "check": {
+        "mentions": "merge|combine|aggregat"
+      }
+    },
+    {
+      "id": "serving",
+      "desc": "Precomputed top-K served from cache/store",
+      "check": {
+        "hasNode": ["cache", "nosql_kv", "sql_db"]
+      }
+    },
+    {
+      "id": "api",
+      "desc": "A top-K query API",
+      "check": {
+        "apiMatch": {
+          "method": "GET",
+          "path~": "trend|top"
+        }
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "cms-flink",
+      "name": "Count-min sketch per window",
+      "summary": "Kafka partitions events by item; Flink keeps a count-min sketch + min-heap per partition per 1-min bucket, emits partial top-K; an aggregator merges partials and writes top-100 per window to Redis.",
+      "tradeoffs": ["Bounded memory", "Approximate; overcounts rare items slightly"],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "mobile_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Apps",
+              "config": {}
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "ingest",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "Event ingest",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          },
+          {
+            "id": "kafka",
+            "type": "event_stream",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Events",
+              "config": {
+                "engine": "Kafka",
+                "topic": "",
+                "partitions": 12,
+                "partitionKey": "item_id",
+                "retention": "7d"
+              }
+            }
+          },
+          {
+            "id": "flink",
+            "type": "stream_processor",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Counters",
+              "config": {
+                "engine": "Flink",
+                "windowing": "sliding"
+              },
+              "note": "Count-min sketch + min-heap per partition, partial top-K every minute"
+            }
+          },
+          {
+            "id": "merge",
+            "type": "worker",
+            "position": {
+              "x": 1300,
+              "y": 0
+            },
+            "data": {
+              "label": "Top-K merger",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              },
+              "note": "Merges partial lists into the global top 100 per window"
+            }
+          },
+          {
+            "id": "redis",
+            "type": "cache",
+            "position": {
+              "x": 1560,
+              "y": 0
+            },
+            "data": {
+              "label": "Trending cache",
+              "config": {
+                "engine": "Redis",
+                "strategy": "write-through",
+                "eviction": "LRU",
+                "ttl": "2m",
+                "cluster": false
+              }
+            }
+          },
+          {
+            "id": "archive",
+            "type": "worker",
+            "position": {
+              "x": 1040,
+              "y": 130
+            },
+            "data": {
+              "label": "Archiver",
+              "config": {
+                "instances": 2,
+                "concurrency": 10
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "type": "object_storage",
+            "position": {
+              "x": 1300,
+              "y": 130
+            },
+            "data": {
+              "label": "Raw events",
+              "config": {
+                "engine": "S3",
+                "lifecycle": ""
+              }
+            }
+          },
+          {
+            "id": "trends",
+            "type": "service",
+            "position": {
+              "x": 520,
+              "y": 130
+            },
+            "data": {
+              "label": "Trends API",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e2",
+            "source": "lb",
+            "target": "ingest",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "lb",
+            "target": "trends",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "ingest",
+            "target": "kafka",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e5",
+            "source": "kafka",
+            "target": "flink",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e6",
+            "source": "kafka",
+            "target": "archive",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "Kafka",
+            "mode": "async"
+          },
+          {
+            "id": "e7",
+            "source": "flink",
+            "target": "merge",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "internal",
+            "mode": "sync"
+          },
+          {
+            "id": "e8",
+            "source": "merge",
+            "target": "redis",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e9",
+            "source": "archive",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e10",
+            "source": "trends",
+            "target": "redis",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "trends",
+          "method": "GET",
+          "path": "/v1/trending",
+          "auth": false,
+          "request": "?window=1h|1d|1w"
+        }
+      ],
+      "entities": []
+    },
+    {
+      "id": "lambda",
+      "name": "Lambda: fast approximate + slow exact",
+      "summary": "Streaming path as above for the 1-hour view; hourly/daily Spark jobs compute exact counts for longer windows.",
+      "tradeoffs": ["Accurate long windows", "Two pipelines to maintain"]
+    }
+  ]
+}

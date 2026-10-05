@@ -1,0 +1,392 @@
+{
+  "id": "pastebin",
+  "number": 2,
+  "title": "Pastebin",
+  "difficulty": "easy",
+  "tags": ["object-storage", "expiry", "ttl", "read-heavy"],
+  "prompt": "Design a service like Pastebin where users paste text (up to a few MB), get a unique URL, and others can read it. Pastes can expire after a chosen time.",
+  "functionalReqs": [
+    "Create a paste and get a unique link",
+    "Read a paste by its link",
+    "Pastes expire after a user-chosen duration (or never)",
+    "Optional syntax highlighting language"
+  ],
+  "nonFunctionalReqs": [
+    "Reads are fast and highly available",
+    "Paste content is durable until expiry",
+    "Links are not guessable"
+  ],
+  "scale": {
+    "dau": "~1M new pastes/day",
+    "qps": "~12 writes/s, ~600 reads/s avg (50:1)",
+    "storage": "~10 KB avg paste → ~10 GB/day, ~18 TB over 5 years"
+  },
+  "outOfScope": ["Editing pastes", "Comments"],
+  "hints": [
+    "Paste bodies are blobs; metadata is small. Do they belong in the same store?",
+    "How will expired pastes actually get deleted?",
+    "Popular pastes get read a lot. What sits in front of storage?"
+  ],
+  "keyComponents": ["service", "object_storage", "sql_db", "cdn", "scheduler"],
+  "deepDives": [
+    "Separating blob and metadata storage",
+    "Expiry: lazy vs active cleanup",
+    "Key generation"
+  ],
+  "rubricFocus": ["Blob storage for content", "Clear expiry mechanism", "Caching hot reads"],
+  "tests": [
+    {
+      "id": "blob-store",
+      "desc": "Paste bodies live in object storage",
+      "check": {
+        "hasNode": "object_storage"
+      },
+      "hint": "Large text blobs fit object storage (S3) better than DB rows."
+    },
+    {
+      "id": "metadata-store",
+      "desc": "Paste metadata is stored in a database",
+      "check": {
+        "hasNode": "db"
+      }
+    },
+    {
+      "id": "expiry",
+      "desc": "Expired pastes are cleaned up",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "scheduler"
+          },
+          {
+            "mentions": "ttl|expir|lifecycle"
+          }
+        ]
+      },
+      "hint": "Use a cleanup job, storage lifecycle rules, or TTLs."
+    },
+    {
+      "id": "hot-reads",
+      "desc": "Hot pastes are served from a cache or CDN",
+      "check": {
+        "anyOf": [
+          {
+            "hasNode": "cdn"
+          },
+          {
+            "hasNode": "cache"
+          }
+        ]
+      }
+    },
+    {
+      "id": "create-api",
+      "desc": "An API creates pastes",
+      "check": {
+        "apiMatch": {
+          "method": "POST",
+          "path~": "paste"
+        }
+      }
+    },
+    {
+      "id": "read-api",
+      "desc": "A GET endpoint reads a paste by key",
+      "check": {
+        "apiMatch": {
+          "method": "GET",
+          "path~": "\\{[^}]+\\}|/:\\w+"
+        }
+      }
+    },
+    {
+      "id": "paste-entity",
+      "desc": "The data model records expiry",
+      "check": {
+        "entityMatch": {
+          "fields~": "expir|ttl"
+        }
+      }
+    },
+    {
+      "id": "scale-out",
+      "desc": "Every service sits behind a load balancer or API gateway",
+      "check": {
+        "upstreamOf": "service",
+        "anyType": "entry"
+      },
+      "hint": "Put a load balancer or API gateway in front of your services so they can scale horizontally."
+    }
+  ],
+  "references": [
+    {
+      "id": "s3-plus-metadata",
+      "name": "Object storage + metadata DB",
+      "summary": "Service writes the body to S3 under a random key and a metadata row (key, size, language, expires_at) to SQL. Reads go CDN → service → S3. A scheduler deletes expired rows; S3 lifecycle rules delete the blobs.",
+      "tradeoffs": [
+        "Cheap durable storage for large bodies",
+        "Two writes per create need cleanup on partial failure"
+      ],
+      "graph": {
+        "nodes": [
+          {
+            "id": "client",
+            "type": "web_client",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "data": {
+              "label": "Browser",
+              "config": {}
+            }
+          },
+          {
+            "id": "cdn",
+            "type": "cdn",
+            "position": {
+              "x": 260,
+              "y": 0
+            },
+            "data": {
+              "label": "CDN",
+              "config": {
+                "content": ["static", "api"],
+                "ttl": "5m"
+              },
+              "note": "Caches popular pastes at the edge"
+            }
+          },
+          {
+            "id": "lb",
+            "type": "load_balancer",
+            "position": {
+              "x": 520,
+              "y": 0
+            },
+            "data": {
+              "label": "LB",
+              "config": {
+                "layer": "L7",
+                "algorithm": "round-robin",
+                "healthChecks": true
+              }
+            }
+          },
+          {
+            "id": "svc",
+            "type": "service",
+            "position": {
+              "x": 780,
+              "y": 0
+            },
+            "data": {
+              "label": "Paste Service",
+              "config": {
+                "stateless": true,
+                "instancesMin": 2,
+                "instancesMax": 10,
+                "autoscale": true,
+                "language": ""
+              },
+              "note": "Random 8-char base62 keys; bodies to S3, metadata to SQL"
+            }
+          },
+          {
+            "id": "cache",
+            "type": "cache",
+            "position": {
+              "x": 1040,
+              "y": 0
+            },
+            "data": {
+              "label": "Redis",
+              "config": {
+                "engine": "Redis",
+                "strategy": "cache-aside",
+                "eviction": "LRU",
+                "ttl": "1h",
+                "cluster": false
+              },
+              "note": "Hot paste bodies < 64 KB"
+            }
+          },
+          {
+            "id": "meta",
+            "type": "sql_db",
+            "position": {
+              "x": 1040,
+              "y": 130
+            },
+            "data": {
+              "label": "Metadata DB",
+              "config": {
+                "engine": "PostgreSQL",
+                "replicas": 2,
+                "readReplicas": true,
+                "sharding": "none",
+                "shardKey": ""
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "type": "object_storage",
+            "position": {
+              "x": 1040,
+              "y": 260
+            },
+            "data": {
+              "label": "Paste bodies",
+              "config": {
+                "engine": "S3",
+                "lifecycle": "Delete objects past expires_at"
+              }
+            }
+          },
+          {
+            "id": "sweeper",
+            "type": "scheduler",
+            "position": {
+              "x": 0,
+              "y": 130
+            },
+            "data": {
+              "label": "Expiry sweeper",
+              "config": {
+                "cron": "*/10 * * * *",
+                "purpose": "Delete expired pastes"
+              },
+              "note": "Expired rows + S3 lifecycle rules (TTL)"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "source": "client",
+            "target": "cdn",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read"
+          },
+          {
+            "id": "e2",
+            "source": "cdn",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e3",
+            "source": "client",
+            "target": "lb",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e4",
+            "source": "lb",
+            "target": "svc",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync"
+          },
+          {
+            "id": "e5",
+            "source": "svc",
+            "target": "cache",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "TCP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e6",
+            "source": "svc",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e7",
+            "source": "svc",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "read_write"
+          },
+          {
+            "id": "e8",
+            "source": "sweeper",
+            "target": "meta",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "SQL",
+            "mode": "sync",
+            "op": "write"
+          },
+          {
+            "id": "e9",
+            "source": "sweeper",
+            "target": "s3",
+            "sourceHandle": "r",
+            "targetHandle": "l",
+            "protocol": "HTTP",
+            "mode": "sync",
+            "op": "write"
+          }
+        ]
+      },
+      "apis": [
+        {
+          "id": "a1",
+          "ownerNodeId": "svc",
+          "method": "POST",
+          "path": "/v1/pastes",
+          "auth": true,
+          "request": "{ content, language?, expiresIn? }",
+          "response": "{ key, url }",
+          "statusCodes": "201, 400, 413"
+        },
+        {
+          "id": "a2",
+          "ownerNodeId": "svc",
+          "method": "GET",
+          "path": "/v1/pastes/{key}",
+          "auth": false,
+          "statusCodes": "200, 404, 410"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Paste",
+          "fields": "key PK, s3_key, size, language, created_at, expires_at"
+        }
+      ]
+    },
+    {
+      "id": "kv-with-ttl",
+      "name": "Key-value store with native TTL",
+      "summary": "Small pastes (<64 KB) go straight into a KV store (DynamoDB) with a TTL attribute; large ones spill to S3. Expiry is handled by the store itself.",
+      "tradeoffs": [
+        "No cleanup job for small pastes",
+        "Item size limits force a split path",
+        "TTL deletion is eventually consistent; check expires_at on read"
+      ]
+    }
+  ]
+}

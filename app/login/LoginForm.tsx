@@ -16,7 +16,7 @@ export function LoginForm() {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(
     params.get("error") ? "error" : "idle",
   );
-  const [message, setMessage] = useState(params.get("error") ? "Sign-in failed. Try again." : "");
+  const [message, setMessage] = useState(() => (params.get("error") ? errorText(params) : ""));
 
   if (!isSupabaseConfigured) {
     return (
@@ -28,11 +28,13 @@ export function LoginForm() {
     );
   }
 
+  // Wherever the app is running (localhost or the Vercel deployment). Supabase only honours it
+  // if it's in Authentication → URL Configuration → Redirect URLs; otherwise it uses the Site URL.
   const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
-  const github = async () => {
+  const oauth = async (provider: "google" | "github") => {
     const { error } = await supabaseBrowser()!.auth.signInWithOAuth({
-      provider: "github",
+      provider,
       options: { redirectTo: callback },
     });
     if (error) {
@@ -56,9 +58,14 @@ export function LoginForm() {
 
   return (
     <div className="space-y-6">
-      <Button className="w-full" onClick={() => void github()}>
-        <GithubMark /> Continue with GitHub
-      </Button>
+      <div className="space-y-2">
+        <Button className="w-full" onClick={() => void oauth("google")}>
+          <GoogleMark /> Continue with Google
+        </Button>
+        <Button variant="outline" className="w-full" onClick={() => void oauth("github")}>
+          <GithubMark /> Continue with GitHub
+        </Button>
+      </div>
 
       <div className="text-muted-foreground flex items-center gap-3 text-xs">
         <span className="bg-border h-px flex-1" /> or <span className="bg-border h-px flex-1" />
@@ -90,6 +97,39 @@ export function LoginForm() {
       )}
       {state === "error" && <p className="text-destructive text-sm">{message}</p>}
     </div>
+  );
+}
+
+/** Supabase's error codes, in words that say what to do next. */
+function errorText(params: URLSearchParams): string {
+  switch (params.get("error_code")) {
+    case "otp_expired":
+      return "That sign-in link has expired or was already used. Request a new one and open only the latest email.";
+    case "exchange_failed":
+      return "Couldn't finish signing in. Open the email link in the same browser you requested it from, or request a new one.";
+    default:
+      return params.get("error_description") || "Sign-in failed. Try again.";
+  }
+}
+
+/** Google's "G" (lucide doesn't ship brand icons). */
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#4285F4"
+        d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.5 5.5 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24Z"
+      />
+      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
+      <path
+        fill="#EA4335"
+        d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9Z"
+      />
+    </svg>
   );
 }
 

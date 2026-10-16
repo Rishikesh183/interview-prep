@@ -30,6 +30,8 @@ type Preferences = {
   /** Lint rule 14: show "likely missing components". Off = no-hints practice. */
   keyComponentHints: boolean;
   lintDrawerOpen: boolean;
+  /** Sandbox tab to reopen on the next visit. */
+  lastSandboxId: string | null;
   set: (patch: Partial<Omit<Preferences, "set">>) => void;
 };
 
@@ -38,14 +40,16 @@ export const usePreferences = create<Preferences>()(
     (set) => ({
       keyComponentHints: true,
       lintDrawerOpen: true,
+      lastSandboxId: null,
       set: (patch) => set(patch),
     }),
     {
       name: "sysdesign-arena:prefs",
       storage: createJSONStorage(() => safeLocalStorage),
-      partialize: ({ keyComponentHints, lintDrawerOpen }) => ({
+      partialize: ({ keyComponentHints, lintDrawerOpen, lastSandboxId }) => ({
         keyComponentHints,
         lintDrawerOpen,
+        lastSandboxId,
       }),
     },
   ),

@@ -8,14 +8,22 @@ import {
   type Progress,
 } from "@/lib/schema";
 
-const SandboxContentSchema = z.object({
+export const SandboxContentSchema = z.object({
   graph: GraphSchema,
   apis: z.array(ApiEndpointSchema).default([]),
 });
 export type SandboxContent = z.infer<typeof SandboxContentSchema>;
 
-/** A free-practice canvas not tied to a problem. `id` is "default" for now. */
-type SandboxRow = SandboxContent & { id: string; updatedAt: number };
+/**
+ * A free-practice canvas not tied to a problem. The first one has id "default"; rows saved before
+ * sandboxes had names lack `name` and `createdAt`.
+ */
+export type SandboxRow = SandboxContent & {
+  id: string;
+  name?: string;
+  createdAt?: number;
+  updatedAt: number;
+};
 
 /** Last `updatedAt` known to match the server, per attempt id. */
 export type SyncStateRow = { id: string; syncedUpdatedAt: number };
@@ -72,15 +80,4 @@ let instance: ArenaDB | null = null;
 export function db(): ArenaDB {
   instance ??= new ArenaDB();
   return instance;
-}
-
-export async function loadSandbox(id = "default"): Promise<SandboxContent | null> {
-  const row = await db().sandbox.get(id);
-  if (!row) return null;
-  const parsed = SandboxContentSchema.safeParse(row);
-  return parsed.success ? parsed.data : null;
-}
-
-export async function saveSandbox(content: SandboxContent, id = "default"): Promise<void> {
-  await db().sandbox.put({ id, ...content, updatedAt: Date.now() });
 }

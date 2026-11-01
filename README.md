@@ -1,15 +1,20 @@
 # SysDesign Arena
 
-A practice app for system design interviews. Pick one of 30 problems (URL shortener, chat app,
-payment system, ...), work through it stage by stage, draw the architecture on a canvas, and get
+A practice app for system design interviews with 30 backend problems and a focused supplement
+of 15 frontend problems. Work through a question stage by stage, draw the architecture, and get
 instant feedback from built-in tests, lint rules and an optional AI reviewer.
 
-Everything works offline in the browser. Accounts, cross-device sync and AI review are opt-in.
+Drafts, design checks and history run locally in the browser. Sign-in is required to submit;
+cross-device progress sync and AI review use the configured services.
 
 ## Features
 
 - **Guided workspace** — each problem walks through six stages: Requirements → Estimation → Data
-  Model → APIs → Design → Review, with a timer and optional hints.
+  Model → APIs → Design → Review, with a timer and optional hints. Frontend adapts these to
+  Requirements & UX → Performance → State Model → Contracts → Architecture → Review.
+- **Frontend supplement** — 15 original exercises covering autocomplete, feeds, search, checkout,
+  chat, uploads and deeper browser topics. Six recommended starting points keep preparation
+  focused. See [selection, sources and study order](docs/FRONTEND-TRACK.md).
 - **Architecture canvas** — drag components (clients, gateways, services, caches, databases,
   queues, ...) onto a [React Flow](https://reactflow.dev) canvas, connect them with protocol edges,
   configure each one, undo/redo, and export as PNG or JSON.
@@ -19,15 +24,18 @@ Everything works offline in the browser. Accounts, cross-device sync and AI revi
 - **Problem tests and points** — each problem ships declarative checks (`tests.json`). Submitting
   scores `base × pass ratio × hint penalty`; viewing a reference solution before submitting
   forfeits the points.
-- **Reference solutions** — 1–3 annotated approaches per problem, with graphs you can compare
-  side-by-side against your own submitted designs.
+- **Reference solutions** — 76 guided approaches with state ownership, contracts, incremental
+  HLD construction, highlighted flows and final diagrams you can inspect and compare.
 - **AI review (optional)** — a rubric-based review of your design plus a few follow-up questions,
   via any [OpenRouter](https://openrouter.ai) model (free models work).
-- **Learn** — 25 concept pages (caching, sharding, consistent hashing, CAP, queues vs streams, ...)
-  linked from the problems.
+- **Learn** — 37 concept pages covering backend foundations, interview patterns and frontend
+  state, performance and recovery, linked from the problems and palette.
 - **Sandbox** — a free-form canvas with up to 5 named tabs for practice outside a problem.
-- **History and progress** — every attempt is kept; the progress page summarises points and
-  solved problems.
+- **History and progress** — attempts stay in local IndexedDB; the progress page summarises
+  points and solved problems. Cloud sync stores compact best progress and explicitly saved solutions.
+- **All-time leaderboard** — signed-in users compare total best points across both tracks.
+  Ties share a rank; retakes count once. Rankings reuse synced progress, while history stays local.
+  See [leaderboard storage and access](docs/LEADERBOARD.md).
 
 ## Quick start
 
@@ -38,24 +46,24 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000. No environment variables are needed: the app runs local-only, with
-no sign-in and no AI review.
+Open http://localhost:3000. Without environment variables you can practise locally and run
+design checks. Submission requires configured sign-in; AI review requires its configuration.
 
 ## Configuration
 
 Copy `.env.example` to `.env.local` and fill in what you need. Every group is optional.
 
-| Variable | Purpose |
-| --- | --- |
-| `OPENROUTER_API_KEY` | Enables AI review. Get one at https://openrouter.ai/keys. |
-| `REVIEW_MODEL` | Model for standard reviews (default is a free model). |
-| `REVIEW_FALLBACK_MODELS` | Comma-separated models tried if the main one is rate-limited. |
-| `DEEP_REVIEW_MODEL` | Optional stronger model for the "Deep review" button. |
-| `REVIEW_REASONING_EFFORT` | `low` (default), `medium`, `high` or `none`. |
-| `DAILY_AI_CALLS` | AI calls per user per day (default 10). |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Enables sign-in and sync. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only; needed to enforce the AI budget when Supabase is on. |
-| `DATABASE_URL` | Only for `pnpm db:migrate`. |
+| Variable                                                    | Purpose                                                           |
+| ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`                                        | Enables AI review. Get one at https://openrouter.ai/keys.         |
+| `REVIEW_MODEL`                                              | Model for standard reviews (default is a free model).             |
+| `REVIEW_FALLBACK_MODELS`                                    | Comma-separated models tried if the main one is rate-limited.     |
+| `DEEP_REVIEW_MODEL`                                         | Optional stronger model for the "Deep review" button.             |
+| `REVIEW_REASONING_EFFORT`                                   | `low` (default), `medium`, `high` or `none`.                      |
+| `DAILY_AI_CALLS`                                            | AI calls per user per day (default 10).                           |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Enables sign-in and sync.                                         |
+| `SUPABASE_SERVICE_ROLE_KEY`                                 | Server-only; needed to enforce the AI budget when Supabase is on. |
+| `DATABASE_URL`                                              | Only for `pnpm db:migrate`.                                       |
 
 Without Supabase, AI review (if a key is set) runs with no account and no daily limit. With
 Supabase, AI review requires sign-in and the daily budget applies.
@@ -81,15 +89,15 @@ localStorage.
 
 ## Scripts
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Dev server (Turbopack). |
-| `pnpm build` / `pnpm start` | Production build (validates content first) and serve. |
-| `pnpm test` | Unit tests (Vitest). |
-| `pnpm lint` / `pnpm typecheck` | ESLint / `tsc --noEmit`. |
-| `pnpm format` / `pnpm format:check` | Prettier. |
-| `pnpm validate:content` | Checks every problem, test and solution file against its schema. |
-| `pnpm db:generate` / `pnpm db:migrate` | Generate / apply Drizzle migrations. |
+| Command                                | What it does                                                     |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `pnpm dev`                             | Dev server (Turbopack).                                          |
+| `pnpm build` / `pnpm start`            | Production build (validates content first) and serve.            |
+| `pnpm test`                            | Unit tests (Vitest).                                             |
+| `pnpm lint` / `pnpm typecheck`         | ESLint / `tsc --noEmit`.                                         |
+| `pnpm format` / `pnpm format:check`    | Prettier.                                                        |
+| `pnpm validate:content`                | Checks every problem, test and solution file against its schema. |
+| `pnpm db:generate` / `pnpm db:migrate` | Generate / apply Drizzle migrations.                             |
 
 ## Project layout
 

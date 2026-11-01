@@ -33,14 +33,16 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
   const attempts = useAttempts();
   const statuses = useMemo(() => statusByProblem(attempts ?? []), [attempts]);
   const progress = useProgress();
+  const [track, setTrack] = useState<"backend" | "frontend" | "all">("backend");
+  const selected = problems.filter((p) => track === "all" || p.track === track);
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>();
   const [status, setStatus] = useState<ProblemStatus>();
   const [tag, setTag] = useState<string>();
   const [priorityOnly, setPriorityOnly] = useState(false);
 
-  const tags = useMemo(() => [...new Set(problems.flatMap((p) => p.tags))].sort(), [problems]);
-  const rows = problems.filter((p) => {
+  const tags = [...new Set(selected.flatMap((p) => p.tags))].sort();
+  const rows = selected.filter((p) => {
     const q = query.trim().toLowerCase();
     return (
       (!q || p.title.toLowerCase().includes(q) || p.tags.some((t) => t.includes(q))) &&
@@ -50,12 +52,36 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
       (!priorityOnly || p.priority)
     );
   });
-  const solved = problems.filter((p) => statuses.get(p.id) === "solved").length;
-  const totalPoints = [...(progress?.values() ?? [])].reduce((sum, p) => sum + p.bestPoints, 0);
-  const maxPoints = problems.reduce((sum, p) => sum + BASE_POINTS[p.difficulty], 0);
+  const solved = selected.filter((p) => statuses.get(p.id) === "solved").length;
+  const totalPoints = selected.reduce((sum, p) => sum + (progress?.get(p.id)?.bestPoints ?? 0), 0);
+  const maxPoints = selected.reduce((sum, p) => sum + BASE_POINTS[p.difficulty], 0);
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Practice track">
+        {(["backend", "frontend", "all"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={track === value}
+            onClick={() => {
+              setTrack(value);
+              setTag(undefined);
+            }}
+            className={`rounded-lg border px-4 py-2 text-sm font-medium ${track === value ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+          >
+            {value === "all" ? "All problems" : value === "backend" ? "Backend" : "Frontend"} (
+            {problems.filter((p) => value === "all" || p.track === value).length})
+          </button>
+        ))}
+      </div>
+      {track === "frontend" && (
+        <p className="text-muted-foreground text-sm">
+          A focused supplement to backend preparation. Start with the starred questions, then
+          explore the deeper browser topics. Each includes a state model, contracts, performance
+          plan and guided HLD.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative w-64">
           <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
@@ -92,7 +118,7 @@ export function ProblemTable({ problems }: { problems: ProblemSummary[] }) {
           Do these first
         </label>
         <span className="text-muted-foreground ml-auto text-sm">
-          {solved}/{problems.length} solved ·{" "}
+          {solved}/{selected.length} solved ·{" "}
           <span className="text-foreground font-medium tabular-nums">{totalPoints}</span> /{" "}
           {maxPoints} points
         </span>

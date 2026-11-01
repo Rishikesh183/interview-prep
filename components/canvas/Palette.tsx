@@ -13,22 +13,34 @@ export const DRAG_MIME = "application/x-sysdesign-node";
 type Props = {
   /** Click-to-add fallback (drops near the centre of the viewport). */
   onAdd: (type: string) => void;
+  track?: import("@/lib/schema").Track;
 };
 
 function matches(def: ComponentDef, q: string): boolean {
   return [def.label, def.type, def.description].some((s) => s.toLowerCase().includes(q));
 }
 
-export function Palette({ onAdd }: Props) {
+export function Palette({ onAdd, track }: Props) {
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   useShortcuts({ search: () => searchRef.current?.focus() });
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     return componentsByCategory()
-      .map((g) => ({ ...g, items: q ? g.items.filter((d) => matches(d, q)) : g.items }))
+      .map((g) => ({
+        ...g,
+        items: g.items.filter(
+          (d) =>
+            (!track ||
+              (track === "backend"
+                ? d.category !== "frontend"
+                : ["frontend", "annotation", "clients"].includes(d.category) ||
+                  d.type === "cdn")) &&
+            (!q || matches(d, q)),
+        ),
+      }))
       .filter((g) => g.items.length > 0);
-  }, [query]);
+  }, [query, track]);
 
   return (
     <div className="flex h-full flex-col">

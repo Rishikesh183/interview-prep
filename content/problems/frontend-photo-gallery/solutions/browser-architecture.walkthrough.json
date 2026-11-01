@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "overview": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "1,600 × 900 decoded image × 4 bytes/pixel",
+      "calculation": "~5.76 MB decoded per image; 3 neighbors/active ≈17.3 MB before overhead",
+      "result": "Compressed transfer size understates decoded memory; bound neighbor prefetch",
+      "implication": "Profile decoded memory and image layout shifts on mobile."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control. Performance plan: 2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next. Accessibility: Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion. Failure recovery: Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs. Trade-off: A static grid is simpler and avoids modal navigation complexity. Preloading all full-resolution photos is wasteful even if metadata is small.",
+      "rationale": "Own this responsibility at the Photo Gallery & Carousel View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+      "rationale": "Own this responsibility at the Gallery / Lightbox boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "activePhotoId: string | null\nlightboxOpen: boolean\nreturnFocusId: string | null\nloadedNeighborIds: Set<id>\ngestureState: transient local pointer data\nUse responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {items:[{id:\"img1\",alt:\"Mountain at sunrise\",width:1600,height:900,variants:{thumb:\"...\",medium:\"...\",full:\"...\"}}],nextCursor:\"c2\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "images",
+      "purpose": "Serves width-appropriate encoded variants; decoded memory and cache retention are browser concerns.",
+      "rationale": "Keep transfer/lifecycle responsibility explicit at this boundary."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "GalleryState",
+      "purpose": "Single source of truth for GalleryState; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "activePhotoId: string | null\nlightboxOpen: boolean\nreturnFocusId: string | null\nloadedNeighborIds: Set<id>\ngestureState: transient local pointer data\nTransitions: Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "PhotoPage",
+      "purpose": "Single source of truth for PhotoPage; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: photo-gallery.mount(props, events)",
+      "rationale": "Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadPhotoGallery(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /albums/{id}/photos?cursor={cursor}",
+      "rationale": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Photo Gallery & Carousel View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Gallery / Lightbox as a UI Component and Interaction State as Client State. In State Model add GalleryState owned by Interaction State. Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["GalleryState"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign PhotoPage to Server State Cache. PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http"],
+      "apiIds": ["adapter", "read"],
+      "entityNames": ["PhotoPage"]
+    },
+    {
+      "title": "Complete transfer and recovery contracts",
+      "explanation": "Add the remaining endpoints under their shown server owners; connect the browser API/media adapter to each dependency. ",
+      "nodeIds": ["images"],
+      "edgeIds": ["image-download"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control. Performance plan: 2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next. Accessibility: Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion. Failure recovery: Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs. Trade-off: A static grid is simpler and avoids modal navigation complexity. Preloading all full-resolution photos is wasteful even if metadata is small.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Render responsive thumbnails with stable aspect ratios. Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "image-transfer",
+      "title": "Image loading and bounded prefetch",
+      "steps": [
+        {
+          "title": "Read metadata",
+          "explanation": "The API supplies stable image IDs, intrinsic dimensions, alt text and variant URLs.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        },
+        {
+          "title": "Decode only the useful window",
+          "explanation": "The gallery/lightbox requests responsive variants. Lazy-load offscreen thumbnails, preload only immediate neighbors and release expendable resources.",
+          "nodeIds": ["view", "detail", "images"],
+          "edgeIds": ["render", "image-download"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A full-resolution image fails while navigating quickly",
+      "handling": "Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "A static grid is simpler and avoids modal navigation complexity. Preloading all full-resolution photos is wasteful even if metadata is small.",
+  "sectionApplicability": {}
+}

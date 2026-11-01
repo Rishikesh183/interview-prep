@@ -1,0 +1,45 @@
+{
+  "id": "frontend-checkout",
+  "number": 34,
+  "title": "Shopping Cart & Checkout",
+  "difficulty": "medium",
+  "priority": true,
+  "track": "frontend",
+  "tags": ["frontend", "forms", "state-machines", "mutations"],
+  "prompt": "Design the frontend for a cart and multi-step checkout. Pricing, stock reservations, payment processing and order creation are server capabilities. Show how the UI prevents duplicate actions and recovers after refresh or uncertain payment outcomes. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Edit cart quantities and reconcile authoritative totals",
+    "Validate address, delivery and payment steps without losing safe form data",
+    "Handle retries, expired quotes and uncertain order confirmation"
+  ],
+  "nonFunctionalReqs": [
+    "Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke.",
+    "Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission.",
+    "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically."
+  ],
+  "scale": {
+    "notes": "Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke.",
+    "storage": "100 cart lines; quantity edit changes 1 line and summary; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client"],
+  "deepDives": [
+    "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+    "Payment succeeds but the order response is lost",
+    "Optimistic quantity updates feel fast but need version reconciliation. Pessimistic final checkout is clearer where price and stock must be confirmed."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+    "Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

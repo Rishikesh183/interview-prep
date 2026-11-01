@@ -46,7 +46,11 @@ export function Review({ problem }: { problem: Problem }) {
     <div className="space-y-8">
       <StageIntro
         title="Review"
-        text="Tests check what your design achieves, not its exact shape. Any valid alternative passes."
+        text={
+          problem.track === "frontend"
+            ? "Checks inspect your diagram, contracts and written reasoning. They do not run a UI or measure performance and accessibility; explain and validate those separately."
+            : "Tests check what your design achieves, not its exact shape. Any valid alternative passes."
+        }
       />
 
       <TestRunner

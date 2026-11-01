@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "overview": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "10,000 posts; 30 mounted rows including overscan",
+      "calculation": "30 / 10,000 = 0.3% of rows mounted",
+      "result": "DOM work scales with the window; retained data still needs an independent bound",
+      "implication": "Profile scrolling, image decode and memory; preserve focused rows when windowing."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader. Performance plan: 10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio. Accessibility: Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update. Failure recovery: Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content. Trade-off: A simple paginated list has better navigation semantics for shorter feeds; virtualization helps very long sessions but complicates variable heights and accessibility.",
+      "rationale": "Own this responsibility at the Infinite-Scrolling News Feed View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+      "rationale": "Own this responsibility at the Virtualized Feed boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "anchor: {postId,offset}\npendingLikes: Map<postId,mutationId>\nnewItemsAvailable: boolean\nfocusedPostId: string | null\nUse cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {items:[{id:\"p1\",body:\"Hello\",image:{url,width,height},liked:false,version:3}],nextCursor:\"c2\",snapshotId:\"s1\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "FeedInteraction",
+      "purpose": "Single source of truth for FeedInteraction; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "anchor: {postId,offset}\npendingLikes: Map<postId,mutationId>\nnewItemsAvailable: boolean\nfocusedPostId: string | null\nTransitions: Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "FeedPages",
+      "purpose": "Single source of truth for FeedPages; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: news-feed.mount(props, events)",
+      "rationale": "Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadNewsFeed(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /feed?cursor={cursor}&snapshot={snapshotId}",
+      "rationale": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /posts/{id}/like",
+      "rationale": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Infinite-Scrolling News Feed View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Virtualized Feed as a UI Component and Interaction State as Client State. In State Model add FeedInteraction owned by Interaction State. Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["FeedInteraction"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign FeedPages to Server State Cache. FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["FeedPages"]
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader. Performance plan: 10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio. Accessibility: Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update. Failure recovery: Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content. Trade-off: A simple paginated list has better navigation semantics for shorter feeds; virtualization helps very long sessions but complicates variable heights and accessibility.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Fetch cursor pages and deduplicate posts. Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call PUT /posts/{id}/like through the API adapter. Request: {liked:true, mutationId:\"m1\", expectedVersion:3}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A like retry and a new page return conflicting versions",
+      "handling": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "A simple paginated list has better navigation semantics for shorter feeds; virtualization helps very long sessions but complicates variable heights and accessibility.",
+  "sectionApplicability": {}
+}

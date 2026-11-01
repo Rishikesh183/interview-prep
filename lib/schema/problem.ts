@@ -5,6 +5,9 @@ import { EdgeModeSchema, GraphSchema } from "./graph";
 import { StoredGraphSchema } from "./stored";
 import { WalkthroughSchema } from "./walkthrough";
 
+export const TrackSchema = z.enum(["backend", "frontend"]);
+export type Track = z.infer<typeof TrackSchema>;
+
 export const DifficultySchema = z.enum(["easy", "medium", "hard"]);
 export type Difficulty = z.infer<typeof DifficultySchema>;
 
@@ -143,6 +146,7 @@ export const ProblemFileSchema = z.strictObject({
   difficulty: DifficultySchema,
   /** "Do these first": the most common interview questions. */
   priority: z.boolean().default(false),
+  track: TrackSchema.default("backend"),
   tags: z.array(z.string()).min(1),
   prompt: z.string().min(1),
   /** Hidden until the attempt is submitted. */
@@ -206,5 +210,5 @@ export type Problem = z.infer<typeof ProblemSchema>;
 
 export type ProblemSummary = Pick<
   Problem,
-  "id" | "number" | "title" | "difficulty" | "priority" | "tags"
+  "id" | "number" | "title" | "difficulty" | "priority" | "tags" | "track"
 > & { testCount: number };

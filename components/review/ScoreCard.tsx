@@ -1,7 +1,7 @@
 "use client";
 
 import { adjustedScore } from "@/lib/ai/client";
-import { LEVEL_LABEL, levelFor, RUBRIC } from "@/lib/ai/rubric";
+import { LEVEL_LABEL, levelFor, rubricFor } from "@/lib/ai/rubric";
 import type { AiReview, FollowUp } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,15 @@ const barColor = (score: number) =>
         ? "bg-amber-500"
         : "bg-rose-500";
 
-export function ScoreCard({ review, followUps }: { review: AiReview; followUps: FollowUp[] }) {
+export function ScoreCard({
+  review,
+  followUps,
+  track,
+}: {
+  review: AiReview;
+  followUps: FollowUp[];
+  track?: import("@/lib/schema").Track;
+}) {
   const score = adjustedScore(review, followUps);
   const delta = score - review.overall;
   const byDim = new Map(review.scores.map((s) => [s.dimension, s]));
@@ -44,7 +52,7 @@ export function ScoreCard({ review, followUps }: { review: AiReview; followUps: 
       </div>
 
       <div className="space-y-3">
-        {RUBRIC.map((r) => {
+        {rubricFor(track).map((r) => {
           const s = byDim.get(r.dimension);
           const value = s?.score ?? 0;
           return (

@@ -18,7 +18,7 @@ export function Design({ readOnly, fileBase, problem }: Props) {
     <div className="flex h-full min-h-0">
       {!readOnly && (
         <aside className="w-56 shrink-0 border-r">
-          <Palette onAdd={addAtCenter} />
+          <Palette onAdd={addAtCenter} track={problem?.track} />
         </aside>
       )}
       <div className="flex min-w-0 flex-1 flex-col">

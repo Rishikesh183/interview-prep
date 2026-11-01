@@ -1,0 +1,45 @@
+{
+  "id": "frontend-notifications",
+  "number": 37,
+  "title": "Notification Center",
+  "difficulty": "medium",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "realtime", "consistency", "accessibility"],
+  "prompt": "Design an in-app notification drawer with unread count, paged history and mark-as-read. Browser push is optional and separate. Events may be duplicated, multiple tabs may be open and the drawer should remain usable if the live connection fails. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Fetch unread count and paginated history",
+    "Mark individual/all notifications read and reconcile count",
+    "Apply live events without duplicating rows or losing focus"
+  ],
+  "nonFunctionalReqs": [
+    "100 notifications per retained page window; bursty live events; coalesce badge updates without blocking drawer controls.",
+    "Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row.",
+    "Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported."
+  ],
+  "scale": {
+    "notes": "100 notifications per retained page window; bursty live events; coalesce badge updates without blocking drawer controls.",
+    "storage": "50 duplicate events for 1 notification; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "realtime_client"],
+  "deepDives": [
+    "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+    "Two tabs read the same notification during a reconnect",
+    "Periodic polling may be sufficient. SSE fits server-to-client deltas; WebSocket is useful only when bidirectional traffic is needed."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+    "Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

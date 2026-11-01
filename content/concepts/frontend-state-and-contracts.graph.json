@@ -1,0 +1,135 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Autocomplete / Typeahead View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a reusable search suggestion widget for a product search box. Suggestions come from a remote endpoint. A user may type, clear, select, change language or use only the keyboard; requests can finish out of order.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion.",
+        "accessibility": "Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely."
+      },
+      "no": "Coordinates this feature. Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection. Alternative: Fetch on each change with request identity for small workloads; debounce saves traffic but delays first suggestions. A headless controlled component supports reuse while a wrapper owns caching."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Suggestion List",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Suggestion List; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion.",
+        "accessibility": "Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely."
+      },
+      "no": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "query: string\nactiveOptionId: string | null\nopen: boolean\nrequestGeneration: number\nselectedValue: {id,label} | null",
+        "transitions": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection."
+      },
+      "no": "query: string\nactiveOptionId: string | null\nopen: boolean\nrequestGeneration: number\nselectedValue: {id,label} | null\nDebounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "SuggestionPage: {query, locale, items: [{id,label,description}], fetchedAt}; cache key [suggestions, locale, normalizedQuery]; bounded LRU cache, short freshness window; never reuse across different tenants.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text."
+      },
+      "no": "SuggestionPage: {query, locale, items: [{id,label,description}], fetchedAt}; cache key [suggestions, locale, normalizedQuery]; bounded LRU cache, short freshness window; never reuse across different tenants."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/suggestions?q={query}&locale={locale}&limit=10\nquery, locale, optional AbortSignal; no request until minimum length and compositionend",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {items:[{id:\"p1\",label:\"Camera\",description:\"Cameras\"}]}"
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "m": "a"
+    }
+  ]
+}

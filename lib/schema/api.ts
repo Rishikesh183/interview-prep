@@ -7,7 +7,7 @@ export const PaginationSchema = z.enum(["none", "offset", "cursor"]);
 
 export const ApiEndpointSchema = z.object({
   id: z.string().min(1),
-  /** Service or api_gateway node that owns the endpoint. */
+  /** Server endpoint owner, or browser component/adapter for a local RPC contract. */
   ownerNodeId: z.string().min(1),
   method: HttpMethodSchema,
   path: z.string(),

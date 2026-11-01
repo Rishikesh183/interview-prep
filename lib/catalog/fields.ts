@@ -11,7 +11,7 @@ type Badge = boolean | ((value: unknown, config: Record<string, unknown>) => str
 type Common = { label: string; help?: string; badge?: Badge };
 
 export type FieldDef =
-  | (Common & { kind: "text"; default: string; placeholder?: string })
+  | (Common & { kind: "text"; default: string; placeholder?: string; multiline?: boolean })
   | (Common & { kind: "number"; default: number; min?: number; max?: number })
   | (Common & { kind: "bool"; default: boolean; short?: string })
   | (Common & { kind: "select"; options: readonly string[]; default?: string })

@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "overview": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "5 Mb/s stream; illustrative 20 s buffered media",
+      "calculation": "5 × 20 / 8 = 12.5 MB encoded payload, excluding decoder overhead",
+      "result": "Do not equate JavaScript heap with media memory or prefetch the whole movie",
+      "implication": "Measure startup delay, rebuffer ratio, seek latency and decoder behavior on supported devices."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference. Performance plan: One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation. Accessibility: Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection. Failure recovery: Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads. Trade-off: Native playback minimizes complexity but gives less control over adaptive logic. A player library adds capabilities and bundle weight; DRM/browser matrices require explicit scope.",
+      "rationale": "Own this responsibility at the Video Player & Watch Page View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+      "rationale": "Own this responsibility at the Player Controls boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "mediaState: idle | loading | playing | paused | buffering | ended | error\ncurrentTime: number\nselectedCaption: string | null\nqualityMode: auto | explicit\nseekGeneration: number\nWrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {videoId:\"v1\",manifestUrl:\"https://media.example/manifest.m3u8\",expiresAt:\"...\",duration:3600,tracks:[{kind:\"captions\",lang:\"en\",url:\"...\"}]}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Keep imperative media lifecycle isolated from declarative page and controls.",
+      "rationale": "Own this responsibility at the Media Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "media-cdn",
+      "purpose": "Native media stack or adaptive player fetches the authorized manifest and segments. Backend metadata does not carry the movie bytes.",
+      "rationale": "Keep transfer/lifecycle responsibility explicit at this boundary."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "PlaybackState",
+      "purpose": "Single source of truth for PlaybackState; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "mediaState: idle | loading | playing | paused | buffering | ended | error\ncurrentTime: number\nselectedCaption: string | null\nqualityMode: auto | explicit\nseekGeneration: number\nTransitions: Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "PlaybackMetadata",
+      "purpose": "Single source of truth for PlaybackMetadata; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: video-player.mount(props, events)",
+      "rationale": "Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadVideoPlayer(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /videos/{id}/playback",
+      "rationale": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /videos/{id}/progress",
+      "rationale": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Video Player & Watch Page View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Player Controls as a UI Component and Interaction State as Client State. In State Model add PlaybackState owned by Interaction State. Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["PlaybackState"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign PlaybackMetadata to Server State Cache. PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["PlaybackMetadata"]
+    },
+    {
+      "title": "Add Media Adapter",
+      "explanation": "Add ui_component as Media Adapter and connect the feature dependency. Keep imperative media lifecycle isolated from declarative page and controls.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Complete transfer and recovery contracts",
+      "explanation": "Add the remaining endpoints under their shown server owners; connect the browser API/media adapter to each dependency. ",
+      "nodeIds": ["media-cdn"],
+      "edgeIds": ["media-download"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference. Performance plan: One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation. Accessibility: Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection. Failure recovery: Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads. Trade-off: Native playback minimizes complexity but gives less control over adaptive logic. A player library adds capabilities and bundle weight; DRM/browser matrices require explicit scope.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Load playback metadata and choose native or adaptive playback support. Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Media Adapter lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Keep imperative media lifecycle isolated from declarative page and controls. Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call PUT /videos/{id}/progress through the API adapter. Request: {positionSeconds:245,sessionId:\"play1\",updatedAt:\"...\"}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "title": "Playback and segment retrieval",
+      "steps": [
+        {
+          "title": "Resolve playback authorization",
+          "explanation": "Load metadata from backend; validate entitlement and expiration before assigning the source to the media adapter.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        },
+        {
+          "title": "Fetch the media stream",
+          "explanation": "The adapter/native video pipeline requests the manifest and bounded segments directly from Media CDN. Buffering, seeking and source cleanup are driven by actual media events.",
+          "nodeIds": ["extra", "media-cdn"],
+          "edgeIds": ["media-download"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Signed manifest expires during a seek or network drops",
+      "handling": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Native playback minimizes complexity but gives less control over adaptive logic. A player library adds capabilities and bundle weight; DRM/browser matrices require explicit scope.",
+  "sectionApplicability": {}
+}

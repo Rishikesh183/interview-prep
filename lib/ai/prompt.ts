@@ -1,5 +1,5 @@
 import type { AiReview, Attempt, LintIssue, Problem, TestResult } from "@/lib/schema";
-import { RUBRIC } from "./rubric";
+import { rubricFor } from "./rubric";
 import { serializeAttempt, serializeGraph } from "./serialize";
 
 /**
@@ -8,16 +8,20 @@ import { serializeAttempt, serializeGraph } from "./serialize";
  */
 export type ChatPrompt = { system: string; context?: string; user: string };
 
-const REVIEW_SYSTEM = `You are a senior staff engineer running a system design interview. You grade a candidate's written design like a fair, demanding interviewer.
+const reviewSystem = (
+  track: Problem["track"],
+) => `You are a senior staff engineer running a ${track} system design interview. You grade a candidate's written design like a fair, demanding interviewer.
 
 RUBRIC (score each dimension 0-10, integers):
-${RUBRIC.map((r) => `- ${r.dimension} (weight ${r.weight}): ${r.label}: ${r.looksFor}`).join("\n")}
+${rubricFor(track)
+  .map((r) => `- ${r.dimension} (weight ${r.weight}): ${r.label}: ${r.looksFor}`)
+  .join("\n")}
 
 RULES
 - Judge reasoning, trade-offs and fit to the requirements. Structural checks (linter, tests) were already run; use their results as evidence, don't just repeat them.
 - Alternative valid designs score fully. Never reward or penalise a design for matching or differing from the reference requirements' wording or any "standard" answer.
-- Every issue MUST list node ids (e.g. "n3") in nodeIds, using only ids that appear under NODES. For something MISSING (e.g. no cache), cite the existing nodes on the affected path where it should go (e.g. the service and the database). Use [] only for issues that truly concern no component (e.g. requirements).
-- severity "high" = would fail the interview or break at the stated scale (e.g. a single unreplicated DB under a high-availability requirement, no cache on a 100:1 read path). "medium" = clear gap. "low" = polish.
+- Every issue MUST list node ids (e.g. "n3") in nodeIds, using only ids that appear under NODES. For something MISSING (e.g. no cache), cite existing components on the affected path. Use [] only for issues that truly concern no component (e.g. requirements).
+- severity "high" = would fail the interview or break at the stated scale (${track === "frontend" ? "e.g. stale responses overwrite current results or the core interaction cannot be used by keyboard" : "e.g. a single unreplicated DB under a high-availability requirement, no cache on a 100:1 read path"}). "medium" = clear gap. "low" = polish.
 - "missing" lists important topics the candidate didn't address at all.
 - Ask 3-5 follow-up questions an interviewer would probe next, specific to THIS design.
 - Be concise: one or two sentences per comment, issue and fix.
@@ -53,7 +57,7 @@ PROBLEM-SPECIFIC SCORING POINTS: ${problem.rubricFocus.join("; ")}
 DEEP DIVES AN INTERVIEWER WOULD PROBE: ${problem.deepDives.join("; ")}`;
 
   const user = `=== CANDIDATE SUBMISSION ===
-${serializeAttempt(attempt)}
+${serializeAttempt(attempt, problem.track)}
 
 === AUTOMATED CHECKS ===
 LINT (${lint.length}):
@@ -61,7 +65,12 @@ ${lint.length ? lint.map((i) => `  [${i.severity}] ${i.message}${i.nodeIds.lengt
 TESTS: ${passed}/${tests.length} passed
 ${tests.map((t) => `  ${t.passed ? "PASS" : "FAIL"} ${testById.get(t.id) ?? t.id}`).join("\n")}`;
 
-  return { system: REVIEW_SYSTEM, context, user };
+  const system =
+    reviewSystem(problem.track) +
+    (problem.track === "frontend"
+      ? "\nFRONTEND TRACK: Grade browser architecture. Do not demand databases, sharding, load balancers or server queues for a frontend-only exercise. Treat the backend as a dependency. A written budget is not proof of measured speed or accessibility. Prioritize state ownership, races, rendering, keyboard/focus and recovery."
+      : "");
+  return { system, context: `TRACK: ${problem.track}\n${context}`, user };
 }
 
 const FOLLOWUP_SYSTEM = `You are a senior system design interviewer. The candidate is answering one of your follow-up questions about their design. Evaluate the answer: is it correct, specific to their design, and does it show understanding of trade-offs?
@@ -79,7 +88,8 @@ export function buildFollowUpPrompt(
   answer: string,
 ): ChatPrompt {
   const issues = review?.issues.map((i) => `  [${i.severity}] ${i.text}`).join("\n") ?? "  (none)";
-  const context = `PROBLEM: ${problem.title}
+  const context = `TRACK: ${problem.track}. For frontend, evaluate browser state, rendering, accessibility and recovery; backend implementation is out of scope.
+PROBLEM: ${problem.title}
 ${problem.prompt}`;
   const user = `CANDIDATE DESIGN:
 ${serializeGraph(attempt)}

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const CategorySchema = z.enum([
   "clients",
+  "frontend",
   "edge",
   "compute",
   "storage",

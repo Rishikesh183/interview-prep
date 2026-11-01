@@ -48,6 +48,7 @@ export function problemSummaries(): ProblemSummary[] {
     title: p.title,
     difficulty: p.difficulty,
     priority: p.priority,
+    track: p.track,
     tags: p.tags,
     testCount: p.tests.length,
   }));

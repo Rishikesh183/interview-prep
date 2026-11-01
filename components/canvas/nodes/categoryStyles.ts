@@ -2,6 +2,10 @@ import type { Category } from "@/lib/schema";
 
 /** Full class strings so Tailwind can see them. */
 export const CATEGORY_STYLES: Record<Category, { icon: string; accent: string }> = {
+  frontend: {
+    icon: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
+    accent: "border-l-indigo-500",
+  },
   clients: {
     icon: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
     accent: "border-l-slate-500",

@@ -1,0 +1,164 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Large Interactive Data Grid View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design an enterprise data grid with 100,000 rows, 50 columns, sorting, filtering, selection and inline editing. The server supports paged queries and versioned writes. Explain which work is local versus remote and preserve keyboard navigation.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan.",
+        "accessibility": "Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization."
+      },
+      "no": "Coordinates this feature. Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows. Alternative: Simple server-paginated tables are cheaper and often more accessible. Full grid behavior is justified by editing and spreadsheet-like navigation."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Virtualized Grid",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Virtualized Grid; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan.",
+        "accessibility": "Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization."
+      },
+      "no": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "activeCell: {rowId,columnId}\nselection: {ids:Set<id>,mode:explicit | allMatching,queryKey}\ncolumnWidths: Map<id,number>\neditDrafts: Map<cellId,value>",
+        "transitions": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows."
+      },
+      "no": "activeCell: {rowId,columnId}\nselection: {ids:Set<id>,mode:explicit | allMatching,queryKey}\ncolumnWidths: Map<id,number>\neditDrafts: Map<cellId,value>\nVirtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "GridPages: {queryKey,rowsById,pageRanges,totalCount}; server sorting/filtering for whole dataset; key includes filters, sort and dataset version; cache selected rows independently from mounted DOM.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes."
+      },
+      "no": "GridPages: {queryKey,rowsById,pageRanges,totalCount}; server sorting/filtering for whole dataset; key includes filters, sort and dataset version; cache selected rows independently from mounted DOM."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/rows?sort={sort}&filter={filter}&cursor={cursor}\nvalidated column IDs, sort direction, query token, cursor",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {rows:[{id:\"r1\",version:4,cells:{name:\"Ada\",team:\"Infra\"}}],nextCursor:\"c2\",totalCount:100000,queryToken:\"q1\"}"
+    },
+    {
+      "i": "extra",
+      "t": "web_worker",
+      "l": "Loaded-Row Formatter",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "workload": "Batch format loaded cells only; optional local preview calculations",
+        "contract": "{jobId,queryToken,rows,columnDefs} -> {jobId,queryToken,formattedRows}",
+        "cancellation": "Terminate on teardown; discard stale queryToken/jobId; bound batch size"
+      },
+      "no": "Move expensive loaded-row formatting off the main thread only after profiling transfer cost."
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "m": "a"
+    },
+    {
+      "i": "mutate",
+      "s": "network",
+      "d": "backend",
+      "l": "mutation / reconciliation",
+      "p": "HTTP",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "postMessage",
+      "m": "a"
+    }
+  ]
+}

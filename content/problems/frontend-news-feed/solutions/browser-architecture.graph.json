@@ -1,0 +1,209 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Infinite-Scrolling News Feed View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design the browser architecture of a personalized feed with posts, images and likes. The server supplies ranking and privacy-filtered pages. Focus on long sessions, back navigation and reliable interaction while scrolling.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio.",
+        "accessibility": "Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update."
+      },
+      "no": "Coordinates this feature. Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader. Alternative: A simple paginated list has better navigation semantics for shorter feeds; virtualization helps very long sessions but complicates variable heights and accessibility."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Virtualized Feed",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Virtualized Feed; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio.",
+        "accessibility": "Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update."
+      },
+      "no": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "anchor: {postId,offset}\npendingLikes: Map<postId,mutationId>\nnewItemsAvailable: boolean\nfocusedPostId: string | null",
+        "transitions": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader."
+      },
+      "no": "anchor: {postId,offset}\npendingLikes: Map<postId,mutationId>\nnewItemsAvailable: boolean\nfocusedPostId: string | null\nUse cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content."
+      },
+      "no": "FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/feed?cursor={cursor}&snapshot={snapshotId}\nopaque cursor, limit=20; viewer auth via secure session",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {items:[{id:\"p1\",body:\"Hello\",image:{url,width,height},liked:false,version:3}],nextCursor:\"c2\",snapshotId:\"s1\"}"
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "mutate",
+      "s": "network",
+      "d": "backend",
+      "l": "mutation / reconciliation",
+      "p": "HTTP",
+      "a": "write",
+      "m": "a"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "news-feed.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadNewsFeed(input, signal)",
+      "request": "opaque cursor, limit=20; viewer auth via secure session",
+      "response": "{items:[{id:\"p1\",body:\"Hello\",image:{url,width,height},liked:false,version:3}],nextCursor:\"c2\",snapshotId:\"s1\"}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/feed?cursor={cursor}&snapshot={snapshotId}",
+      "request": "opaque cursor, limit=20; viewer auth via secure session",
+      "response": "{items:[{id:\"p1\",body:\"Hello\",image:{url,width,height},liked:false,version:3}],nextCursor:\"c2\",snapshotId:\"s1\"}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "cursor",
+      "note": "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader."
+    },
+    {
+      "id": "write",
+      "ownerNodeId": "backend",
+      "method": "PUT",
+      "path": "/posts/{id}/like",
+      "request": "{liked:true, mutationId:\"m1\", expectedVersion:3}",
+      "response": "{id:\"p1\",liked:true,version:4}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content."
+    }
+  ],
+  "entities": [
+    {
+      "name": "FeedInteraction",
+      "storeNodeId": "state",
+      "fields": "anchor: {postId,offset}\npendingLikes: Map<postId,mutationId>\nnewItemsAvailable: boolean\nfocusedPostId: string | null\nTransitions: Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader."
+    },
+    {
+      "name": "FeedPages",
+      "storeNodeId": "cache",
+      "fields": "FeedPages: {byId: Record<id,Post>, pageIds: string[][], nextCursor, snapshotId}; query key [feed, viewerId, snapshotId]; retain a bounded page window and refetch evicted ranges without duplicating IDs."
+    }
+  ]
+}

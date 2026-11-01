@@ -108,7 +108,7 @@ export function BuildHld({ approach }: { approach: ReferenceApproach }) {
         )}
         {step.entityNames.length > 0 && (
           <p className="text-sm">
-            Add state/entities: {step.entityNames.join(", ")} (use the storage assignments above).
+            Add state/entities: {step.entityNames.join(", ")} (use the ownership assignments above).
           </p>
         )}
         <div className="flex justify-between">

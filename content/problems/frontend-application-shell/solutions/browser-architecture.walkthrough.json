@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "overview": "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "3 illustrative 300 KB feature chunks; 100 KB shared shell",
+      "calculation": "Eager: 1,000 KB; active-route split: ~400 KB before shared/runtime overhead",
+      "result": "Set production bundle budgets and analyze duplicate dependencies",
+      "implication": "Measure cache-cold vs warm navigation and hydration; compression changes transfer size."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints. Performance plan: 3 large feature areas; initial load should include shell + active route, not all feature code; track real-user route failures. Accessibility: Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls. Failure recovery: Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring. Trade-off: Microfrontends enable independent release ownership but add shared-runtime, CSS, routing and observability costs. A modular monolith is sufficient until organizational constraints justify these costs.",
+      "rationale": "Own this responsibility at the Large Multi-Team Frontend View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+      "rationale": "Own this responsibility at the Route Boundary boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "sessionView: loading | authenticated | anonymous\nactiveTenantId: string\nrouteTransition: idle | loading | failed\nfeature-local state stays inside each module\nStart with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "SessionView: {userId,tenantId,capabilities,expiresAt}; account/tenant-scoped cache reset on identity change; server enforces every permission; shell hides unavailable controls but is not an authorization boundary.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {userId:\"u1\",tenantId:\"t1\",capabilities:[\"billing:read\"],expiresAt:\"...\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Own route loading and session context centrally while feature implementation details remain private.",
+      "rationale": "Own this responsibility at the Application Shell boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "ShellState",
+      "purpose": "Single source of truth for ShellState; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "sessionView: loading | authenticated | anonymous\nactiveTenantId: string\nrouteTransition: idle | loading | failed\nfeature-local state stays inside each module\nTransitions: Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "SessionView",
+      "purpose": "Single source of truth for SessionView; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "SessionView: {userId,tenantId,capabilities,expiresAt}; account/tenant-scoped cache reset on identity change; server enforces every permission; shell hides unavailable controls but is not an authorization boundary.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: application-shell.mount(props, events)",
+      "rationale": "Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadApplicationShell(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /session",
+      "rationale": "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Large Multi-Team Frontend View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Route Boundary as a UI Component and Interaction State as Client State. In State Model add ShellState owned by Interaction State. Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["ShellState"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign SessionView to Server State Cache. SessionView: {userId,tenantId,capabilities,expiresAt}; account/tenant-scoped cache reset on identity change; server enforces every permission; shell hides unavailable controls but is not an authorization boundary.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http"],
+      "apiIds": ["adapter", "read"],
+      "entityNames": ["SessionView"]
+    },
+    {
+      "title": "Add Application Shell",
+      "explanation": "Add router as Application Shell and connect the feature dependency. Own route loading and session context centrally while feature implementation details remain private.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints. Performance plan: 3 large feature areas; initial load should include shell + active route, not all feature code; track real-user route failures. Accessibility: Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls. Failure recovery: Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring. Trade-off: Microfrontends enable independent release ownership but add shared-runtime, CSS, routing and observability costs. A modular monolith is sufficient until organizational constraints justify these costs.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. SessionView: {userId,tenantId,capabilities,expiresAt}; account/tenant-scoped cache reset on identity change; server enforces every permission; shell hides unavailable controls but is not an authorization boundary.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Route between feature modules with stable URL contracts. Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "3 large feature areas; initial load should include shell + active route, not all feature code; track real-user route failures. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Application Shell lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Own route loading and session context centrally while feature implementation details remain private. Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A lazy chunk is stale after a deployment, or tenant switches mid-request",
+      "handling": "Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Microfrontends enable independent release ownership but add shared-runtime, CSS, routing and observability costs. A modular monolith is sufficient until organizational constraints justify these costs.",
+  "sectionApplicability": {}
+}

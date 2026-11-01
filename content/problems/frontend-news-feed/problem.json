@@ -1,0 +1,45 @@
+{
+  "id": "frontend-news-feed",
+  "number": 32,
+  "title": "Infinite-Scrolling News Feed",
+  "difficulty": "medium",
+  "priority": true,
+  "track": "frontend",
+  "tags": ["frontend", "rendering", "pagination", "optimistic-ui"],
+  "prompt": "Design the browser architecture of a personalized feed with posts, images and likes. The server supplies ranking and privacy-filtered pages. Focus on long sessions, back navigation and reliable interaction while scrolling. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Fetch cursor pages and deduplicate posts",
+    "Like a post optimistically with rollback",
+    "Preserve scroll anchor on back navigation and expose an explicit Load more action"
+  ],
+  "nonFunctionalReqs": [
+    "10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio.",
+    "Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update.",
+    "Track mutationId and server version; rollback only the failed optimistic operation. Dedup page IDs, expose retry and retain existing content."
+  ],
+  "scale": {
+    "notes": "10,000 browsed posts, 20 fetched per page; illustrative mounted window of 20 plus 10 overscan; lazy images with reserved aspect ratio.",
+    "storage": "10,000 posts; 30 mounted rows including overscan; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client"],
+  "deepDives": [
+    "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+    "A like retry and a new page return conflicting versions",
+    "A simple paginated list has better navigation semantics for shorter feeds; virtualization helps very long sessions but complicates variable heights and accessibility."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Use cursor pagination, ID normalization and a variable-height virtualized list. Anchor by post ID plus pixel offset rather than raw scrollTop. Keep new posts behind a New posts button to avoid moving the reader.",
+    "Use semantic articles and headings, keyboard-operable like/load-more controls, polite load announcements and stable focus when rows are recycled. Never announce the whole feed on every update.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

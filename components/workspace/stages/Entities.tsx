@@ -26,12 +26,14 @@ const STORE_TYPES = [
   "geo_index",
 ];
 
-export function Entities() {
-  const [storeType, setStoreType] = useState("sql_db");
+export function Entities({ track = "backend" }: { track?: import("@/lib/schema").Track }) {
+  const frontend = track === "frontend";
+  const storeTypes = frontend ? [...GROUPS["@frontend-state"]] : STORE_TYPES;
+  const [storeType, setStoreType] = useState(frontend ? "client_store" : "sql_db");
   const [storeName, setStoreName] = useState("");
   const entities = useAttemptStore((s) => s.meta?.entities);
   const setEntities = useAttemptStore((s) => s.setEntities);
-  const storeOptions = useNodeOptions(STORE_TYPES);
+  const storeOptions = useNodeOptions(storeTypes);
   if (!entities) return null;
 
   const update = (i: number, patch: Partial<Entity>) =>
@@ -40,31 +42,36 @@ export function Entities() {
   return (
     <div className="space-y-6">
       <StageIntro
-        title="Data model"
-        text="List the core entities, their key fields (mark PK / partition / sort keys) and which store holds them."
+        title={frontend ? "State model" : "Data model"}
+        text={
+          frontend
+            ? "Separate component, URL, server-cache and persistent state. Name a single owner, shape, transitions, and invalidation rule for each."
+            : "List the core entities, their key fields (mark PK / partition / sort keys) and which store holds them."
+        }
       />
 
       <div className="bg-muted/20 space-y-3 rounded-lg border p-4">
         <p className="text-sm">
-          Create a store here, then select it under “Stored in”. It also appears on your Design
-          canvas.
+          {frontend
+            ? "Create a state owner here, then assign state to it. Owners also appear on your Architecture canvas."
+            : "Create a store here, then select it under Stored in. It also appears on your Design canvas."}
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="w-48">
-            <FormRow id="new-store-type" label="Store type">
+            <FormRow id="new-store-type" label={frontend ? "Owner type" : "Store type"}>
               <SimpleSelect
                 id="new-store-type"
                 value={storeType}
-                options={STORE_TYPES.map((t) => ({ value: t, label: CATALOG[t].label }))}
+                options={storeTypes.map((t) => ({ value: t, label: CATALOG[t].label }))}
                 onChange={(v) => v && setStoreType(v)}
               />
             </FormRow>
           </div>
           <div className="min-w-40 flex-1">
-            <FormRow id="new-store-name" label="Store name">
+            <FormRow id="new-store-name" label={frontend ? "Owner name" : "Store name"}>
               <Input
                 id="new-store-name"
-                placeholder="e.g. URL Store"
+                placeholder={frontend ? "e.g. Search State" : "e.g. URL Store"}
                 value={storeName}
                 onChange={(e) => setStoreName(e.target.value)}
               />
@@ -77,7 +84,7 @@ export function Entities() {
               setStoreName("");
             }}
           >
-            <Database /> Add store
+            <Database /> {frontend ? "Add state owner" : "Add store"}
           </Button>
         </div>
       </div>
@@ -87,23 +94,25 @@ export function Entities() {
           <div key={i} className="space-y-3 rounded-lg border p-4">
             <div className="flex items-end gap-3">
               <div className="flex-1">
-                <FormRow id={`ent-${i}-name`} label="Entity">
+                <FormRow id={`ent-${i}-name`} label={frontend ? "State slice" : "Entity"}>
                   <Input
                     id={`ent-${i}-name`}
-                    placeholder="UrlMapping"
+                    placeholder={frontend ? "SearchState" : "UrlMapping"}
                     value={entity.name}
                     onChange={(e) => update(i, { name: e.target.value })}
                   />
                 </FormRow>
               </div>
               <div className="w-56">
-                <FormRow id={`ent-${i}-store`} label="Stored in">
+                <FormRow id={`ent-${i}-store`} label={frontend ? "Owned by" : "Stored in"}>
                   <SimpleSelect
                     id={`ent-${i}-store`}
                     value={entity.storeNodeId}
                     options={storeOptions}
                     allowNone
-                    placeholder={storeOptions.length ? "Select a store" : "No stores on canvas yet"}
+                    placeholder={
+                      storeOptions.length ? "Select an owner" : "No owners on canvas yet"
+                    }
                     onChange={(v) => update(i, { storeNodeId: v })}
                   />
                 </FormRow>
@@ -122,7 +131,11 @@ export function Entities() {
                 id={`ent-${i}-fields`}
                 rows={4}
                 className="font-mono text-xs"
-                placeholder={"code PK (base62, 7 chars)\nlong_url\ncreated_at\nexpires_at"}
+                placeholder={
+                  frontend
+                    ? "query: string\nstatus: idle | loading | success | error\nrequestId: number\nOwner, transitions and reset policy"
+                    : "code PK (base62, 7 chars)\nlong_url\ncreated_at\nexpires_at"
+                }
                 value={entity.fields}
                 onChange={(e) => update(i, { fields: e.target.value })}
               />
@@ -136,21 +149,21 @@ export function Entities() {
                   useAttemptStore.getState().setStage("design");
                 }}
               >
-                Show store on canvas →
+                Show owner on canvas →
               </Button>
             )}
           </div>
         ))}
         {entities.length === 0 && (
           <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
-            No entities yet.
+            {frontend ? "No state slices yet." : "No entities yet."}
           </p>
         )}
         <Button
           variant="outline"
           onClick={() => setEntities([...entities, { name: "", fields: "" }])}
         >
-          <Plus /> Add entity
+          <Plus /> {frontend ? "Add state slice" : "Add entity"}
         </Button>
       </div>
     </div>

@@ -84,7 +84,9 @@ function ApiRow({ api, compact }: { api: ApiEndpoint; compact?: boolean }) {
         <Input
           aria-label="Path"
           className="h-7 font-mono text-xs"
-          placeholder="/v1/resource/{id}"
+          placeholder={
+            api.method === "RPC" ? "onChange(value) / load(input, signal)" : "/v1/resource/{id}"
+          }
           value={api.path}
           onChange={(e) => set({ path: e.target.value })}
         />

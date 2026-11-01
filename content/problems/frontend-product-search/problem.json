@@ -1,0 +1,45 @@
+{
+  "id": "frontend-product-search",
+  "number": 33,
+  "title": "Product Listing & Search",
+  "difficulty": "medium",
+  "priority": true,
+  "track": "frontend",
+  "tags": ["frontend", "routing", "search", "rendering"],
+  "prompt": "Design an e-commerce search and product listing page with filters, sorting and deep links. Search/indexing and inventory computation already exist on the server. Explain initial rendering, browser navigation and races between filter requests. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Share and restore query, filters, sort and page through the URL",
+    "Render initial useful content and progressively hydrate controls",
+    "Show facet counts, empty results, skeletons and recoverable errors"
+  ],
+  "nonFunctionalReqs": [
+    "40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code.",
+    "Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration.",
+    "Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state."
+  ],
+  "scale": {
+    "notes": "40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code.",
+    "storage": "40 products with 100 KB thumbnails vs 20 KB responsive thumbnails; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "router"],
+  "deepDives": [
+    "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+    "Rapid filter changes render results for the previous URL",
+    "CSR can be enough for an internal authenticated catalog. SSR improves initial discoverability but adds hydration and personalized-cache boundaries."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+    "Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

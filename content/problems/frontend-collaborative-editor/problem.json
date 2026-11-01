@@ -1,0 +1,45 @@
+{
+  "id": "frontend-collaborative-editor",
+  "number": 42,
+  "title": "Collaborative Document Editor",
+  "difficulty": "hard",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "realtime", "conflicts", "browser-storage"],
+  "prompt": "Design the frontend of a collaborative rich-text document editor. A server authenticates document access and relays durable updates. Scope to text editing, presence, local recovery and reconnect; explain the collaboration algorithm boundary. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Edit rich text locally with undo/redo and composition input",
+    "Merge remote updates and display ephemeral presence",
+    "Recover local unsynced edits and resynchronize after reconnect"
+  ],
+  "nonFunctionalReqs": [
+    "Document with 50 concurrent editors and 100,000 characters; incremental operations and bounded presence rendering.",
+    "Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit.",
+    "Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts."
+  ],
+  "scale": {
+    "notes": "Document with 50 concurrent editors and 100,000 characters; incremental operations and bounded presence rendering.",
+    "storage": "50 editors × 5 presence updates/s; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "realtime_client"],
+  "deepDives": [
+    "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+    "Offline edits meet remote edits after permissions were revoked",
+    "Server-ordered OT is a valid alternative with transform/version machinery. Last-write-wins whole-document replacement loses concurrent edits and is unsuitable here."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+    "Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "frontend-dashboard",
+  "number": 39,
+  "title": "Analytics Dashboard",
+  "difficulty": "medium",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "data-fetching", "workers", "resilience"],
+  "prompt": "Design a customizable analytics dashboard with 12 charts, date filters and auto-refresh. Metric computation is server-owned. Widgets have different latency and freshness requirements; one failing chart must not block the others. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Apply shared URL date/filter state to independent widgets",
+    "Load widgets progressively with local error/retry boundaries",
+    "Refresh visible widgets with bounded concurrency and consistent comparison windows"
+  ],
+  "nonFunctionalReqs": [
+    "12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended.",
+    "Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color.",
+    "Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current."
+  ],
+  "scale": {
+    "notes": "12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended.",
+    "storage": "12 widgets × 1,000 points; concurrency 4; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "web_worker"],
+  "deepDives": [
+    "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+    "One slow widget returns a previous date range after filters change",
+    "A batched endpoint reduces requests but can couple slow widgets. Independent queries improve isolation; server snapshot tokens are needed if exact cross-widget consistency matters."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+    "Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

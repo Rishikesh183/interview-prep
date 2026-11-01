@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "overview": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "1,000 × 10 KB note text",
+      "calculation": "~10 MB raw text plus indexes, outbox and copies",
+      "result": "Budget quota overhead; expose export and sync status rather than promise unlimited durability",
+      "implication": "Test denied storage, quota exhaustion, schema upgrade and a browser restart during sync."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement. Performance plan: 1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee. Accessibility: Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive. Failure recovery: On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded. Trade-off: Online-first is simpler when offline edits are unnecessary. CRDTs help concurrent rich editing but add substantial complexity for basic notes.",
+      "rationale": "Own this responsibility at the Offline-First Notes App View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+      "rationale": "Own this responsibility at the Notes Editor boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "activeNoteId: string | null\neditorDraft: string\nsyncStatus: local | syncing | synced | conflict | failed\nconflictByNote: Map<id,{local,remote}>\nWrite Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {changes:[{id:\"n1\",version:5,body:\"Notes\",deleted:false}],nextCursor:\"s2\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Local database owns durable notes and pending sync operations, independently from render state.",
+      "rationale": "Own this responsibility at the Notes & Outbox boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "recovery",
+      "purpose": "Cache only the shell needed to reopen offline; data and outbox stay in IndexedDB.",
+      "rationale": "Keep offline lifecycle separate from current render state."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "NoteEditorState",
+      "purpose": "Single source of truth for NoteEditorState; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "activeNoteId: string | null\neditorDraft: string\nsyncStatus: local | syncing | synced | conflict | failed\nconflictByNote: Map<id,{local,remote}>\nTransitions: Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "SyncPage",
+      "purpose": "Single source of truth for SyncPage; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "LocalNoteAndOutbox",
+      "purpose": "Single source of truth for LocalNoteAndOutbox; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "Atomic edit+mutation transaction; stable mutationId; expectedVersion; tombstones; versioned migration\nRetention and errors: Bound outbox; surface quota errors; per-account partition and explicit sign-out policy; export recovery",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: offline-notes.mount(props, events)",
+      "rationale": "Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadOfflineNotes(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /notes/changes?cursor={cursor}",
+      "rationale": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /notes/mutations",
+      "rationale": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Offline-First Notes App View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Notes Editor as a UI Component and Interaction State as Client State. In State Model add NoteEditorState owned by Interaction State. Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["NoteEditorState"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign SyncPage to Server State Cache. SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["SyncPage"]
+    },
+    {
+      "title": "Add Notes & Outbox",
+      "explanation": "Add browser_storage as Notes & Outbox and connect the feature dependency. Local database owns durable notes and pending sync operations, independently from render state.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": ["LocalNoteAndOutbox"]
+    },
+    {
+      "title": "Add offline recovery boundary",
+      "explanation": "Cache only the shell needed to reopen offline; data and outbox stay in IndexedDB.",
+      "nodeIds": ["recovery"],
+      "edgeIds": ["recovery-edge"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement. Performance plan: 1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee. Accessibility: Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive. Failure recovery: On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded. Trade-off: Online-first is simpler when offline edits are unnecessary. CRDTs help concurrent rich editing but add substantial complexity for basic notes.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Read and edit locally without waiting for network. Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Notes & Outbox lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Local database owns durable notes and pending sync operations, independently from render state. On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call POST /notes/mutations through the API adapter. Request: {mutationId:\"mut1\",noteId:\"n1\",expectedVersion:4,body:\"Edited\",deleted:false}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Local and remote versions diverge, or storage write fails",
+      "handling": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Online-first is simpler when offline edits are unnecessary. CRDTs help concurrent rich editing but add substantial complexity for basic notes.",
+  "sectionApplicability": {}
+}

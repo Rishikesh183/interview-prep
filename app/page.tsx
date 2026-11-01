@@ -10,8 +10,9 @@ export default function Home() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Problems</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Work through requirements, estimation, data model, APIs and the design, then run the
-            tests. Starred problems come up most often in interviews.
+            Build your architecture step by step, run design checks and compare guided solutions.
+            Backend is the main track; frontend adds 15 focused interview exercises. Stars mark
+            recommended starting points.
           </p>
         </div>
         <ProblemTable problems={problemSummaries()} />

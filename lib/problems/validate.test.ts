@@ -172,14 +172,17 @@ describe("content/problems", () => {
     expect(errors).toEqual([]);
   });
 
-  it("has 30 problems: 6 easy, 14 medium, 10 hard", () => {
-    expect(problems).toHaveLength(30);
-    const count = (d: string) => problems.filter((p) => p.difficulty === d).length;
+  it("preserves 30 backend problems and adds 15 frontend problems", () => {
+    expect(problems).toHaveLength(45);
+    expect(problems.filter((p) => p.track === "frontend")).toHaveLength(15);
+    expect(problems.filter((p) => p.track === "backend")).toHaveLength(30);
+    const count = (d: string) =>
+      problems.filter((p) => p.track === "backend" && p.difficulty === d).length;
     expect([count("easy"), count("medium"), count("hard")]).toEqual([6, 14, 10]);
   });
 
   it("loads the 10 priority problems with diagrams for every approach", () => {
-    const priority = problems.filter((p) => p.priority);
+    const priority = problems.filter((p) => p.track === "backend" && p.priority);
     expect(priority.map((p) => p.number)).toEqual([1, 3, 7, 8, 10, 13, 15, 21, 22, 23]);
     for (const p of priority)
       expect(

@@ -34,4 +34,7 @@ export const CONCEPT_SLUGS = [
   "backpressure-load-shedding",
   "hot-partitions",
   "cache-stampede",
+  "frontend-state-and-contracts",
+  "frontend-performance",
+  "frontend-recovery-and-offline",
 ] as const;

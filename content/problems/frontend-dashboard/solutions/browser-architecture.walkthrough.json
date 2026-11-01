@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "overview": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "12 widgets × 1,000 points; concurrency 4",
+      "calculation": "12,000 displayed points; at least 3 request waves if all start cold",
+      "result": "Prioritize visible widgets and downsample before transfer",
+      "implication": "Measure chart render time, network waterfalls and filter-to-first-widget latency."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution. Performance plan: 12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended. Accessibility: Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color. Failure recovery: Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current. Trade-off: A batched endpoint reduces requests but can couple slow widgets. Independent queries improve isolation; server snapshot tokens are needed if exact cross-widget consistency matters.",
+      "rationale": "Own this responsibility at the Analytics Dashboard View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+      "rationale": "Own this responsibility at the Widget Grid boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "layout: widget placements\nexpandedWidgetId: string | null\npausedRefresh: boolean\nURL owns date range, timezone and filters\nCoordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {metricId:\"sales\",asOf:\"...\",bucketSize:\"1h\",points:[{t:\"...\",value:42}],partial:false}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Expensive chart transforms can run off-main-thread while controls remain responsive.",
+      "rationale": "Own this responsibility at the Chart Transformer boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "DashboardLayout",
+      "purpose": "Single source of truth for DashboardLayout; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "layout: widget placements\nexpandedWidgetId: string | null\npausedRefresh: boolean\nURL owns date range, timezone and filters\nTransitions: Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "WidgetResults",
+      "purpose": "Single source of truth for WidgetResults; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: dashboard.mount(props, events)",
+      "rationale": "Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadDashboard(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /metrics/{metricId}?from={from}&to={to}&tz={tz}&bucket={bucket}",
+      "rationale": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Analytics Dashboard View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Widget Grid as a UI Component and Interaction State as Client State. In State Model add DashboardLayout owned by Interaction State. Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["DashboardLayout"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign WidgetResults to Server State Cache. WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http"],
+      "apiIds": ["adapter", "read"],
+      "entityNames": ["WidgetResults"]
+    },
+    {
+      "title": "Add Chart Transformer",
+      "explanation": "Add web_worker as Chart Transformer and connect the feature dependency. Expensive chart transforms can run off-main-thread while controls remain responsive.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution. Performance plan: 12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended. Accessibility: Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color. Failure recovery: Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current. Trade-off: A batched endpoint reduces requests but can couple slow widgets. Independent queries improve isolation; server snapshot tokens are needed if exact cross-widget consistency matters.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Apply shared URL date/filter state to independent widgets. Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Chart Transformer lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Expensive chart transforms can run off-main-thread while controls remain responsive. Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "One slow widget returns a previous date range after filters change",
+      "handling": "Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "A batched endpoint reduces requests but can couple slow widgets. Independent queries improve isolation; server snapshot tokens are needed if exact cross-widget consistency matters.",
+  "sectionApplicability": {}
+}

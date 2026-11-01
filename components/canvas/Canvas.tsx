@@ -31,6 +31,7 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 const MINIMAP_COLORS: Record<string, string> = {
   clients: "#64748b",
   edge: "#0ea5e9",
+  frontend: "#6366f1",
   compute: "#8b5cf6",
   storage: "#10b981",
   messaging: "#f59e0b",

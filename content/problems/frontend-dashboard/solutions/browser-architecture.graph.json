@@ -1,0 +1,209 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Analytics Dashboard View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a customizable analytics dashboard with 12 charts, date filters and auto-refresh. Metric computation is server-owned. Widgets have different latency and freshness requirements; one failing chart must not block the others.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended.",
+        "accessibility": "Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color."
+      },
+      "no": "Coordinates this feature. Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution. Alternative: A batched endpoint reduces requests but can couple slow widgets. Independent queries improve isolation; server snapshot tokens are needed if exact cross-widget consistency matters."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Widget Grid",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Widget Grid; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "12 widgets, each at most 1,000 displayed points; 4 concurrent queries; hidden-tab refresh suspended.",
+        "accessibility": "Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color."
+      },
+      "no": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "layout: widget placements\nexpandedWidgetId: string | null\npausedRefresh: boolean\nURL owns date range, timezone and filters",
+        "transitions": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution."
+      },
+      "no": "layout: widget placements\nexpandedWidgetId: string | null\npausedRefresh: boolean\nURL owns date range, timezone and filters\nCoordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current."
+      },
+      "no": "WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/metrics/{metricId}?from={from}&to={to}&tz={tz}&bucket={bucket}\nmetric ID, date range, timezone, normalized filters, bucket size",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Reject obsolete keys, show per-widget error and retain clearly marked stale data only when its range is visible. Never label old-range data as current."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {metricId:\"sales\",asOf:\"...\",bucketSize:\"1h\",points:[{t:\"...\",value:42}],partial:false}"
+    },
+    {
+      "i": "extra",
+      "t": "web_worker",
+      "l": "Chart Transformer",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "workload": "Transform/downsample fetched aggregates for charts; server still computes global metrics",
+        "contract": "{jobId,filterGeneration,points,width} -> bounded series",
+        "cancellation": "Discard old generations; transfer buffers where beneficial"
+      },
+      "no": "Expensive chart transforms can run off-main-thread while controls remain responsive."
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "postMessage",
+      "m": "a"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "dashboard.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Each chart has a title, units, textual summary and accessible table/download alternative; keyboard controls for filters and layout, distinguish data series beyond color."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadDashboard(input, signal)",
+      "request": "metric ID, date range, timezone, normalized filters, bucket size",
+      "response": "{metricId:\"sales\",asOf:\"...\",bucketSize:\"1h\",points:[{t:\"...\",value:42}],partial:false}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/metrics/{metricId}?from={from}&to={to}&tz={tz}&bucket={bucket}",
+      "request": "metric ID, date range, timezone, normalized filters, bucket size",
+      "response": "{metricId:\"sales\",asOf:\"...\",bucketSize:\"1h\",points:[{t:\"...\",value:42}],partial:false}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution."
+    }
+  ],
+  "entities": [
+    {
+      "name": "DashboardLayout",
+      "storeNodeId": "state",
+      "fields": "layout: widget placements\nexpandedWidgetId: string | null\npausedRefresh: boolean\nURL owns date range, timezone and filters\nTransitions: Coordinate filter changes with a generation key but give each widget an independent query/error boundary. Limit parallel requests, pause refresh in hidden tabs and request server aggregation/downsampling for the visible chart resolution."
+    },
+    {
+      "name": "WidgetResults",
+      "storeNodeId": "cache",
+      "fields": "WidgetResults: {metricId,range,timezone,filters,bucketSize,asOf,points}; key includes all aggregation inputs; separate per-widget freshness; retain last success with explicit stale indicator."
+    }
+  ]
+}

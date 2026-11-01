@@ -116,7 +116,7 @@ export function AiReviewPanel({ problem }: { problem: Problem }) {
 
       {review && (
         <>
-          <ScoreCard review={review} followUps={followUps ?? []} />
+          <ScoreCard track={problem.track} review={review} followUps={followUps ?? []} />
           <p className="text-muted-foreground text-xs">
             {review.tier === "deep" ? "Deep review" : "Review"} by {review.model}
             {review.cached ? " · from cache (no AI call)" : ""} · a quality badge only; it never

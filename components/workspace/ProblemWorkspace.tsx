@@ -20,6 +20,7 @@ import { StageStepper } from "./StageStepper";
 import { Apis } from "./stages/Apis";
 import { Design } from "./stages/Design";
 import { Entities } from "./stages/Entities";
+import { FrontendPerformance } from "./stages/FrontendPerformance";
 import { Estimation } from "./stages/Estimation";
 import { Requirements } from "./stages/Requirements";
 import { Review } from "./stages/Review";
@@ -98,7 +99,7 @@ function Workspace({ problem, requested, onNewAttempt }: Props) {
         >
           <BookOpen /> Problem
         </Button>
-        <div className="mx-auto">{!loading && <StageStepper />}</div>
+        <div className="mx-auto">{!loading && <StageStepper track={problem.track} />}</div>
         {readOnly && (
           <span className="text-muted-foreground flex items-center gap-1 text-xs">
             <Lock className="size-3" /> Submitted
@@ -163,10 +164,11 @@ function StageView({
     return <Design readOnly={readOnly} fileBase={problem.id} problem={problem} />;
 
   const forms: Record<Exclude<Stage, "design">, React.ReactNode> = {
-    requirements: <Requirements />,
-    estimation: <Estimation />,
-    data_model: <Entities />,
-    apis: <Apis />,
+    requirements: <Requirements track={problem.track} />,
+    estimation:
+      problem.track === "frontend" ? <FrontendPerformance problem={problem} /> : <Estimation />,
+    data_model: <Entities track={problem.track} />,
+    apis: <Apis track={problem.track} />,
     review: <Review problem={problem} />,
   };
   return (

@@ -1,0 +1,45 @@
+{
+  "id": "frontend-photo-gallery",
+  "number": 41,
+  "title": "Photo Gallery & Carousel",
+  "difficulty": "easy",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "images", "components", "accessibility"],
+  "prompt": "Design a reusable responsive photo gallery with a full-screen lightbox and carousel navigation. Metadata and image variants come from a server. Focus on image loading, layout stability, keyboard use and cleanup after long browsing. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Render responsive thumbnails with stable aspect ratios",
+    "Open a deep-linkable lightbox and move next/previous",
+    "Support loading/error fallback, touch and keyboard controls"
+  ],
+  "nonFunctionalReqs": [
+    "2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next.",
+    "Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion.",
+    "Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs."
+  ],
+  "scale": {
+    "notes": "2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next.",
+    "storage": "1,600 × 900 decoded image × 4 bytes/pixel; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client"],
+  "deepDives": [
+    "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+    "A full-resolution image fails while navigating quickly",
+    "A static grid is simpler and avoids modal navigation complexity. Preloading all full-resolution photos is wasteful even if metadata is small."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control.",
+    "Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

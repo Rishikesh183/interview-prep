@@ -1,0 +1,17 @@
+# Frontend interview supplement
+
+The default track remains the 30 backend problems. Frontend adds 15 original architecture exercises, each with eight design checks, four hints, a complete state model, component/network contracts, a guided build, highlighted interaction flows and a final inspectable HLD. No UI coding or live UI benchmark is performed by these exercises.
+
+Start with the six starred questions: autocomplete, news feed, product search, checkout, chat and resumable uploads. Then cover notification center, data grid, dashboard, video player, gallery/carousel, collaborative editor, offline notes, design system and multi-team application shell. These cover reusable product engineering competencies; stars are an editorial study order, not a verified frequency ranking or a guarantee about any company's interviews.
+
+Frontend stages are Requirements & UX → Performance → State Model → Contracts → Architecture → Review. Persisted stage IDs and attempt format are unchanged. Performance notes use the existing estimation notes field; frontend checks and AI reviews do not require backend QPS calculations, databases or load balancers. RPC contracts describe local functions/props/events. HTTP and WS endpoints belong to the external backend dependency; browser API adapters own local wrappers.
+
+Content is static repository data. It creates no Supabase question rows or history writes. Attempt history remains local in IndexedDB; sign-in is still required to submit, and existing compact progress sync and explicitly saved solutions keep their existing behavior. Adding content increases build output and the question list, not per-user database history storage.
+
+## Selection and sources
+
+Question format and representative categories were cross-checked against [GreatFrontEnd's original system-design question collection](https://www.greatfrontend.com/questions/system-design). The prompts, examples, checks and architectures here are independently authored; no paid solutions were copied. This is a competency-based product-company preparation set, not a claim that all 15 were asked by named employers.
+
+Browser behavior was checked against [W3C combobox guidance](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/), [W3C grid guidance](https://www.w3.org/WAI/ARIA/apg/patterns/grid/), [Web Vitals](https://web.dev/articles/vitals), [React state structure](https://react.dev/learn/choosing-the-state-structure), and MDN's [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController), [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API), [workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers), [service workers](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API), [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket), and [video](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/video) documentation. The editor's algorithm boundary is informed by [Yjs's editor/provider documentation](https://docs.yjs.dev/getting-started/a-collaborative-editor).
+
+All numerical budgets are explicitly illustrative interview assumptions. Structural/keyword checks are learning heuristics and cannot establish functional correctness, actual runtime speed or accessibility compliance. Equivalent architectures should be assessed through reasoning and the frontend-specific AI rubric.

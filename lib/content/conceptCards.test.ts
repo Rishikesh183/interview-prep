@@ -10,8 +10,8 @@ describe("concept cards (step 2.6)", () => {
 
   it("all foundations and interview patterns are valid", () => {
     expect(errors).toEqual([]);
-    expect(concepts).toHaveLength(34);
-    expect(concepts.filter((c) => c.kind === "foundation")).toHaveLength(25);
+    expect(concepts).toHaveLength(37);
+    expect(concepts.filter((c) => c.kind === "foundation")).toHaveLength(28);
     const patterns = concepts.filter((c) => c.kind === "pattern");
     expect(patterns).toHaveLength(9);
     for (const card of patterns) {

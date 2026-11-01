@@ -1,4 +1,4 @@
-import type { Attempt, Stage } from "@/lib/schema";
+import type { Attempt, Stage, Track } from "@/lib/schema";
 
 export const STAGES: { id: Stage; label: string; hint: string }[] = [
   {
@@ -13,8 +13,38 @@ export const STAGES: { id: Stage; label: string; hint: string }[] = [
   { id: "review", label: "Review", hint: "Run tests, submit, compare with references" },
 ];
 
-/** Node types that can own API endpoints. */
+export const FRONTEND_API_OWNER_TYPES = [
+  "ui_component",
+  "api_client",
+  "realtime_client",
+  "web_worker",
+  "service_worker",
+  "external_service",
+];
+export function stagesFor(track: Track = "backend") {
+  if (track === "backend") return STAGES;
+  const labels = [
+    "Requirements & UX",
+    "Performance",
+    "State Model",
+    "Contracts",
+    "Architecture",
+    "Review",
+  ];
+  const hints = [
+    "User journeys, interaction states and scope",
+    "Browser budgets, devices and measurement plan",
+    "Local, URL, server and persistent state ownership",
+    "Props, events, network payloads and recovery",
+    "Components, browser data flow and boundaries",
+    "Check design coverage and compare reference solutions",
+  ];
+  return STAGES.map((s, i) => ({ ...s, label: labels[i], hint: hints[i] }));
+}
+
+/** Node types that can own API endpoints or browser contracts. */
 export const API_OWNER_TYPES = [
+  ...FRONTEND_API_OWNER_TYPES,
   "service",
   "api_gateway",
   "websocket_server",
@@ -46,12 +76,14 @@ export function progressOf(a: Attempt): Progress {
 }
 
 /** Whether a stage has meaningful content (drives the check marks in the stepper). */
-export function stageDone(stage: Stage, a: Progress): boolean {
+export function stageDone(stage: Stage, a: Progress, track: Track = "backend"): boolean {
   switch (stage) {
     case "requirements":
       return a.requirements.functional.length > 0 && a.requirements.nonFunctional.length > 0;
     case "estimation":
-      return a.estimation.dau > 0 && a.estimation.objectSize > 0;
+      return track === "frontend"
+        ? Boolean(a.estimation.notes?.trim())
+        : a.estimation.dau > 0 && a.estimation.objectSize > 0;
     case "data_model":
       return a.entities.some((e) => e.name.trim() !== "");
     case "apis":

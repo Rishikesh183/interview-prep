@@ -1,0 +1,280 @@
+{
+  "version": 1,
+  "overview": "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "50 duplicate events for 1 notification",
+      "calculation": "Set membership yields 1 row; count does not change 50 times",
+      "result": "Identity and versioning matter more than transport speed",
+      "implication": "Test two tabs marking the same item read and reordered count responses."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events. Performance plan: 100 notifications per retained page window; bursty live events; coalesce badge updates without blocking drawer controls. Accessibility: Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row. Failure recovery: Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported. Trade-off: Periodic polling may be sufficient. SSE fits server-to-client deltas; WebSocket is useful only when bidirectional traffic is needed.",
+      "rationale": "Own this responsibility at the Notification Center View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+      "rationale": "Own this responsibility at the Notification List boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "drawerOpen: boolean\nfocusedNotificationId: string | null\npendingReadIds: Set<id>\nlastEventCursor: string | null\nUse a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "Notifications: {byId,pages,nextCursor,unreadCount,countVersion}; account-scoped cache; count is a versioned server snapshot reconciled after local read mutations, not decremented blindly for every duplicate event.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {items:[{id:\"n1\",title:\"Build complete\",readAt:null,target:\"/builds/b1\"}],nextCursor:\"c2\",unreadCount:3,countVersion:10}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Live updates supplement a paginated fetch; the stream is not the sole source of notification history.",
+      "rationale": "Own this responsibility at the Notification Stream boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "NotificationUi",
+      "purpose": "Single source of truth for NotificationUi; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "drawerOpen: boolean\nfocusedNotificationId: string | null\npendingReadIds: Set<id>\nlastEventCursor: string | null\nTransitions: Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "NotificationPages",
+      "purpose": "Single source of truth for NotificationPages; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "Notifications: {byId,pages,nextCursor,unreadCount,countVersion}; account-scoped cache; count is a versioned server snapshot reconciled after local read mutations, not decremented blindly for every duplicate event.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: notifications.mount(props, events)",
+      "rationale": "Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadNotifications(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /notifications?cursor={cursor}",
+      "rationale": "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /notifications/{id}/read",
+      "rationale": "Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported."
+    },
+    {
+      "apiId": "stream",
+      "purpose": "Existing server interface: /events/notifications",
+      "rationale": "Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported."
+    },
+    {
+      "apiId": "read-all",
+      "purpose": "/notifications/read-through",
+      "rationale": "Mark only the acknowledged snapshot range read; new notifications beyond the watermark remain unread. Reconcile returned countVersion instead of setting the badge to zero blindly."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Notification Center View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Notification List as a UI Component and Interaction State as Client State. In State Model add NotificationUi owned by Interaction State. Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["NotificationUi"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign NotificationPages to Server State Cache. Notifications: {byId,pages,nextCursor,unreadCount,countVersion}; account-scoped cache; count is a versioned server snapshot reconciled after local read mutations, not decremented blindly for every duplicate event.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["NotificationPages"]
+    },
+    {
+      "title": "Add Notification Stream",
+      "explanation": "Add realtime_client as Notification Stream and connect the feature dependency. Live updates supplement a paginated fetch; the stream is not the sole source of notification history.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature", "stream"],
+      "apiIds": ["stream"],
+      "entityNames": []
+    },
+    {
+      "title": "Complete transfer and recovery contracts",
+      "explanation": "Add the remaining endpoints under their shown server owners; connect the browser API/media adapter to each dependency. Mark only the acknowledged snapshot range read; new notifications beyond the watermark remain unread. Reconcile returned countVersion instead of setting the badge to zero blindly.",
+      "nodeIds": [],
+      "edgeIds": ["read-all-call"],
+      "apiIds": ["read-all"],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events. Performance plan: 100 notifications per retained page window; bursty live events; coalesce badge updates without blocking drawer controls. Accessibility: Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row. Failure recovery: Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported. Trade-off: Periodic polling may be sufficient. SSE fits server-to-client deltas; WebSocket is useful only when bidirectional traffic is needed.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. Notifications: {byId,pages,nextCursor,unreadCount,countVersion}; account-scoped cache; count is a versioned server snapshot reconciled after local read mutations, not decremented blindly for every duplicate event.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Fetch unread count and paginated history. Use a labelled drawer/dialog with appropriate focus management and Escape behavior; return focus to bell on close. Announce a concise count change, not every historical row.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Use a versioned unread-count snapshot and ID-based notification deduplication. Optimistic read state is a reversible overlay until acknowledgement. After connection gaps refetch count and page before accepting later events.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "100 notifications per retained page window; bursty live events; coalesce badge updates without blocking drawer controls. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Notification Stream lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Live updates supplement a paginated fetch; the stream is not the sole source of notification history. Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        },
+        {
+          "title": "Resume the remote event channel",
+          "explanation": "Jittered reconnect, cursor resume when supported; refetch after expired cursor Dedup eventId and notificationId; apply countVersion monotonically",
+          "nodeIds": ["extra", "backend"],
+          "edgeIds": ["stream"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call PUT /notifications/{id}/read through the API adapter. Request: {read:true,mutationId:\"r1\"}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Two tabs read the same notification during a reconnect",
+      "handling": "Read mutation is idempotent; accept only current count versions and refresh authoritative state after a gap. Broadcast invalidation across tabs if supported.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Periodic polling may be sufficient. SSE fits server-to-client deltas; WebSocket is useful only when bidirectional traffic is needed.",
+  "sectionApplicability": {}
+}

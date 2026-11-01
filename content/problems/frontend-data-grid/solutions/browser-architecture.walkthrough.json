@@ -1,0 +1,256 @@
+{
+  "version": 1,
+  "overview": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "100,000 × 50 logical cells; 40 × 12 mounted cells",
+      "calculation": "5,000,000 logical cells vs ~480 mounted cells",
+      "result": "Window both dimensions; keep the focused cell mounted or move focus deliberately",
+      "implication": "Profile scroll/resize and worker messaging, measure memory for retained pages separately."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows. Performance plan: 100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan. Accessibility: Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization. Failure recovery: Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes. Trade-off: Simple server-paginated tables are cheaper and often more accessible. Full grid behavior is justified by editing and spreadsheet-like navigation.",
+      "rationale": "Own this responsibility at the Large Interactive Data Grid View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+      "rationale": "Own this responsibility at the Virtualized Grid boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "activeCell: {rowId,columnId}\nselection: {ids:Set<id>,mode:explicit | allMatching,queryKey}\ncolumnWidths: Map<id,number>\neditDrafts: Map<cellId,value>\nVirtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "GridPages: {queryKey,rowsById,pageRanges,totalCount}; server sorting/filtering for whole dataset; key includes filters, sort and dataset version; cache selected rows independently from mounted DOM.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {rows:[{id:\"r1\",version:4,cells:{name:\"Ada\",team:\"Infra\"}}],nextCursor:\"c2\",totalCount:100000,queryToken:\"q1\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Move expensive loaded-row formatting off the main thread only after profiling transfer cost.",
+      "rationale": "Own this responsibility at the Loaded-Row Formatter boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "GridInteraction",
+      "purpose": "Single source of truth for GridInteraction; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "activeCell: {rowId,columnId}\nselection: {ids:Set<id>,mode:explicit | allMatching,queryKey}\ncolumnWidths: Map<id,number>\neditDrafts: Map<cellId,value>\nTransitions: Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "GridQueryPages",
+      "purpose": "Single source of truth for GridQueryPages; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "GridPages: {queryKey,rowsById,pageRanges,totalCount}; server sorting/filtering for whole dataset; key includes filters, sort and dataset version; cache selected rows independently from mounted DOM.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: data-grid.mount(props, events)",
+      "rationale": "Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadDataGrid(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /rows?sort={sort}&filter={filter}&cursor={cursor}",
+      "rationale": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /rows/{id}",
+      "rationale": "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Large Interactive Data Grid View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Virtualized Grid as a UI Component and Interaction State as Client State. In State Model add GridInteraction owned by Interaction State. Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["GridInteraction"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign GridQueryPages to Server State Cache. GridPages: {queryKey,rowsById,pageRanges,totalCount}; server sorting/filtering for whole dataset; key includes filters, sort and dataset version; cache selected rows independently from mounted DOM.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["GridQueryPages"]
+    },
+    {
+      "title": "Add Loaded-Row Formatter",
+      "explanation": "Add web_worker as Loaded-Row Formatter and connect the feature dependency. Move expensive loaded-row formatting off the main thread only after profiling transfer cost.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows. Performance plan: 100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan. Accessibility: Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization. Failure recovery: Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes. Trade-off: Simple server-paginated tables are cheaper and often more accessible. Full grid behavior is justified by editing and spreadsheet-like navigation.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. GridPages: {queryKey,rowsById,pageRanges,totalCount}; server sorting/filtering for whole dataset; key includes filters, sort and dataset version; cache selected rows independently from mounted DOM.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Window visible rows and columns with stable row IDs. Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Loaded-Row Formatter lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Move expensive loaded-row formatting off the main thread only after profiling transfer cost. Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call PATCH /rows/{id} through the API adapter. Request: {expectedVersion:4,changes:{name:\"Grace\"},mutationId:\"edit1\"}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Another user edits the same cell before save",
+      "handling": "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Simple server-paginated tables are cheaper and often more accessible. Full grid behavior is justified by editing and spreadsheet-like navigation.",
+  "sectionApplicability": {}
+}

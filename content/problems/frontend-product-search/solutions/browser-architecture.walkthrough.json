@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "overview": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "40 products with 100 KB thumbnails vs 20 KB responsive thumbnails",
+      "calculation": "40 × 100 KB = 4 MB; 40 × 20 KB = 800 KB before lazy-loading",
+      "result": "Image sizing dominates an illustrative listing payload",
+      "implication": "Measure actual encoded sizes, LCP, layout shifts and hydration; image budgets depend on device width."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets. Performance plan: 40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code. Accessibility: Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration. Failure recovery: Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state. Trade-off: CSR can be enough for an internal authenticated catalog. SSR improves initial discoverability but adds hydration and personalized-cache boundaries.",
+      "rationale": "Own this responsibility at the Product Listing & Search View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+      "rationale": "Own this responsibility at the Product Grid boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "draftFilters: local edits until Apply\nviewMode: grid | list\nfocusedProductId: string | null\nURL is authoritative for committed search parameters\nThe router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {items:[{id:\"sku1\",title:\"Headphones\",price:{amount:9900,currency:\"INR\"},image:{url,width,height}}],facets:[],nextCursor:\"c2\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "URL state is the source of truth for committed filters; the store holds only drafts.",
+      "rationale": "Own this responsibility at the Search Router boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "SearchFilterDrafts",
+      "purpose": "Single source of truth for SearchFilterDrafts; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "draftFilters: local edits until Apply\nviewMode: grid | list\nfocusedProductId: string | null\nURL is authoritative for committed search parameters\nTransitions: The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "ProductResults",
+      "purpose": "Single source of truth for ProductResults; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: product-search.mount(props, events)",
+      "rationale": "Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadProductSearch(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /products?q={q}&filters={filters}&sort={sort}&cursor={cursor}",
+      "rationale": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Product Listing & Search View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Product Grid as a UI Component and Interaction State as Client State. In State Model add SearchFilterDrafts owned by Interaction State. The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["SearchFilterDrafts"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign ProductResults to Server State Cache. ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http"],
+      "apiIds": ["adapter", "read"],
+      "entityNames": ["ProductResults"]
+    },
+    {
+      "title": "Add Search Router",
+      "explanation": "Add router as Search Router and connect the feature dependency. URL state is the source of truth for committed filters; the store holds only drafts.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets. Performance plan: 40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code. Accessibility: Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration. Failure recovery: Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state. Trade-off: CSR can be enough for an internal authenticated catalog. SSR improves initial discoverability but adds hydration and personalized-cache boundaries.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Share and restore query, filters, sort and page through the URL. Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Search Router lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "URL state is the source of truth for committed filters; the store holds only drafts. Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Rapid filter changes render results for the previous URL",
+      "handling": "Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "CSR can be enough for an internal authenticated catalog. SSR improves initial discoverability but adds hydration and personalized-cache boundaries.",
+  "sectionApplicability": {}
+}

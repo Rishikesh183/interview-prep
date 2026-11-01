@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "overview": "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "50 editors × 5 presence updates/s",
+      "calculation": "250 presence events/s before coalescing",
+      "result": "Throttle/coalesce remote cursor presentation; durable document operations require a separate reliable path",
+      "implication": "Profile long-document typing and IME; presence rate is an assumption, not an algorithm correctness proof."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot. Performance plan: Document with 50 concurrent editors and 100,000 characters; incremental operations and bounded presence rendering. Accessibility: Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit. Failure recovery: Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts. Trade-off: Server-ordered OT is a valid alternative with transform/version machinery. Last-write-wins whole-document replacement loses concurrent edits and is unsuitable here.",
+      "rationale": "Own this responsibility at the Collaborative Document Editor View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+      "rationale": "Own this responsibility at the Editor Surface boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "documentId: string\nselection: relative document positions\nconnectionStatus: offline | syncing | synced\npendingUpdateIds: Set<id>\npresenceByClient: Map<id,{cursor,lastSeen}>\nBind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "DocumentBootstrap: {docId,snapshot,stateVector,permissions}; cache bootstrap briefly; a dedicated CRDT document model in client state owns live content, not a repeatedly overwritten server-query string.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {docId:\"d1\",snapshot:\"base64 CRDT state\",stateVector:\"base64\",permissions:{read:true,write:true}}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "A sync provider bridges the editor model to the server without treating the socket as durable storage.",
+      "rationale": "Own this responsibility at the Document Sync Provider boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "recovery",
+      "purpose": "Persist local CRDT updates before advertising local durability; the query cache is not the live document model.",
+      "rationale": "Keep offline lifecycle separate from current render state."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "EditorSession",
+      "purpose": "Single source of truth for EditorSession; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "documentId: string\nselection: relative document positions\nconnectionStatus: offline | syncing | synced\npendingUpdateIds: Set<id>\npresenceByClient: Map<id,{cursor,lastSeen}>\nTransitions: Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "DocumentBootstrap",
+      "purpose": "Single source of truth for DocumentBootstrap; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "DocumentBootstrap: {docId,snapshot,stateVector,permissions}; cache bootstrap briefly; a dedicated CRDT document model in client state owns live content, not a repeatedly overwritten server-query string.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "LocalDocumentUpdates",
+      "purpose": "Persist local CRDT updates before advertising local durability; the query cache is not the live document model.",
+      "accessPatterns": ["Append local operations transactionally; load before reconnect."],
+      "constraints": [
+        "Stable docId/updateId; report persistence failures; do not discard unsynced work."
+      ],
+      "relationships": [
+        "The CRDT document model consumes persisted operations; the sync provider exchanges missing operations."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: collaborative-editor.mount(props, events)",
+      "rationale": "Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadCollaborativeEditor(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /documents/{id}/bootstrap",
+      "rationale": "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /documents/{id}/updates",
+      "rationale": "Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts."
+    },
+    {
+      "apiId": "stream",
+      "purpose": "Existing server interface: /events/collaborative-editor",
+      "rationale": "Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Collaborative Document Editor View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Editor Surface as a UI Component and Interaction State as Client State. In State Model add EditorSession owned by Interaction State. Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["EditorSession"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign DocumentBootstrap to Server State Cache. DocumentBootstrap: {docId,snapshot,stateVector,permissions}; cache bootstrap briefly; a dedicated CRDT document model in client state owns live content, not a repeatedly overwritten server-query string.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["DocumentBootstrap"]
+    },
+    {
+      "title": "Add Document Sync Provider",
+      "explanation": "Add realtime_client as Document Sync Provider and connect the feature dependency. A sync provider bridges the editor model to the server without treating the socket as durable storage.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature", "stream"],
+      "apiIds": ["stream"],
+      "entityNames": []
+    },
+    {
+      "title": "Add offline recovery boundary",
+      "explanation": "Persist local CRDT updates before advertising local durability; the query cache is not the live document model.",
+      "nodeIds": ["recovery"],
+      "edgeIds": ["recovery-edge"],
+      "apiIds": [],
+      "entityNames": ["LocalDocumentUpdates"]
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot. Performance plan: Document with 50 concurrent editors and 100,000 characters; incremental operations and bounded presence rendering. Accessibility: Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit. Failure recovery: Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts. Trade-off: Server-ordered OT is a valid alternative with transform/version machinery. Last-write-wins whole-document replacement loses concurrent edits and is unsuitable here.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. DocumentBootstrap: {docId,snapshot,stateVector,permissions}; cache bootstrap briefly; a dedicated CRDT document model in client state owns live content, not a repeatedly overwritten server-query string.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Edit rich text locally with undo/redo and composition input. Use an editor with documented keyboard/screen-reader and IME support; toolbar buttons expose pressed state, shortcuts and focus return. Announce connection status without rereading every remote edit.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Bind a proven CRDT model to a rich-text editor; persist local updates before showing saved locally, then exchange missing operations using state vectors. Presence is ephemeral and throttled. Undo tracks local user operations rather than reverting the whole shared snapshot.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "Document with 50 concurrent editors and 100,000 characters; incremental operations and bounded presence rendering. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Document Sync Provider lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "A sync provider bridges the editor model to the server without treating the socket as durable storage. Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        },
+        {
+          "title": "Resume the remote event channel",
+          "explanation": "Reauthenticate, exchange missing CRDT operations, preserve unsent local updates CRDT operation identity/dedup; presence expiry; cleanup on document switch",
+          "nodeIds": ["extra", "backend"],
+          "edgeIds": ["stream"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call POST /documents/{id}/updates through the API adapter. Request: {updateId:\"u1\",stateVector:\"...\",binaryUpdate:\"base64\"}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Offline edits meet remote edits after permissions were revoked",
+      "handling": "Revalidate permissions before sync; preserve a recoverable local copy and explain rejected writes. CRDT convergence does not solve authorization or semantic conflicts.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Server-ordered OT is a valid alternative with transform/version machinery. Last-write-wins whole-document replacement loses concurrent edits and is unsuitable here.",
+  "sectionApplicability": {}
+}

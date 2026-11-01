@@ -5,7 +5,9 @@ import { edge, node, weakUrlShortener } from "@/test/fixtures";
 import { fromStored, graphHash, stableStringify, toStored } from "./codec";
 
 const references = loadProblems().flatMap((p) =>
-  p.references.filter((r) => r.graph).map((r) => ({ name: `${p.id}/${r.id}`, graph: r.graph! })),
+  p.references
+    .filter((r) => r.graph)
+    .map((r) => ({ name: `${p.id}/${r.id}`, graph: r.graph!, track: p.track })),
 );
 
 /** Positions are rounded on store; everything else must survive exactly. */
@@ -24,10 +26,18 @@ describe("codec round-trip", () => {
     expect(fromStored(JSON.parse(JSON.stringify(stored)))).toEqual(rounded(graph));
   });
 
-  it("is much smaller than the app shape", () => {
-    const full = references.reduce((s, r) => s + JSON.stringify(r.graph).length, 0);
-    const compact = references.reduce((s, r) => s + JSON.stringify(toStored(r.graph)).length, 0);
+  it("keeps existing backend compression savings", () => {
+    const backend = references.filter((r) => r.track === "backend");
+    const full = backend.reduce((s, r) => s + JSON.stringify(r.graph).length, 0);
+    const compact = backend.reduce((s, r) => s + JSON.stringify(toStored(r.graph)).length, 0);
     expect(compact / full).toBeLessThan(0.6);
+  });
+  it("reduces text-heavy frontend graphs without losing authored content", () => {
+    for (const ref of references.filter((r) => r.track === "frontend")) {
+      expect(JSON.stringify(toStored(ref.graph)).length, ref.name).toBeLessThan(
+        JSON.stringify(ref.graph).length,
+      );
+    }
   });
 });
 

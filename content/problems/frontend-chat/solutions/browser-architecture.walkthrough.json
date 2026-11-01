@@ -1,0 +1,280 @@
+{
+  "version": 1,
+  "overview": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "20 incoming events/s; render batches every 100 ms as an illustrative target",
+      "calculation": "At most ~10 event-driven render batches/s rather than 20 separate commits",
+      "result": "Batching limits churn but adds up to ~100 ms presentation delay",
+      "implication": "Measure interaction latency and ensure input updates stay immediate; presence can tolerate more coalescing."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom. Performance plan: 50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history. Accessibility: Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content. Failure recovery: Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage. Trade-off: Polling is simpler for low-frequency messaging. WebSocket lowers latency but requires backfill, connection lifecycle and multi-tab policy.",
+      "rationale": "Own this responsibility at the Chat Application Frontend View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+      "rationale": "Own this responsibility at the Message Timeline boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "activeConversationId: string\ndraftsByConversation: Map<id,string>\npendingByClientId: Map<id,Message>\nlastSequenceByConversation: Map<id,number>\natBottom: boolean\nRender pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {items:[{id:\"m1\",clientMessageId:\"local1\",sequence:42,body:\"Hi\",senderId:\"u1\"}],nextBeforeCursor:\"c1\",latestSequence:42}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Receive deltas through a disposable conversation subscription; connection state is distinct from durable message state.",
+      "rationale": "Own this responsibility at the Conversation Connection boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "ConversationUi",
+      "purpose": "Single source of truth for ConversationUi; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "activeConversationId: string\ndraftsByConversation: Map<id,string>\npendingByClientId: Map<id,Message>\nlastSequenceByConversation: Map<id,number>\natBottom: boolean\nTransitions: Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "MessagePages",
+      "purpose": "Single source of truth for MessagePages; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: chat.mount(props, events)",
+      "rationale": "Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadChat(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /conversations/{id}/messages?before={cursor}",
+      "rationale": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /conversations/{id}/messages",
+      "rationale": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+    },
+    {
+      "apiId": "stream",
+      "purpose": "Existing server interface: /events/chat",
+      "rationale": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+    },
+    {
+      "apiId": "backfill",
+      "purpose": "/conversations/{id}/messages?afterSequence={sequence}",
+      "rationale": "Use afterSequence for reconnect gaps, before cursor for older history. Fetch until contiguous, dedup by stable IDs and buffer later events until the gap closes."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Chat Application Frontend View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Message Timeline as a UI Component and Interaction State as Client State. In State Model add ConversationUi owned by Interaction State. Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["ConversationUi"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign MessagePages to Server State Cache. MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["MessagePages"]
+    },
+    {
+      "title": "Add Conversation Connection",
+      "explanation": "Add realtime_client as Conversation Connection and connect the feature dependency. Receive deltas through a disposable conversation subscription; connection state is distinct from durable message state.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature", "stream"],
+      "apiIds": ["stream"],
+      "entityNames": []
+    },
+    {
+      "title": "Complete transfer and recovery contracts",
+      "explanation": "Add the remaining endpoints under their shown server owners; connect the browser API/media adapter to each dependency. Use afterSequence for reconnect gaps, before cursor for older history. Fetch until contiguous, dedup by stable IDs and buffer later events until the gap closes.",
+      "nodeIds": [],
+      "edgeIds": ["backfill-call"],
+      "apiIds": ["backfill"],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom. Performance plan: 50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history. Accessibility: Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content. Failure recovery: Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage. Trade-off: Polling is simpler for low-frequency messaging. WebSocket lowers latency but requires backfill, connection lifecycle and multi-tab policy.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Page older messages and preserve scroll position. Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Conversation Connection lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Receive deltas through a disposable conversation subscription; connection state is distinct from durable message state. Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        },
+        {
+          "title": "Resume the remote event channel",
+          "explanation": "Jittered backoff; reconnect then backfill missing sequence range via API Dedup server id/clientMessageId; buffer gaps, cleanup on room switch",
+          "nodeIds": ["extra", "backend"],
+          "edgeIds": ["stream"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call POST /conversations/{id}/messages through the API adapter. Request: {clientMessageId:\"local1\",body:\"Hi\"}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Socket reconnect delivers a duplicate and skips an event",
+      "handling": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Polling is simpler for low-frequency messaging. WebSocket lowers latency but requires backfill, connection lifecycle and multi-tab policy.",
+  "sectionApplicability": {}
+}

@@ -1,0 +1,45 @@
+{
+  "id": "frontend-autocomplete",
+  "number": 31,
+  "title": "Autocomplete / Typeahead",
+  "difficulty": "medium",
+  "priority": true,
+  "track": "frontend",
+  "tags": ["frontend", "async-data", "accessibility", "components"],
+  "prompt": "Design a reusable search suggestion widget for a product search box. Suggestions come from a remote endpoint. A user may type, clear, select, change language or use only the keyboard; requests can finish out of order. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Debounce remote lookups while keeping input updates immediate",
+    "Support loading, no matches, retry, selection and dismissal",
+    "Handle composition input, disabled options and keyboard navigation"
+  ],
+  "nonFunctionalReqs": [
+    "Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion.",
+    "Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely.",
+    "Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text."
+  ],
+  "scale": {
+    "notes": "Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion.",
+    "storage": "10 keystrokes in 1 s; 200 ms quiet-period debounce; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client"],
+  "deepDives": [
+    "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+    "An older slow request succeeds after a newer fast one",
+    "Fetch on each change with request identity for small workloads; debounce saves traffic but delays first suggestions. A headless controlled component supports reuse while a wrapper owns caching."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+    "Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

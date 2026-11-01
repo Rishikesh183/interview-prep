@@ -5,7 +5,8 @@ import { isSupabaseConfigured, SUPABASE_URL } from "./config";
 let client: SupabaseClient | null | undefined;
 
 /**
- * Service-role client: bypasses RLS, so it is used only for the AI budget RPCs.
+ * Service-role client: bypasses RLS. Used for AI budget RPCs and the authenticated
+ * leaderboard's aggregate-only RPC. Never expose raw cross-user rows to the client.
  * SUPABASE_SERVICE_ROLE_KEY is read on the server and never sent to the browser.
  */
 export function supabaseAdmin(): SupabaseClient | null {

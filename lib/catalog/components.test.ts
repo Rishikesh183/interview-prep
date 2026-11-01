@@ -11,6 +11,8 @@ const SPEC_TYPES = [
   "auth_service", "id_generator", "coordination", "service_discovery", "monitoring",
   "notification_service", "geo_index",
   "note", "group",
+  "ui_component", "client_store", "query_cache", "api_client", "browser_storage",
+  "web_worker", "service_worker", "realtime_client", "router",
 ]; // prettier-ignore
 
 describe("component catalog", () => {

@@ -1,0 +1,45 @@
+{
+  "id": "frontend-file-uploader",
+  "number": 36,
+  "title": "Resumable File Uploader",
+  "difficulty": "medium",
+  "priority": true,
+  "track": "frontend",
+  "tags": ["frontend", "browser-storage", "concurrency", "recovery"],
+  "prompt": "Design a reusable multi-file browser uploader supporting progress, pause, cancel and resume. The server issues upload sessions and presigned part URLs. Focus on memory bounds, retry correctness and what can actually survive a browser restart. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Validate files and create per-file upload sessions",
+    "Upload bounded concurrent chunks with accurate progress",
+    "Resume incomplete sessions and clean up cancelled work"
+  ],
+  "nonFunctionalReqs": [
+    "Up to 2 GiB per file; three concurrent 8 MiB parts; no whole-file ArrayBuffer.",
+    "Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file.",
+    "Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server."
+  ],
+  "scale": {
+    "notes": "Up to 2 GiB per file; three concurrent 8 MiB parts; no whole-file ArrayBuffer.",
+    "storage": "3 active parts × 8 MiB; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "browser_storage"],
+  "deepDives": [
+    "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+    "A part succeeds but its acknowledgement times out",
+    "Whole-file upload is simpler for small files. Resumable multipart adds server coordination; persistent file access varies by browser and permission."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+    "Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

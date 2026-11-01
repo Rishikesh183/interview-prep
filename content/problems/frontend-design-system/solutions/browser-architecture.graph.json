@@ -1,0 +1,209 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Design System & Component Library View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a shared frontend component library for several product teams. Cover tokens, accessible primitives, controlled APIs, theming, packaging and safe upgrades. Use a small documentation/catalog app as the browser architecture; do not turn this into a backend service design.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "20 consuming apps, ~40 primitives; avoid bundling the full library for one button; measure consumer output, not source size.",
+        "accessibility": "Define keyboard/focus contracts per primitive, native semantics first, contrast and reduced-motion tokens, accessible-name requirements and automated plus manual assistive-technology checks."
+      },
+      "no": "Coordinates this feature. Layer semantic tokens -> headless behavior primitives -> styled components -> product patterns. Define one controlled/uncontrolled ownership rule and forward refs. Publish tree-shakable per-component exports, semver changes and migration examples with visual, interaction and accessibility coverage. Alternative: Headless primitives maximize flexibility but consumers must style correctly. A styled system accelerates consistency but needs deliberate escape hatches; avoid unrestricted internal DOM dependencies."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Accessible Primitives",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Accessible Primitives; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "20 consuming apps, ~40 primitives; avoid bundling the full library for one button; measure consumer output, not source size.",
+        "accessibility": "Define keyboard/focus contracts per primitive, native semantics first, contrast and reduced-motion tokens, accessible-name requirements and automated plus manual assistive-technology checks."
+      },
+      "no": "Layer semantic tokens -> headless behavior primitives -> styled components -> product patterns. Define one controlled/uncontrolled ownership rule and forward refs. Publish tree-shakable per-component exports, semver changes and migration examples with visual, interaction and accessibility coverage."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "themePreference: light | dark | system\npreviewProps: component-specific local state\nselectedExampleId: string\ncomponent value owned by caller when controlled; internal otherwise",
+        "transitions": "Layer semantic tokens -> headless behavior primitives -> styled components -> product patterns. Define one controlled/uncontrolled ownership rule and forward refs. Publish tree-shakable per-component exports, semver changes and migration examples with visual, interaction and accessibility coverage."
+      },
+      "no": "themePreference: light | dark | system\npreviewProps: component-specific local state\nselectedExampleId: string\ncomponent value owned by caller when controlled; internal otherwise\nLayer semantic tokens -> headless behavior primitives -> styled components -> product patterns. Define one controlled/uncontrolled ownership rule and forward refs. Publish tree-shakable per-component exports, semver changes and migration examples with visual, interaction and accessibility coverage."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "CatalogManifest: {version,components:[{name,entry,docsUrl,tokenVersion}]}; cache immutable released versions; the runtime component package is build-time code, not downloaded executable code from arbitrary manifest URLs.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Document stable token/API contracts, use prerelease consumer validation, migration tooling and version rollback. Accessibility requirements are part of the API."
+      },
+      "no": "CatalogManifest: {version,components:[{name,entry,docsUrl,tokenVersion}]}; cache immutable released versions; the runtime component package is build-time code, not downloaded executable code from arbitrary manifest URLs."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/catalog/releases/{version}/manifest\nexplicit released documentation version; no credentials required for public catalog",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Document stable token/API contracts, use prerelease consumer validation, migration tooling and version rollback. Accessibility requirements are part of the API."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {version:\"2.1.0\",tokenVersion:\"2\",components:[{name:\"Dialog\",entry:\"@acme/ui/dialog\",docsUrl:\"/docs/dialog\"}]}"
+    },
+    {
+      "i": "extra",
+      "t": "ui_component",
+      "l": "Token & Theme Provider",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "responsibility": "Resolve semantic tokens from theme/density/localization preferences",
+        "contract": "Provider(theme, locale, direction); CSS custom properties and documented token names",
+        "rendering": "Static CSS plus scoped variables; prevent theme flash on initial render",
+        "accessibility": "Contrast-tested themes, reduced motion and RTL-aware logical properties"
+      },
+      "no": "Separate token values from interaction semantics so restyling cannot silently change keyboard behavior."
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "internal"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "design-system.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Define keyboard/focus contracts per primitive, native semantics first, contrast and reduced-motion tokens, accessible-name requirements and automated plus manual assistive-technology checks."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadDesignSystem(input, signal)",
+      "request": "explicit released documentation version; no credentials required for public catalog",
+      "response": "{version:\"2.1.0\",tokenVersion:\"2\",components:[{name:\"Dialog\",entry:\"@acme/ui/dialog\",docsUrl:\"/docs/dialog\"}]}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/catalog/releases/{version}/manifest",
+      "request": "explicit released documentation version; no credentials required for public catalog",
+      "response": "{version:\"2.1.0\",tokenVersion:\"2\",components:[{name:\"Dialog\",entry:\"@acme/ui/dialog\",docsUrl:\"/docs/dialog\"}]}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": false,
+      "pagination": "none",
+      "note": "Layer semantic tokens -> headless behavior primitives -> styled components -> product patterns. Define one controlled/uncontrolled ownership rule and forward refs. Publish tree-shakable per-component exports, semver changes and migration examples with visual, interaction and accessibility coverage."
+    }
+  ],
+  "entities": [
+    {
+      "name": "ComponentPreviewState",
+      "storeNodeId": "state",
+      "fields": "themePreference: light | dark | system\npreviewProps: component-specific local state\nselectedExampleId: string\ncomponent value owned by caller when controlled; internal otherwise\nTransitions: Layer semantic tokens -> headless behavior primitives -> styled components -> product patterns. Define one controlled/uncontrolled ownership rule and forward refs. Publish tree-shakable per-component exports, semver changes and migration examples with visual, interaction and accessibility coverage."
+    },
+    {
+      "name": "CatalogManifest",
+      "storeNodeId": "cache",
+      "fields": "CatalogManifest: {version,components:[{name,entry,docsUrl,tokenVersion}]}; cache immutable released versions; the runtime component package is build-time code, not downloaded executable code from arbitrary manifest URLs."
+    }
+  ]
+}

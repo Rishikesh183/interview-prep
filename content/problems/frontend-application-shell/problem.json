@@ -1,0 +1,45 @@
+{
+  "id": "frontend-application-shell",
+  "number": 45,
+  "title": "Large Multi-Team Frontend",
+  "difficulty": "hard",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "routing", "modularity", "rendering"],
+  "prompt": "Design the frontend architecture of a large product with independently owned dashboard, billing and settings features. Discuss routing, auth, delivery, shared dependencies and failure isolation. Evaluate whether microfrontends are warranted rather than assuming they are required. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Route between feature modules with stable URL contracts",
+    "Share session/design primitives without leaking feature internals",
+    "Choose delivery boundaries, monitor failures and roll out safely"
+  ],
+  "nonFunctionalReqs": [
+    "3 large feature areas; initial load should include shell + active route, not all feature code; track real-user route failures.",
+    "Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls.",
+    "Use a guarded refresh prompt for chunk-version failure; cancel old-tenant requests and clear caches before rendering new data. Add route-level error boundaries and release-correlated monitoring."
+  ],
+  "scale": {
+    "notes": "3 large feature areas; initial load should include shell + active route, not all feature code; track real-user route failures.",
+    "storage": "3 illustrative 300 KB feature chunks; 100 KB shared shell; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "router"],
+  "deepDives": [
+    "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+    "A lazy chunk is stale after a deployment, or tenant switches mid-request",
+    "Microfrontends enable independent release ownership but add shared-runtime, CSS, routing and observability costs. A modular monolith is sufficient until organizational constraints justify these costs."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints.",
+    "Provide skip links, route heading/focus management, document-title updates and keyboard navigation. Route errors must expose recovery without losing shell controls.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

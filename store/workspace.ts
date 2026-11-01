@@ -196,7 +196,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           "a",
           apis.map((a) => a.id),
         );
-        set({ apis: [...apis, { id, ownerNodeId, method: "GET", path: "/v1/", auth: true }] });
+        const local = [
+          "ui_component",
+          "api_client",
+          "web_worker",
+          "service_worker",
+          "realtime_client",
+        ].includes(get().nodes.find((n) => n.id === ownerNodeId)?.type ?? "");
+        set({
+          apis: [
+            ...apis,
+            {
+              id,
+              ownerNodeId,
+              method: local ? "RPC" : "GET",
+              path: local ? "handle(input)" : "/v1/",
+              auth: !local,
+            },
+          ],
+        });
         return id;
       },
 

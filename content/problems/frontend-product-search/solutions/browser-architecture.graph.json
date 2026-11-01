@@ -1,0 +1,208 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Product Listing & Search View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design an e-commerce search and product listing page with filters, sorting and deep links. Search/indexing and inventory computation already exist on the server. Explain initial rendering, browser navigation and races between filter requests.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code.",
+        "accessibility": "Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration."
+      },
+      "no": "Coordinates this feature. The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets. Alternative: CSR can be enough for an internal authenticated catalog. SSR improves initial discoverability but adds hydration and personalized-cache boundaries."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Product Grid",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Product Grid; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "40 products per page on a mobile network; prioritize one initial route and visible images, defer optional recommendation code.",
+        "accessibility": "Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration."
+      },
+      "no": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "draftFilters: local edits until Apply\nviewMode: grid | list\nfocusedProductId: string | null\nURL is authoritative for committed search parameters",
+        "transitions": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets."
+      },
+      "no": "draftFilters: local edits until Apply\nviewMode: grid | list\nfocusedProductId: string | null\nURL is authoritative for committed search parameters\nThe router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state."
+      },
+      "no": "ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/products?q={q}&filters={filters}&sort={sort}&cursor={cursor}\nvalidated URL query and facets, stable sort, opaque cursor",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Abort and key-check responses; keep the previous grid visibly marked as updating. Back/forward restores the same committed URL state."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {items:[{id:\"sku1\",title:\"Headphones\",price:{amount:9900,currency:\"INR\"},image:{url,width,height}}],facets:[],nextCursor:\"c2\"}"
+    },
+    {
+      "i": "extra",
+      "t": "router",
+      "l": "Search Router",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "urlState": "q, sorted filters, sort, cursor; parse and canonicalize on navigation",
+        "rendering": "SSR first results; client navigation thereafter",
+        "boundaries": "Route error boundary; never share personalized HTML across users"
+      },
+      "no": "URL state is the source of truth for committed filters; the store holds only drafts."
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "internal"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "product-search.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Label filter groups, expose selected filters and clear-all, announce result count without stealing focus; use semantic product links and accessible mobile filter dialog focus restoration."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadProductSearch(input, signal)",
+      "request": "validated URL query and facets, stable sort, opaque cursor",
+      "response": "{items:[{id:\"sku1\",title:\"Headphones\",price:{amount:9900,currency:\"INR\"},image:{url,width,height}}],facets:[],nextCursor:\"c2\"}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/products?q={q}&filters={filters}&sort={sort}&cursor={cursor}",
+      "request": "validated URL query and facets, stable sort, opaque cursor",
+      "response": "{items:[{id:\"sku1\",title:\"Headphones\",price:{amount:9900,currency:\"INR\"},image:{url,width,height}}],facets:[],nextCursor:\"c2\"}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": false,
+      "pagination": "cursor",
+      "note": "The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets."
+    }
+  ],
+  "entities": [
+    {
+      "name": "SearchFilterDrafts",
+      "storeNodeId": "state",
+      "fields": "draftFilters: local edits until Apply\nviewMode: grid | list\nfocusedProductId: string | null\nURL is authoritative for committed search parameters\nTransitions: The router owns committed URL state and SSRs the initial page for discovery. Client transitions cancel superseded requests and commit only a result matching the canonical query key. Reserve image dimensions and prioritize above-fold assets."
+    },
+    {
+      "name": "ProductResults",
+      "storeNodeId": "cache",
+      "fields": "ProductResults: {items:[{id,title,price,image}], facets, nextCursor, queryVersion}; key by canonical query/filter/sort/locale; bounded query cache, invalidate changed prices on detail/cart confirmation."
+    }
+  ]
+}

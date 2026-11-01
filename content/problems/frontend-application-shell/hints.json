@@ -1,0 +1,6 @@
+[
+  "Start with the user journey and its loading, empty, ready and error states. Draw browser responsibilities before backend dependencies.",
+  "Give each state slice one owner: ephemeral component state, URL state, server query cache or durable local data. Avoid copying the same truth into all four.",
+  "Specify concrete props/events and payloads, then explain how stale/failed operations are rejected. For this question consider: A lazy chunk is stale after a deployment, or tenant switches mid-request",
+  "Use the workload to justify the rendering/data budget. Finish with keyboard/focus behavior and an honest recovery path."
+]

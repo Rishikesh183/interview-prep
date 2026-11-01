@@ -1,7 +1,7 @@
 import type { ApiEndpoint, Estimation, Graph, Problem, Requirements } from "@/lib/schema";
 import type { LintContext } from "./rules";
 
-export type LintProblem = Pick<Problem, "keyComponents" | "prompt">;
+export type LintProblem = Pick<Problem, "keyComponents" | "prompt"> & { track?: Problem["track"] };
 
 type Inputs = {
   graph: Graph;

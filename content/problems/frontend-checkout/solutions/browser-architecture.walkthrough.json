@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "overview": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "100 cart lines; quantity edit changes 1 line and summary",
+      "calculation": "1 edited line + derived totals, rather than 100 independent total calculations",
+      "result": "Memoize only profiled expensive work; authoritative totals still come from server",
+      "implication": "Profile form input latency and payment-SDK loading on slow devices."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt. Performance plan: Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke. Accessibility: Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission. Failure recovery: Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically. Trade-off: Optimistic quantity updates feel fast but need version reconciliation. Pessimistic final checkout is clearer where price and stock must be confirmed.",
+      "rationale": "Own this responsibility at the Shopping Cart & Checkout View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+      "rationale": "Own this responsibility at the Checkout Form boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "step: address | delivery | payment | confirmation\ndraftAddress: safe form fields\nsubmitState: idle | submitting | pending | confirmed | failed\ncheckoutAttemptId: string\nfieldErrors: Record<string,string>\nModel checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {cartId:\"cart1\",version:7,lines:[{sku:\"sku1\",quantity:2,unitPrice:500}],totals:{amount:1000,currency:\"INR\"},quoteExpiresAt:\"...\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "CheckoutState",
+      "purpose": "Single source of truth for CheckoutState; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "step: address | delivery | payment | confirmation\ndraftAddress: safe form fields\nsubmitState: idle | submitting | pending | confirmed | failed\ncheckoutAttemptId: string\nfieldErrors: Record<string,string>\nTransitions: Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "CartSnapshot",
+      "purpose": "Single source of truth for CartSnapshot; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: checkout.mount(props, events)",
+      "rationale": "Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadCheckout(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /cart",
+      "rationale": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /checkout/attempts",
+      "rationale": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically."
+    },
+    {
+      "apiId": "cart-edit",
+      "purpose": "/cart/lines/{sku}",
+      "rationale": "Reconcile quantity edits against a cart version; use authoritative totals and show stock/price corrections before final confirmation."
+    },
+    {
+      "apiId": "attempt-status",
+      "purpose": "/checkout/attempts/{checkoutAttemptId}",
+      "rationale": "After timeout poll the existing attempt within a bounded budget; server validates ownership. Do not mint a fresh payment attempt while the old outcome is uncertain."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Shopping Cart & Checkout View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Checkout Form as a UI Component and Interaction State as Client State. In State Model add CheckoutState owned by Interaction State. Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["CheckoutState"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign CartSnapshot to Server State Cache. CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["CartSnapshot"]
+    },
+    {
+      "title": "Complete transfer and recovery contracts",
+      "explanation": "Add the remaining endpoints under their shown server owners; connect the browser API/media adapter to each dependency. Reconcile quantity edits against a cart version; use authoritative totals and show stock/price corrections before final confirmation. After timeout poll the existing attempt within a bounded budget; server validates ownership. Do not mint a fresh payment attempt while the old outcome is uncertain.",
+      "nodeIds": [],
+      "edgeIds": ["cart-edit-call", "attempt-status-call"],
+      "apiIds": ["cart-edit", "attempt-status"],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt. Performance plan: Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke. Accessibility: Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission. Failure recovery: Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically. Trade-off: Optimistic quantity updates feel fast but need version reconciliation. Pessimistic final checkout is clearer where price and stock must be confirmed.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Edit cart quantities and reconcile authoritative totals. Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call POST /checkout/attempts through the API adapter. Request: Idempotency-Key: checkoutAttemptId; {cartId,expectedVersion,addressId,paymentToken}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Payment succeeds but the order response is lost",
+      "handling": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Optimistic quantity updates feel fast but need version reconciliation. Pessimistic final checkout is clearer where price and stock must be confirmed.",
+  "sectionApplicability": {}
+}

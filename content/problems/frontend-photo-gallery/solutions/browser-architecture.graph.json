@@ -1,0 +1,205 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Photo Gallery & Carousel View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a reusable responsive photo gallery with a full-screen lightbox and carousel navigation. Metadata and image variants come from a server. Focus on image loading, layout stability, keyboard use and cleanup after long browsing.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next.",
+        "accessibility": "Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion."
+      },
+      "no": "Coordinates this feature. Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control. Alternative: A static grid is simpler and avoids modal navigation complexity. Preloading all full-resolution photos is wasteful even if metadata is small."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Gallery / Lightbox",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Gallery / Lightbox; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "2,000 metadata entries; fetch 30 thumbnails/page; lightbox prefetch only previous/next.",
+        "accessibility": "Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion."
+      },
+      "no": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "activePhotoId: string | null\nlightboxOpen: boolean\nreturnFocusId: string | null\nloadedNeighborIds: Set<id>\ngestureState: transient local pointer data",
+        "transitions": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control."
+      },
+      "no": "activePhotoId: string | null\nlightboxOpen: boolean\nreturnFocusId: string | null\nloadedNeighborIds: Set<id>\ngestureState: transient local pointer data\nUse responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs."
+      },
+      "no": "PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/albums/{id}/photos?cursor={cursor}\nalbum ID and cursor; public/private access determined server-side",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Keep thumbnail/placeholder, expose retry, ignore old selection loads, abort expendable prefetch and revoke local object URLs."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {items:[{id:\"img1\",alt:\"Mountain at sunrise\",width:1600,height:900,variants:{thumb:\"...\",medium:\"...\",full:\"...\"}}],nextCursor:\"c2\"}"
+    },
+    {
+      "i": "images",
+      "t": "cdn",
+      "l": "Responsive Image CDN",
+      "x": 840,
+      "y": -140,
+      "no": "Serves width-appropriate encoded variants; decoded memory and cache retention are browser concerns.",
+      "c": {}
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "image-download",
+      "s": "detail",
+      "d": "images",
+      "p": "HTTP",
+      "m": "a",
+      "l": "responsive thumbnails / selected image"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "photo-gallery.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Use meaningful alt text, keyboard next/previous, an accessible modal with Escape, trapped focus and focus restoration to the opened thumbnail; respect reduced motion."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadPhotoGallery(input, signal)",
+      "request": "album ID and cursor; public/private access determined server-side",
+      "response": "{items:[{id:\"img1\",alt:\"Mountain at sunrise\",width:1600,height:900,variants:{thumb:\"...\",medium:\"...\",full:\"...\"}}],nextCursor:\"c2\"}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/albums/{id}/photos?cursor={cursor}",
+      "request": "album ID and cursor; public/private access determined server-side",
+      "response": "{items:[{id:\"img1\",alt:\"Mountain at sunrise\",width:1600,height:900,variants:{thumb:\"...\",medium:\"...\",full:\"...\"}}],nextCursor:\"c2\"}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": false,
+      "pagination": "cursor",
+      "note": "Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control."
+    }
+  ],
+  "entities": [
+    {
+      "name": "GalleryState",
+      "storeNodeId": "state",
+      "fields": "activePhotoId: string | null\nlightboxOpen: boolean\nreturnFocusId: string | null\nloadedNeighborIds: Set<id>\ngestureState: transient local pointer data\nTransitions: Use responsive image sizes with intrinsic width/height; lazy-load below-fold thumbnails and preload at most adjacent lightbox images. Keep the selected photo by stable ID; do not automatically advance a carousel without pause and user control."
+    },
+    {
+      "name": "PhotoPage",
+      "storeNodeId": "cache",
+      "fields": "PhotoPage: {items:[{id,alt,width,height,variants}],nextCursor}; cache metadata separately from decoded images; bound prefetched neighbors and release object URLs when no longer used."
+    }
+  ]
+}

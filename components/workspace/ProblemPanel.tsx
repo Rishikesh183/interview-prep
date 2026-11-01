@@ -37,6 +37,7 @@ export function ProblemPanel({ problem }: { problem: Problem }) {
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground tabular-nums">#{problem.number}</span>
           <DifficultyBadge difficulty={problem.difficulty} />
+          <span className="text-muted-foreground text-xs capitalize">{problem.track}</span>
         </div>
         <h2 className="text-base font-semibold">{problem.title}</h2>
         <p className="leading-relaxed">{problem.prompt}</p>
@@ -68,7 +69,10 @@ export function ProblemPanel({ problem }: { problem: Problem }) {
           <dl className="space-y-1">
             {scale.map((k) => (
               <div key={k}>
-                <dt className="text-muted-foreground inline text-xs">{SCALE_LABELS[k]}: </dt>
+                <dt className="text-muted-foreground inline text-xs">
+                  {problem.track === "frontend" && k === "storage" ? "Workload" : SCALE_LABELS[k]}
+                  :{" "}
+                </dt>
                 <dd className="inline">{problem.scale[k]}</dd>
               </div>
             ))}

@@ -91,7 +91,10 @@ export function serializeGraph(a: Pick<Attempt, "graph" | "apis">): string {
   return lines.join("\n");
 }
 
-export function serializeAttempt(a: Attempt): string {
+export function serializeAttempt(
+  a: Attempt,
+  track: import("@/lib/schema").Track = "backend",
+): string {
   const r = a.requirements;
   const list = (title: string, items: string[]) =>
     `${title}:\n${items.length ? items.map((i) => `  - ${i}`).join("\n") : "  (none)"}`;
@@ -99,22 +102,24 @@ export function serializeAttempt(a: Attempt): string {
   const e = a.estimation;
   const out = estimate(e);
   const estimation =
-    e.dau > 0
-      ? [
-          `ESTIMATION: DAU ${formatCount(e.dau)}, ${e.writesPerUserPerDay} writes/user/day, read:write ${e.readWriteRatio}:1, object ${e.objectSize} ${e.objectSizeUnit}, retention ${e.retentionYears}y, peak x${e.peakFactor}`,
-          `  -> write QPS ${formatCount(out.writeQpsAvg)} avg / ${formatCount(out.writeQpsPeak)} peak; read QPS ${formatCount(out.readQpsAvg)} avg / ${formatCount(out.readQpsPeak)} peak`,
-          `  -> storage ${formatBytes(out.storagePerDayBytes)}/day, ${formatBytes(out.storageTotalBytes)} total; cache ~${formatBytes(out.cacheMemoryBytes)}`,
-        ].join("\n")
-      : "ESTIMATION: (not done)";
+    track === "frontend"
+      ? "BROWSER PERFORMANCE PLAN: " + (e.notes?.trim() || "(not done)")
+      : e.dau > 0
+        ? [
+            `ESTIMATION: DAU ${formatCount(e.dau)}, ${e.writesPerUserPerDay} writes/user/day, read:write ${e.readWriteRatio}:1, object ${e.objectSize} ${e.objectSizeUnit}, retention ${e.retentionYears}y, peak x${e.peakFactor}`,
+            `  -> write QPS ${formatCount(out.writeQpsAvg)} avg / ${formatCount(out.writeQpsPeak)} peak; read QPS ${formatCount(out.readQpsAvg)} avg / ${formatCount(out.readQpsPeak)} peak`,
+            `  -> storage ${formatBytes(out.storagePerDayBytes)}/day, ${formatBytes(out.storageTotalBytes)} total; cache ~${formatBytes(out.cacheMemoryBytes)}`,
+          ].join("\n")
+        : "ESTIMATION: (not done)";
 
   return [
     list("CLARIFYING QUESTIONS", r.questions),
     list("FUNCTIONAL REQUIREMENTS", r.functional),
     list("NON-FUNCTIONAL REQUIREMENTS", r.nonFunctional),
     list("OUT OF SCOPE", r.outOfScope),
-    estimation + (e.notes ? `\n  notes: ${q(e.notes)}` : ""),
+    estimation + (track !== "frontend" && e.notes ? `\n  notes: ${q(e.notes)}` : ""),
     list(
-      "ENTITIES",
+      track === "frontend" ? "STATE MODEL AND OWNERS" : "ENTITIES",
       a.entities.map(
         (x) =>
           `${x.name}${x.storeNodeId ? ` (in ${x.storeNodeId})` : ""}: ${x.fields.replace(/\n/g, ", ")}`,

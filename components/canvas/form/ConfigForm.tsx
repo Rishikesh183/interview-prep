@@ -1,6 +1,7 @@
 "use client";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -61,6 +62,18 @@ function FieldInput({ id, field, value, onChange }: FieldProps) {
         </div>
       );
     case "text":
+      if (field.multiline)
+        return (
+          <FormRow id={id} label={field.label} help={field.help}>
+            <Textarea
+              id={id}
+              rows={3}
+              value={typeof value === "string" ? value : ""}
+              placeholder={field.placeholder}
+              onChange={(e) => onChange(e.target.value)}
+            />
+          </FormRow>
+        );
       return (
         <FormRow id={id} label={field.label} help={field.help}>
           <Input

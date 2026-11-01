@@ -1,0 +1,45 @@
+{
+  "id": "frontend-chat",
+  "number": 35,
+  "title": "Chat Application Frontend",
+  "difficulty": "medium",
+  "priority": true,
+  "track": "frontend",
+  "tags": ["frontend", "realtime", "optimistic-ui", "pagination"],
+  "prompt": "Design a browser chat client with conversation switching, history, sending and reconnecting. The messaging service handles durable delivery and authorization. Concentrate on browser message state, ordering, scroll behavior and an honest delivery UI. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Page older messages and preserve scroll position",
+    "Send optimistically and show pending/sent/failed states",
+    "Reconnect, recover gaps and isolate state between conversations"
+  ],
+  "nonFunctionalReqs": [
+    "50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history.",
+    "Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content.",
+    "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+  ],
+  "scale": {
+    "notes": "50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history.",
+    "storage": "20 incoming events/s; render batches every 100 ms as an illustrative target; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "realtime_client"],
+  "deepDives": [
+    "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+    "Socket reconnect delivers a duplicate and skips an event",
+    "Polling is simpler for low-frequency messaging. WebSocket lowers latency but requires backfill, connection lifecycle and multi-tab policy."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom.",
+    "Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

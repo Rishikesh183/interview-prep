@@ -7,10 +7,12 @@ export function Entities({
   entities,
   graph,
   walkthrough,
+  track = "backend",
 }: {
   entities: Entity[];
   graph?: Graph;
   walkthrough?: Walkthrough;
+  track?: import("@/lib/schema").Track;
 }) {
   if (!entities.length)
     return (
@@ -29,7 +31,9 @@ export function Entities({
             <div>
               <h4 className="font-semibold">{entity.name}</h4>
               <p className="text-muted-foreground mt-1 text-xs">
-                Data Model → Add entity → Stored in:{" "}
+                {track === "frontend"
+                  ? "State Model → Add state slice → Owned by:"
+                  : "Data Model → Add entity → Stored in:"}{" "}
                 <strong>{store ?? "Storage assignment pending"}</strong>
               </p>
             </div>
@@ -40,7 +44,14 @@ export function Entities({
             {detail && (
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <Lines title="Access patterns" items={detail.accessPatterns} />
-                <Lines title="Keys, indexes & constraints" items={detail.constraints} />
+                <Lines
+                  title={
+                    track === "frontend"
+                      ? "Ownership, transitions & invariants"
+                      : "Keys, indexes & constraints"
+                  }
+                  items={detail.constraints}
+                />
                 {detail.relationships.length > 0 && (
                   <Lines title="Relationships" items={detail.relationships} />
                 )}
@@ -57,10 +68,12 @@ export function Apis({
   apis,
   graph,
   walkthrough,
+  track = "backend",
 }: {
   apis: ApiEndpoint[];
   graph?: Graph;
   walkthrough?: Walkthrough;
+  track?: import("@/lib/schema").Track;
 }) {
   if (!apis.length)
     return (
@@ -85,7 +98,8 @@ export function Apis({
                     {api.method} {api.path}
                   </code>
                   <p className="text-muted-foreground text-xs">
-                    APIs → {nodeName(graph, owner)} → Add endpoint
+                    {track === "frontend" ? "Contracts" : "APIs"} → {nodeName(graph, owner)} → Add
+                    endpoint
                   </p>
                   {detail && <p className="text-sm">{detail.purpose}</p>}
                   <div className="grid gap-3 sm:grid-cols-2">

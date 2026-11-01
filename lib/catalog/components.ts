@@ -58,6 +58,7 @@ export type ComponentDef = {
 
 export const CATEGORIES: { id: Category; label: string }[] = [
   { id: "clients", label: "Clients & external" },
+  { id: "frontend", label: "Browser architecture" },
   { id: "edge", label: "Edge / networking" },
   { id: "compute", label: "Compute" },
   { id: "storage", label: "Storage" },
@@ -93,6 +94,116 @@ const instancesBadge = (_: unknown, c: Record<string, unknown>) => {
 };
 
 const DEFS: ComponentDef[] = [
+  define({
+    type: "ui_component",
+    category: "frontend",
+    label: "UI Component",
+    icon: Monitor,
+    description: "A view or reusable component: props, events, rendering and accessibility.",
+    fields: {
+      responsibility: f.text("Responsibility", { default: "", multiline: true }),
+      contract: f.text("Props and events", { default: "", multiline: true }),
+      rendering: f.text("Rendering strategy", { default: "", multiline: true }),
+      accessibility: f.text("Keyboard, focus and semantics", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "client_store",
+    category: "frontend",
+    label: "Client State",
+    icon: Boxes,
+    description: "Local or shared client state with explicit transitions and ownership.",
+    fields: {
+      scope: f.text("State scope", { default: "", multiline: true }),
+      state: f.text("State shape", { default: "", multiline: true }),
+      transitions: f.text("Transitions and invariants", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "query_cache",
+    category: "frontend",
+    label: "Query Cache",
+    icon: MemoryStick,
+    description: "Server-state cache: keys, freshness, invalidation and optimistic reconciliation.",
+    fields: {
+      queryKey: f.text("Query key", { default: "", multiline: true }),
+      freshness: f.text("Freshness and eviction", { default: "", multiline: true }),
+      invalidation: f.text("Invalidation and reconciliation", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "api_client",
+    category: "frontend",
+    label: "API Client",
+    icon: Cable,
+    description: "Browser networking boundary with cancellation, validation and bounded retries.",
+    fields: {
+      contract: f.text("Network contract", { default: "", multiline: true }),
+      cancellation: f.text("Stale responses and cancellation", { default: "", multiline: true }),
+      retries: f.text("Retry and error policy", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "browser_storage",
+    category: "frontend",
+    label: "Browser Storage",
+    icon: Database,
+    description: "IndexedDB or browser storage for bounded local persistence.",
+    fields: {
+      engine: f.text("Storage engine", { default: "", multiline: true }),
+      schema: f.text("Schema and migration", { default: "", multiline: true }),
+      retention: f.text("Retention, quota and privacy", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "web_worker",
+    category: "frontend",
+    label: "Web Worker",
+    icon: Cog,
+    description: "Off-main-thread computation through a versioned message contract.",
+    fields: {
+      workload: f.text("Worker workload", { default: "", multiline: true }),
+      contract: f.text("Message and result contract", { default: "", multiline: true }),
+      cancellation: f.text("Cancellation and lifecycle", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "service_worker",
+    category: "frontend",
+    label: "Service Worker",
+    icon: Globe,
+    description: "Browser request interception and explicit offline/update policies.",
+    fields: {
+      scope: f.text("Scope and lifecycle", { default: "", multiline: true }),
+      cachePolicy: f.text("Cache and offline policy", { default: "", multiline: true }),
+      updates: f.text("Versioning and updates", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "realtime_client",
+    category: "frontend",
+    label: "Realtime Client",
+    icon: RadioTower,
+    description: "A browser connection with ordering, deduplication and reconnect recovery.",
+    fields: {
+      transport: f.text("Transport", { default: "", multiline: true }),
+      recovery: f.text("Reconnect and gap recovery", { default: "", multiline: true }),
+      ordering: f.text("Ordering and deduplication", { default: "", multiline: true }),
+    },
+  }),
+  define({
+    type: "router",
+    category: "frontend",
+    label: "Router / App Shell",
+    icon: Compass,
+    description: "URL-owned state, route boundaries and delivery/rendering decisions.",
+    fields: {
+      urlState: f.text("URL state", { default: "", multiline: true }),
+      rendering: f.text("CSR / SSR / streaming choice", { default: "", multiline: true }),
+      boundaries: f.text("Route, auth and error boundaries", { default: "", multiline: true }),
+    },
+  }),
+
   // Clients & external
   define({
     type: "web_client",

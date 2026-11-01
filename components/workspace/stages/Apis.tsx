@@ -7,7 +7,7 @@ import { useNodeOptions } from "@/components/canvas/useNodeOptions";
 import { addStageNode } from "../addStageNode";
 import { highlightLater } from "@/components/canvas/useFocusOnCanvas";
 import { useAttemptStore } from "@/store/attempt";
-import { API_OWNER_TYPES } from "@/lib/workspace/stages";
+import { API_OWNER_TYPES, FRONTEND_API_OWNER_TYPES } from "@/lib/workspace/stages";
 import { useWorkspaceStore } from "@/store/workspace";
 import { ApiList } from "../ApiList";
 import { StageIntro } from "./StageIntro";
@@ -15,14 +15,23 @@ import { StageIntro } from "./StageIntro";
 /** Adds an owner node to the canvas without needing the canvas to be mounted. */
 const addOwner = addStageNode;
 
-export function Apis() {
-  const owners = useNodeOptions(API_OWNER_TYPES);
+export function Apis({ track = "backend" }: { track?: import("@/lib/schema").Track }) {
+  const frontend = track === "frontend";
+  const owners = useNodeOptions(
+    frontend
+      ? FRONTEND_API_OWNER_TYPES
+      : API_OWNER_TYPES.filter((t) => !FRONTEND_API_OWNER_TYPES.includes(t)),
+  );
 
   return (
     <div className="space-y-6">
       <StageIntro
-        title="API design"
-        text="Endpoints belong to a service or gateway. Owners are canvas nodes, so they show up in the Design stage too."
+        title={frontend ? "Component & network contracts" : "API design"}
+        text={
+          frontend
+            ? "Use RPC for props, callbacks or local functions. Put HTTP/WS server endpoints under an External Service; the API Client owns only its local wrapper. Specify payloads, error states and cancellation."
+            : "Endpoints belong to a service or gateway. Owners are canvas nodes, so they show up in the Design stage too."
+        }
       />
 
       {owners.map((owner) => (
@@ -31,17 +40,27 @@ export function Apis() {
 
       {owners.length === 0 && (
         <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
-          Add a service or gateway to start defining endpoints.
+          {frontend
+            ? "Add a component or API client to define contracts. Add an External Service on the canvas for server endpoints."
+            : "Add a service or gateway to start defining endpoints."}
         </p>
       )}
 
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={() => addOwner("service")}>
-          <Server /> Add service
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => addOwner(frontend ? "ui_component" : "service")}>
+          <Server /> {frontend ? "Add component" : "Add service"}
         </Button>
-        <Button variant="outline" onClick={() => addOwner("api_gateway")}>
-          <DoorOpen /> Add API gateway
+        <Button variant="outline" onClick={() => addOwner(frontend ? "api_client" : "api_gateway")}>
+          <DoorOpen /> {frontend ? "Add API client" : "Add API gateway"}
         </Button>
+        {frontend && (
+          <Button
+            variant="outline"
+            onClick={() => addOwner("external_service", "Existing Backend API")}
+          >
+            <Server /> Add backend dependency
+          </Button>
+        )}
       </div>
     </div>
   );

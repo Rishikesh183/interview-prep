@@ -1,0 +1,45 @@
+{
+  "id": "frontend-data-grid",
+  "number": 38,
+  "title": "Large Interactive Data Grid",
+  "difficulty": "hard",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "virtualization", "workers", "accessibility"],
+  "prompt": "Design an enterprise data grid with 100,000 rows, 50 columns, sorting, filtering, selection and inline editing. The server supports paged queries and versioned writes. Explain which work is local versus remote and preserve keyboard navigation. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Window visible rows and columns with stable row IDs",
+    "Sort/filter consistently over the full dataset",
+    "Edit with validation/version conflicts and support keyboard cell navigation"
+  ],
+  "nonFunctionalReqs": [
+    "100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan.",
+    "Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization.",
+    "Send expected row version; on 409 preserve the draft, show current value and ask how to resolve. Cancel stale query responses on sorting changes."
+  ],
+  "scale": {
+    "notes": "100,000 × 50 cells; target around 40 mounted rows and 12 mounted columns including overscan.",
+    "storage": "100,000 × 50 logical cells; 40 × 12 mounted cells; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "web_worker"],
+  "deepDives": [
+    "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+    "Another user edits the same cell before save",
+    "Simple server-paginated tables are cheaper and often more accessible. Full grid behavior is justified by editing and spreadsheet-like navigation."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Virtualize two axes with stable IDs and bounded overscan; offscreen data and selected IDs are independent of DOM rows. Server sorts/filters the entire dataset. A worker can format/index only loaded data; it cannot make sorting one cached page equivalent to sorting all rows.",
+    "Use table semantics for read-only data; interactive grid needs roving tabIndex, arrow/Home/End navigation, correct logical row/column indices and a focused-cell strategy across virtualization.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

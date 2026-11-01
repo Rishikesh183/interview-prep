@@ -20,7 +20,7 @@ export type LintContext = {
   estimation?: EstimationInput;
   /** The user's own requirements. */
   requirements?: Requirements;
-  problem?: Pick<Problem, "keyComponents" | "prompt">;
+  problem?: Pick<Problem, "keyComponents" | "prompt"> & { track?: Problem["track"] };
   /** Rule 14 can be turned off for "no hints" practice. */
   keyComponentHints?: boolean;
 };

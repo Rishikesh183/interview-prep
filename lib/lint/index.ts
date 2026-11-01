@@ -1,3 +1,4 @@
+import { frontendLint } from "./frontend";
 import { indexGraph } from "@/lib/graph/analysis";
 import type { LintIssue, LintSeverity } from "@/lib/schema";
 import { RULES, type LintContext } from "./rules";
@@ -9,6 +10,7 @@ const ORDER: Record<LintSeverity, number> = { error: 0, warn: 1, info: 2 };
 
 /** Runs every rule; issues sorted by severity. Pure and cheap enough to run on every change. */
 export function runLint(ctx: LintContext): LintIssue[] {
+  if (ctx.problem?.track === "frontend") return frontendLint(ctx);
   const ix = indexGraph(ctx.graph);
   return RULES.flatMap((rule) => rule.check(ix, ctx)).sort(
     (a, b) => ORDER[a.severity] - ORDER[b.severity],

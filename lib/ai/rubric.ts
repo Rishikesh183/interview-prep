@@ -57,6 +57,32 @@ export const RUBRIC: {
   },
 ];
 
+export const FRONTEND_RUBRIC = RUBRIC.map((r, i) => ({
+  ...r,
+  label: [
+    "User experience & scope",
+    "Browser performance budgets",
+    "State model & ownership",
+    "Component & network contracts",
+    "Browser architecture",
+    "Rendering & data efficiency",
+    "Accessibility & recovery",
+    "Trade-offs & justification",
+  ][i],
+  looksFor: [
+    "user journeys, interaction states, scope cuts",
+    "device/network assumptions, initial bytes, mounted items, memory, profiling plan",
+    "component vs URL vs server-cache vs persistent state; transitions and single ownership",
+    "props/events, payloads, pagination, cancellation and error semantics",
+    "component boundaries, dependency direction and browser data flow",
+    "bounded rendering, cache invalidation, request races and code splitting",
+    "keyboard, focus, semantics, stale data, retry, offline and reconnect behavior",
+    "simplest adequate design, alternatives and limitations",
+  ][i],
+}));
+export const rubricFor = (track: import("@/lib/schema").Track = "backend") =>
+  track === "frontend" ? FRONTEND_RUBRIC : RUBRIC;
+
 /** Weighted 0–100 from 0–10 dimension scores. Missing dimensions count as 0. */
 export function overallScore(scores: ModelReview["scores"]): number {
   const byDim = new Map(scores.map((s) => [s.dimension, s.score]));

@@ -29,6 +29,10 @@ export function ApproachWalkthrough({
   problem: Problem;
   approach: ReferenceApproach;
 }) {
+  const frontend = problem.track === "frontend";
+  const labels: Record<string, string> = frontend
+    ? { estimation: "Performance", entities: "State model", flows: "Interaction flows" }
+    : {};
   const prefix = useId().replace(/:/g, "");
   const w = approach.walkthrough;
   const results = useMemo(
@@ -65,7 +69,7 @@ export function ApproachWalkthrough({
               <span className="text-muted-foreground mr-2 tabular-nums">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              {title}
+              {labels[id] ?? title}
             </a>
           ))}
         </nav>
@@ -102,7 +106,7 @@ export function ApproachWalkthrough({
         )}
         {section(
           "estimation",
-          "2. Estimate and choose capacity",
+          frontend ? "2. Set browser performance budgets" : "2. Estimate and choose capacity",
           <>
             <dl className="bg-muted/30 grid gap-3 rounded-xl border p-4 text-sm sm:grid-cols-2">
               {Object.entries(problem.scale)
@@ -113,7 +117,7 @@ export function ApproachWalkthrough({
                       {{
                         dau: "Traffic assumptions",
                         qps: "Throughput",
-                        storage: "Storage",
+                        storage: frontend ? "Browser workload" : "Storage",
                         notes: "Notes",
                       }[k] ?? k}
                     </dt>
@@ -135,13 +139,25 @@ export function ApproachWalkthrough({
         )}
         {section(
           "entities",
-          "3. Add entities and choose their stores",
-          <Entities entities={approach.entities} graph={approach.graph} walkthrough={w} />,
+          frontend
+            ? "3. Define state and assign its owners"
+            : "3. Add entities and choose their stores",
+          <Entities
+            track={problem.track}
+            entities={approach.entities}
+            graph={approach.graph}
+            walkthrough={w}
+          />,
         )}
         {section(
           "apis",
           "4. Define APIs and contracts under their owners",
-          <Apis apis={approach.apis} graph={approach.graph} walkthrough={w} />,
+          <Apis
+            track={problem.track}
+            apis={approach.apis}
+            graph={approach.graph}
+            walkthrough={w}
+          />,
         )}
         {section(
           "build",
@@ -156,7 +172,9 @@ export function ApproachWalkthrough({
         )}
         {section(
           "flows",
-          "6. Walk through requests and branches",
+          frontend
+            ? "6. Walk through interactions and recovery"
+            : "6. Walk through requests and branches",
           w && approach.graph ? (
             <RequestFlows key={approach.id} approach={approach} />
           ) : (

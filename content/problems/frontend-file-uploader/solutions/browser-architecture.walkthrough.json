@@ -1,0 +1,323 @@
+{
+  "version": 1,
+  "overview": "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "3 active parts × 8 MiB",
+      "calculation": "~24 MiB active chunk payload plus browser/network overhead",
+      "result": "Bound concurrency and release buffers; actual browser copies add memory",
+      "implication": "Profile peak memory and progress behavior with retries, pause and background tabs."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available. Performance plan: Up to 2 GiB per file; three concurrent 8 MiB parts; no whole-file ArrayBuffer. Accessibility: Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file. Failure recovery: Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server. Trade-off: Whole-file upload is simpler for small files. Resumable multipart adds server coordination; persistent file access varies by browser and permission.",
+      "rationale": "Own this responsibility at the Resumable File Uploader View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+      "rationale": "Own this responsibility at the Upload Queue boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "filesById: {fileRef,sessionId,status,confirmedParts,inFlightBytes}\nstatus: queued | uploading | paused | failed | complete\nconcurrencyLimit: number\nretryBudgetByPart: Map<part,number>\nSlice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "UploadSession: {uploadId,fileFingerprint,partSize,confirmedParts,expiresAt}; server is authoritative for uploaded parts; cache metadata only and reconcile through a session-status request.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {uploadId:\"up1\",partSize:8388608,confirmedParts:[1,2],expiresAt:\"...\",status:\"active\"}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "extra",
+      "purpose": "Persist resumable session identity and acknowledgements separately from ephemeral File references.",
+      "rationale": "Own this responsibility at the Upload Metadata boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "object-store",
+      "purpose": "Receives scoped presigned binary PUT requests; backend controls sessions and completion.",
+      "rationale": "Keep transfer/lifecycle responsibility explicit at this boundary."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "UploadQueueState",
+      "purpose": "Single source of truth for UploadQueueState; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "filesById: {fileRef,sessionId,status,confirmedParts,inFlightBytes}\nstatus: queued | uploading | paused | failed | complete\nconcurrencyLimit: number\nretryBudgetByPart: Map<part,number>\nTransitions: Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "UploadSession",
+      "purpose": "Single source of truth for UploadSession; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "UploadSession: {uploadId,fileFingerprint,partSize,confirmedParts,expiresAt}; server is authoritative for uploaded parts; cache metadata only and reconcile through a session-status request.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "ResumeRecord",
+      "purpose": "Single source of truth for ResumeRecord; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "version 1: uploadId, fingerprint, part size, confirmed parts; migrate transactionally\nRetention and errors: Delete completed/expired metadata; quota failure disables resume with visible explanation; no auth secrets",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: file-uploader.mount(props, events)",
+      "rationale": "Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadFileUploader(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /uploads/{uploadId}",
+      "rationale": "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available."
+    },
+    {
+      "apiId": "write",
+      "purpose": "Existing server interface: /uploads",
+      "rationale": "Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server."
+    },
+    {
+      "apiId": "part",
+      "purpose": "/signed-upload/{uploadId}/parts/{partNumber}",
+      "rationale": "The external object store receives raw binary parts, not a JSON/base64 copy of the whole file. Retry the same part number and verify checksum/ETag. Signed URL authorizes this scoped upload; no extra app-session header is sent."
+    },
+    {
+      "apiId": "complete",
+      "purpose": "/uploads/{uploadId}/complete",
+      "rationale": "Complete only after reconciling all confirmed parts. Backend validates manifest/ownership and returns processing until validation/scanning finishes. Retry the same completion identity."
+    },
+    {
+      "apiId": "cancel",
+      "purpose": "/uploads/{uploadId}",
+      "rationale": "Abort in-flight browser requests, discard queued parts and request server cleanup. Treat already-cancelled state as success."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Resumable File Uploader View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Upload Queue as a UI Component and Interaction State as Client State. In State Model add UploadQueueState owned by Interaction State. Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["UploadQueueState"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign UploadSession to Server State Cache. UploadSession: {uploadId,fileFingerprint,partSize,confirmedParts,expiresAt}; server is authoritative for uploaded parts; cache metadata only and reconcile through a session-status request.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http", "mutate"],
+      "apiIds": ["adapter", "read", "write"],
+      "entityNames": ["UploadSession"]
+    },
+    {
+      "title": "Add Upload Metadata",
+      "explanation": "Add browser_storage as Upload Metadata and connect the feature dependency. Persist resumable session identity and acknowledgements separately from ephemeral File references.",
+      "nodeIds": ["extra"],
+      "edgeIds": ["feature"],
+      "apiIds": [],
+      "entityNames": ["ResumeRecord"]
+    },
+    {
+      "title": "Complete transfer and recovery contracts",
+      "explanation": "Add the remaining endpoints under their shown server owners; connect the browser API/media adapter to each dependency. The external object store receives raw binary parts, not a JSON/base64 copy of the whole file. Retry the same part number and verify checksum/ETag. Signed URL authorizes this scoped upload; no extra app-session header is sent. Complete only after reconciling all confirmed parts. Backend validates manifest/ownership and returns processing until validation/scanning finishes. Retry the same completion identity. Abort in-flight browser requests, discard queued parts and request server cleanup. Treat already-cancelled state as success.",
+      "nodeIds": ["object-store"],
+      "edgeIds": ["part-call", "complete-call", "cancel-call"],
+      "apiIds": ["part", "complete", "cancel"],
+      "entityNames": []
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available. Performance plan: Up to 2 GiB per file; three concurrent 8 MiB parts; no whole-file ArrayBuffer. Accessibility: Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file. Failure recovery: Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server. Trade-off: Whole-file upload is simpler for small files. Resumable multipart adds server coordination; persistent file access varies by browser and permission.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. UploadSession: {uploadId,fileFingerprint,partSize,confirmedParts,expiresAt}; server is authoritative for uploaded parts; cache metadata only and reconcile through a session-status request.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Validate files and create per-file upload sessions. Provide a labelled file input as well as drag/drop, keyboard pause/cancel, text progress and throttled announcements. Validation errors identify the affected file.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Slice files into 8 MiB parts and upload at most three concurrently. Confirm progress only for acknowledged parts; in-flight bytes are provisional. Store session metadata in IndexedDB, not the whole file by default; after reload require re-selection and verify fingerprint unless a supported permissioned file handle is available.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "Up to 2 GiB per file; three concurrent 8 MiB parts; no whole-file ArrayBuffer. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    },
+    {
+      "id": "specialized",
+      "title": "Upload Metadata lifecycle",
+      "steps": [
+        {
+          "title": "Call or subscribe to the feature dependency",
+          "explanation": "Persist resumable session identity and acknowledgements separately from ephemeral File references. Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server.",
+          "nodeIds": ["view", "extra"],
+          "edgeIds": ["feature"]
+        }
+      ]
+    },
+    {
+      "id": "mutation",
+      "title": "Mutation, acknowledgement and reconciliation",
+      "apiId": "write",
+      "steps": [
+        {
+          "title": "Capture user intent without duplicating authority",
+          "explanation": "Validate local input and enter a pending state. Use the component callback rather than mutating server snapshots directly.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Send the versioned operation",
+          "explanation": "Call POST /uploads through the API adapter. Request: {name:\"demo.mp4\",size:2147483648,mime:\"video/mp4\",fingerprint:\"...\"}. A prior successful response or unresolved operation must not be overwritten by a stale retry.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Reconcile or expose recovery",
+          "explanation": "Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server. Update the query key with the acknowledged version or invalidate/refetch it; maintain focus and make pending/error state visible.",
+          "nodeIds": ["view", "cache"],
+          "edgeIds": ["query"]
+        }
+      ]
+    },
+    {
+      "id": "parts",
+      "title": "Upload parts, reconcile and complete",
+      "steps": [
+        {
+          "title": "Create the session",
+          "explanation": "Use the existing POST /uploads contract to receive part size and scoped signed destinations. Persist session metadata; slice without reading the whole file.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["mutate"]
+        },
+        {
+          "title": "Upload bounded parts",
+          "explanation": "At most three PUT requests stream 8 MiB slices. Record confirmed part numbers/ETags; a timed-out acknowledgement triggers session reconciliation before retry.",
+          "nodeIds": ["network", "object-store"],
+          "edgeIds": ["part-call"]
+        },
+        {
+          "title": "Finalize the asset",
+          "explanation": "Submit the confirmed manifest after every required part is acknowledged. Show processing until the server reports the asset ready; cancellation must prevent automatic completion.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["complete-call"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A part succeeds but its acknowledgement times out",
+      "handling": "Reconcile confirmed parts from server; retry the same part number/checksum safely. Expired sessions require explicit restart; cancel aborts active requests and informs the server.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Whole-file upload is simpler for small files. Resumable multipart adds server coordination; persistent file access varies by browser and permission.",
+  "sectionApplicability": {}
+}

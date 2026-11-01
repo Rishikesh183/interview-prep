@@ -1,0 +1,247 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Video Player & Watch Page View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a video watch frontend with playback, seeking, quality selection, captions and resume position. Transcoding, CDN distribution and DRM services are external dependencies. Explain native media behavior, control state and failure recovery.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation.",
+        "accessibility": "Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection."
+      },
+      "no": "Coordinates this feature. Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference. Alternative: Native playback minimizes complexity but gives less control over adaptive logic. A player library adds capabilities and bundle weight; DRM/browser matrices require explicit scope."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Player Controls",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Player Controls; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation.",
+        "accessibility": "Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection."
+      },
+      "no": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "mediaState: idle | loading | playing | paused | buffering | ended | error\ncurrentTime: number\nselectedCaption: string | null\nqualityMode: auto | explicit\nseekGeneration: number",
+        "transitions": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference."
+      },
+      "no": "mediaState: idle | loading | playing | paused | buffering | ended | error\ncurrentTime: number\nselectedCaption: string | null\nqualityMode: auto | explicit\nseekGeneration: number\nWrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads."
+      },
+      "no": "PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/videos/{id}/playback\nvideo ID and secure authenticated session if required",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {videoId:\"v1\",manifestUrl:\"https://media.example/manifest.m3u8\",expiresAt:\"...\",duration:3600,tracks:[{kind:\"captions\",lang:\"en\",url:\"...\"}]}"
+    },
+    {
+      "i": "extra",
+      "t": "ui_component",
+      "l": "Media Adapter",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "responsibility": "Own HTMLVideoElement, media events and adaptive playback integration",
+        "contract": "load(videoId), play():Promise, seek(time), dispose(); emits playback events",
+        "rendering": "Native video surface; throttle time-display updates",
+        "accessibility": "Native control fallback, caption track support, keyboard commands"
+      },
+      "no": "Keep imperative media lifecycle isolated from declarative page and controls."
+    },
+    {
+      "i": "media-cdn",
+      "t": "cdn",
+      "l": "Media CDN",
+      "x": 1120,
+      "y": -140,
+      "no": "Native media stack or adaptive player fetches the authorized manifest and segments. Backend metadata does not carry the movie bytes.",
+      "c": {}
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "mutate",
+      "s": "network",
+      "d": "backend",
+      "l": "mutation / reconciliation",
+      "p": "HTTP",
+      "a": "write",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "internal"
+    },
+    {
+      "i": "media-download",
+      "s": "extra",
+      "d": "media-cdn",
+      "p": "HTTP",
+      "m": "a",
+      "l": "manifest + adaptive segments"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "video-player.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadVideoPlayer(input, signal)",
+      "request": "video ID and secure authenticated session if required",
+      "response": "{videoId:\"v1\",manifestUrl:\"https://media.example/manifest.m3u8\",expiresAt:\"...\",duration:3600,tracks:[{kind:\"captions\",lang:\"en\",url:\"...\"}]}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/videos/{id}/playback",
+      "request": "video ID and secure authenticated session if required",
+      "response": "{videoId:\"v1\",manifestUrl:\"https://media.example/manifest.m3u8\",expiresAt:\"...\",duration:3600,tracks:[{kind:\"captions\",lang:\"en\",url:\"...\"}]}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference."
+    },
+    {
+      "id": "write",
+      "ownerNodeId": "backend",
+      "method": "PUT",
+      "path": "/videos/{id}/progress",
+      "request": "{positionSeconds:245,sessionId:\"play1\",updatedAt:\"...\"}",
+      "response": "{videoId:\"v1\",positionSeconds:245}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads."
+    }
+  ],
+  "entities": [
+    {
+      "name": "PlaybackState",
+      "storeNodeId": "state",
+      "fields": "mediaState: idle | loading | playing | paused | buffering | ended | error\ncurrentTime: number\nselectedCaption: string | null\nqualityMode: auto | explicit\nseekGeneration: number\nTransitions: Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference."
+    },
+    {
+      "name": "PlaybackMetadata",
+      "storeNodeId": "cache",
+      "fields": "PlaybackMetadata: {videoId,manifestUrl,expiresAt,tracks,duration,poster}; short-lived account-scoped cache; never cache entitlement forever; the media element is authoritative for current playback/buffer state."
+    }
+  ]
+}

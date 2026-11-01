@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "overview": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection. The graph separates browser interaction state, server query state and the existing backend. It is one defensible approach; equivalent boundaries and well-argued alternatives are welcome.",
+  "limitations": [
+    "Design checks inspect structure and written evidence only; they do not execute a UI or prove accessibility/performance."
+  ],
+  "estimation": [
+    {
+      "assumption": "10 keystrokes in 1 s; 200 ms quiet-period debounce",
+      "calculation": "10 immediate input updates; often 1 lookup after the burst, but pauses can trigger more",
+      "result": "Reduces request bursts without delaying local typing",
+      "implication": "Measure input responsiveness and request count under variable latency; debounce is not a correctness mechanism."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "browser",
+      "purpose": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies.",
+      "rationale": "Own this responsibility at the Browser / User boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "view",
+      "purpose": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection. Performance plan: Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion. Accessibility: Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely. Failure recovery: Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text. Trade-off: Fetch on each change with request identity for small workloads; debounce saves traffic but delays first suggestions. A headless controlled component supports reuse while a wrapper owns caching.",
+      "rationale": "Own this responsibility at the Autocomplete / Typeahead View boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "detail",
+      "purpose": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+      "rationale": "Own this responsibility at the Suggestion List boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "query: string\nactiveOptionId: string | null\nopen: boolean\nrequestGeneration: number\nselectedValue: {id,label} | null\nDebounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+      "rationale": "Own this responsibility at the Interaction State boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "SuggestionPage: {query, locale, items: [{id,label,description}], fetchedAt}; cache key [suggestions, locale, normalizedQuery]; bounded LRU cache, short freshness window; never reuse across different tenants.",
+      "rationale": "Own this responsibility at the Server State Cache boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "network",
+      "purpose": "Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text.",
+      "rationale": "Own this responsibility at the API Adapter boundary; keep communication explicit through the diagrammed dependency."
+    },
+    {
+      "nodeId": "backend",
+      "purpose": "Server owns authorization and durable business rules. {items:[{id:\"p1\",label:\"Camera\",description:\"Cameras\"}]}",
+      "rationale": "Own this responsibility at the Existing Backend API boundary; keep communication explicit through the diagrammed dependency."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "SearchInteraction",
+      "purpose": "Single source of truth for SearchInteraction; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "query: string\nactiveOptionId: string | null\nopen: boolean\nrequestGeneration: number\nselectedValue: {id,label} | null\nTransitions: Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    },
+    {
+      "entityName": "SuggestionPage",
+      "purpose": "Single source of truth for SuggestionPage; do not duplicate it in child components.",
+      "accessPatterns": [
+        "Read by the feature view through its owner.",
+        "Update via explicit transition or query reconciliation, keyed by stable identity."
+      ],
+      "constraints": [
+        "SuggestionPage: {query, locale, items: [{id,label,description}], fetchedAt}; cache key [suggestions, locale, normalizedQuery]; bounded LRU cache, short freshness window; never reuse across different tenants.",
+        "Reset or partition state by account/tenant/document where relevant."
+      ],
+      "relationships": [
+        "Interaction state references server entities by stable ID; derived views are computed."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "component",
+      "purpose": "Browser contract: autocomplete.mount(props, events)",
+      "rationale": "Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely."
+    },
+    {
+      "apiId": "adapter",
+      "purpose": "Browser contract: loadAutocomplete(input, signal)",
+      "rationale": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "apiId": "read",
+      "purpose": "Existing server interface: /suggestions?q={query}&locale={locale}&limit=10",
+      "rationale": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Add the browser and feature root",
+      "explanation": "Architecture → add Web Client and UI Component. Name the component Autocomplete / Typeahead View. Its public contract owns the entry interaction; keep backend internals outside this boundary.",
+      "nodeIds": ["browser", "view"],
+      "edgeIds": ["open"],
+      "apiIds": ["component"],
+      "entityNames": []
+    },
+    {
+      "title": "Split presentation from interaction state",
+      "explanation": "Add Suggestion List as a UI Component and Interaction State as Client State. In State Model add SearchInteraction owned by Interaction State. Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+      "nodeIds": ["detail", "state"],
+      "edgeIds": ["render", "intent"],
+      "apiIds": [],
+      "entityNames": ["SearchInteraction"]
+    },
+    {
+      "title": "Add the query, adapter and external contract",
+      "explanation": "Add Query Cache, API Client and External Service named Existing Backend API. Put the local wrapper under API Adapter and the HTTP contract under the external backend. Assign SuggestionPage to Server State Cache. SuggestionPage: {query, locale, items: [{id,label,description}], fetchedAt}; cache key [suggestions, locale, normalizedQuery]; bounded LRU cache, short freshness window; never reuse across different tenants.",
+      "nodeIds": ["cache", "network", "backend"],
+      "edgeIds": ["query", "fetch", "http"],
+      "apiIds": ["adapter", "read"],
+      "entityNames": ["SuggestionPage"]
+    },
+    {
+      "title": "Review performance, access and recovery",
+      "explanation": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection. Performance plan: Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion. Accessibility: Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely. Failure recovery: Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text. Trade-off: Fetch on each change with request identity for small workloads; debounce saves traffic but delays first suggestions. A headless controlled component supports reuse while a wrapper owns caching.",
+      "nodeIds": [],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "load",
+      "title": "Initial data load and rendering",
+      "apiId": "read",
+      "steps": [
+        {
+          "title": "Enter the feature",
+          "explanation": "The browser mounts the feature; establish identity, locale and initial state. Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Resolve the current query",
+          "explanation": "The view observes the current query key. Cache hits render immediately; misses invoke the abortable API wrapper. SuggestionPage: {query, locale, items: [{id,label,description}], fetchedAt}; cache key [suggestions, locale, normalizedQuery]; bounded LRU cache, short freshness window; never reuse across different tenants.",
+          "nodeIds": ["view", "cache", "network"],
+          "edgeIds": ["query", "fetch"]
+        },
+        {
+          "title": "Fetch and commit only current results",
+          "explanation": "Backend response returns along the call path. Validate shape and identity before cache commit; responses are implicit, not a second request edge. Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text.",
+          "nodeIds": ["network", "backend"],
+          "edgeIds": ["http"]
+        }
+      ]
+    },
+    {
+      "id": "interaction",
+      "title": "Local interaction, state transition and UI update",
+      "apiId": "component",
+      "steps": [
+        {
+          "title": "Receive user intent",
+          "explanation": "Debounce remote lookups while keeping input updates immediate. Use combobox/listbox semantics, labelled input, aria-expanded, aria-controls and aria-activedescendant; Arrow keys move active option, Enter commits, Escape closes. Keep DOM focus in input and announce result count politely.",
+          "nodeIds": ["browser", "view"],
+          "edgeIds": ["open"]
+        },
+        {
+          "title": "Apply the owning transition",
+          "explanation": "Debounce the fetch by an illustrative 200 ms; abort the previous lookup and also compare requestGeneration before committing. A late response for ca must never overwrite cam. Input text remains separate from the committed selection.",
+          "nodeIds": ["view", "state"],
+          "edgeIds": ["intent"]
+        },
+        {
+          "title": "Render controlled child state",
+          "explanation": "Mid-range phone, long-tail latency, at most 10 suggestions mounted; target immediate input feedback before network completion. Child events return to the owner; focus and selection use stable identities.",
+          "nodeIds": ["view", "detail"],
+          "edgeIds": ["render"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "An older slow request succeeds after a newer fast one",
+      "handling": "Ignore obsolete generations even if abort arrived too late; show retry for the current query only and keep typed text.",
+      "nodeIds": ["view", "state", "network"]
+    },
+    {
+      "scenario": "Route or identity changes while work is in flight",
+      "handling": "Dispose subscriptions, abort obsolete reads and ignore old generations; partition/clear private cache before showing a new account. Preserve only explicitly safe drafts.",
+      "nodeIds": ["view", "cache", "network"]
+    }
+  ],
+  "alternatives": "Fetch on each change with request identity for small workloads; debounce saves traffic but delays first suggestions. A headless controlled component supports reuse while a wrapper owns caching.",
+  "sectionApplicability": {}
+}

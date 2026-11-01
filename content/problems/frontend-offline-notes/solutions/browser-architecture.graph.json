@@ -1,0 +1,254 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Offline-First Notes App View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a notes frontend that opens and edits existing notes offline, survives refresh and synchronizes on reconnect. A sync API supports versions and tombstones. Explain local durability, concurrent edits, quota failures and service worker updates.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee.",
+        "accessibility": "Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive."
+      },
+      "no": "Coordinates this feature. Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement. Alternative: Online-first is simpler when offline edits are unnecessary. CRDTs help concurrent rich editing but add substantial complexity for basic notes."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Notes Editor",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Notes Editor; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee.",
+        "accessibility": "Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive."
+      },
+      "no": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "activeNoteId: string | null\neditorDraft: string\nsyncStatus: local | syncing | synced | conflict | failed\nconflictByNote: Map<id,{local,remote}>",
+        "transitions": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement."
+      },
+      "no": "activeNoteId: string | null\neditorDraft: string\nsyncStatus: local | syncing | synced | conflict | failed\nconflictByNote: Map<id,{local,remote}>\nWrite Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded."
+      },
+      "no": "SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/notes/changes?cursor={cursor}\naccount-scoped incremental cursor; bounded limit",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {changes:[{id:\"n1\",version:5,body:\"Notes\",deleted:false}],nextCursor:\"s2\"}"
+    },
+    {
+      "i": "extra",
+      "t": "browser_storage",
+      "l": "Notes & Outbox",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "engine": "IndexedDB; notes, outbox and syncCursor stores",
+        "schema": "Atomic edit+mutation transaction; stable mutationId; expectedVersion; tombstones; versioned migration",
+        "retention": "Bound outbox; surface quota errors; per-account partition and explicit sign-out policy; export recovery"
+      },
+      "no": "Local database owns durable notes and pending sync operations, independently from render state."
+    },
+    {
+      "i": "recovery",
+      "t": "service_worker",
+      "x": 1120,
+      "y": 80,
+      "l": "Offline App Shell",
+      "c": {
+        "scope": "Same-origin versioned application shell",
+        "cachePolicy": "Precache public shell assets; do not blanket-cache private API requests",
+        "updates": "Versioned caches; prompt safe reload after local drafts are persisted"
+      },
+      "no": "Cache only the shell needed to reopen offline; data and outbox stay in IndexedDB."
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "mutate",
+      "s": "network",
+      "d": "backend",
+      "l": "mutation / reconciliation",
+      "p": "HTTP",
+      "a": "write",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "internal"
+    },
+    {
+      "i": "recovery-edge",
+      "s": "view",
+      "d": "recovery",
+      "p": "internal",
+      "l": "offline lifecycle / persistence"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "offline-notes.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadOfflineNotes(input, signal)",
+      "request": "account-scoped incremental cursor; bounded limit",
+      "response": "{changes:[{id:\"n1\",version:5,body:\"Notes\",deleted:false}],nextCursor:\"s2\"}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/notes/changes?cursor={cursor}",
+      "request": "account-scoped incremental cursor; bounded limit",
+      "response": "{changes:[{id:\"n1\",version:5,body:\"Notes\",deleted:false}],nextCursor:\"s2\"}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "cursor",
+      "note": "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement."
+    },
+    {
+      "id": "write",
+      "ownerNodeId": "backend",
+      "method": "POST",
+      "path": "/notes/mutations",
+      "request": "{mutationId:\"mut1\",noteId:\"n1\",expectedVersion:4,body:\"Edited\",deleted:false}",
+      "response": "{mutationId:\"mut1\",noteId:\"n1\",version:5}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded."
+    }
+  ],
+  "entities": [
+    {
+      "name": "NoteEditorState",
+      "storeNodeId": "state",
+      "fields": "activeNoteId: string | null\neditorDraft: string\nsyncStatus: local | syncing | synced | conflict | failed\nconflictByNote: Map<id,{local,remote}>\nTransitions: Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement."
+    },
+    {
+      "name": "SyncPage",
+      "storeNodeId": "cache",
+      "fields": "SyncResponse: {changes:[{id,version,body,deleted}],nextCursor}; query cache is a transient sync buffer; IndexedDB owns local notes and durable outbox; apply a sync page and cursor in one transaction."
+    },
+    {
+      "name": "LocalNoteAndOutbox",
+      "storeNodeId": "extra",
+      "fields": "Note {id, accountId, title, body, baseVersion, localUpdatedAt, deleted}\nOutboxMutation {mutationId, noteId, expectedVersion, payload, status, retryAt}\nSyncCursor {accountId, cursor}\nAtomic transaction: write Note + OutboxMutation. Apply remote changes + cursor atomically. Keep tombstones until a safe compaction watermark."
+    }
+  ]
+}

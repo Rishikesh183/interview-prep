@@ -1,0 +1,45 @@
+{
+  "id": "frontend-offline-notes",
+  "number": 43,
+  "title": "Offline-First Notes App",
+  "difficulty": "hard",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "offline", "browser-storage", "sync"],
+  "prompt": "Design a notes frontend that opens and edits existing notes offline, survives refresh and synchronizes on reconnect. A sync API supports versions and tombstones. Explain local durability, concurrent edits, quota failures and service worker updates. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Read and edit locally without waiting for network",
+    "Atomically persist note edits and a pending mutation outbox",
+    "Sync with version conflicts and explicit deletion tombstones"
+  ],
+  "nonFunctionalReqs": [
+    "1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee.",
+    "Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive.",
+    "On 409 keep both versions for merge; never silently overwrite. On transaction failure retain in-memory draft, show unsaved and allow export. A network online flag alone does not prove sync succeeded."
+  ],
+  "scale": {
+    "notes": "1,000 notes averaging 10 KB text; offline app shell; browser storage can be evicted and is not a backup guarantee.",
+    "storage": "1,000 × 10 KB note text; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client", "browser_storage"],
+  "deepDives": [
+    "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+    "Local and remote versions diverge, or storage write fails",
+    "Online-first is simpler when offline edits are unnecessary. CRDTs help concurrent rich editing but add substantial complexity for basic notes."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Write Note and OutboxMutation atomically to IndexedDB before acknowledging saved locally. A foreground sync coordinator retries stable mutation IDs, uses expectedVersion and stores remote tombstones. Service worker caches the versioned app shell, not arbitrary private API responses; background sync is optional enhancement.",
+    "Keyboard-accessible note list/editor, labelled sync and conflict status, explicit unsaved errors and focus preservation when remote notes arrive.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

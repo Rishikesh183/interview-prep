@@ -12,7 +12,7 @@ const clone = () => structuredClone(reference);
 describe("reference walkthrough integrity", () => {
   it("covers every published approach with a complete graph and authored walkthrough", () => {
     const references = problems.flatMap((p) => p.references);
-    expect(references).toHaveLength(61);
+    expect(references).toHaveLength(76);
     for (const ref of references) {
       expect(ref.graph?.nodes.length, ref.id).toBeGreaterThan(0);
       expect(ref.walkthrough?.version, ref.id).toBe(1);

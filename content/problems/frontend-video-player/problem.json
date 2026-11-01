@@ -1,0 +1,45 @@
+{
+  "id": "frontend-video-player",
+  "number": 40,
+  "title": "Video Player & Watch Page",
+  "difficulty": "hard",
+  "priority": false,
+  "track": "frontend",
+  "tags": ["frontend", "media", "state-machines", "performance"],
+  "prompt": "Design a video watch frontend with playback, seeking, quality selection, captions and resume position. Transcoding, CDN distribution and DRM services are external dependencies. Explain native media behavior, control state and failure recovery. Draw the component/data-flow architecture, define state owners and contracts, and explain performance, accessibility and recovery. No UI coding is required.",
+  "functionalReqs": [
+    "Load playback metadata and choose native or adaptive playback support",
+    "Expose play/pause/seek/captions and responsive controls",
+    "Persist safe resume progress and recover from expired media authorization"
+  ],
+  "nonFunctionalReqs": [
+    "One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation.",
+    "Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection.",
+    "Refresh authorization once, preserve intended time, resume only after metadata is valid; show retry and keep controls operable. A new video ID cancels old loads."
+  ],
+  "scale": {
+    "notes": "One active player per page; lazy comments/recommendations, defer optional player modules; bound prefetch and release the previous source on navigation.",
+    "storage": "5 Mb/s stream; illustrative 20 s buffered media; illustrative interview assumptions, not measured guarantees."
+  },
+  "outOfScope": [
+    "Backend sharding, ranking algorithms and infrastructure provisioning",
+    "Implementing a production UI inside this exercise"
+  ],
+  "keyComponents": ["ui_component", "client_store", "query_cache", "api_client"],
+  "deepDives": [
+    "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+    "Signed manifest expires during a seek or network drops",
+    "Native playback minimizes complexity but gives less control over adaptive logic. A player library adds capabilities and bundle weight; DRM/browser matrices require explicit scope."
+  ],
+  "rubricFocus": [
+    "Clear component and state ownership",
+    "Wrap the native video element in a media adapter. Feed actual media events into a state machine instead of assuming play() succeeded. Use native HLS where supported or a compatible adaptive player via Media Source Extensions; quality selection follows capabilities and user preference.",
+    "Prefer usable native controls as fallback, labelled custom controls, keyboard seeking/volume and visible focus. Provide captions and avoid autoplay with sound; handle play() rejection.",
+    "Budget justified by workload; explicit failure and recovery behavior"
+  ],
+  "prerequisites": [
+    "frontend-state-and-contracts",
+    "frontend-performance",
+    "frontend-recovery-and-offline"
+  ]
+}

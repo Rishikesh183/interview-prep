@@ -1,0 +1,249 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Shopping Cart & Checkout View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design the frontend for a cart and multi-step checkout. Pricing, stock reservations, payment processing and order creation are server capabilities. Show how the UI prevents duplicate actions and recovers after refresh or uncertain payment outcomes.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke.",
+        "accessibility": "Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission."
+      },
+      "no": "Coordinates this feature. Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt. Alternative: Optimistic quantity updates feel fast but need version reconciliation. Pessimistic final checkout is clearer where price and stock must be confirmed."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Checkout Form",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Checkout Form; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "Cart of up to 100 lines; delay payment SDK load until needed, avoid full-page rerenders on every keystroke.",
+        "accessibility": "Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission."
+      },
+      "no": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "step: address | delivery | payment | confirmation\ndraftAddress: safe form fields\nsubmitState: idle | submitting | pending | confirmed | failed\ncheckoutAttemptId: string\nfieldErrors: Record<string,string>",
+        "transitions": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt."
+      },
+      "no": "step: address | delivery | payment | confirmation\ndraftAddress: safe form fields\nsubmitState: idle | submitting | pending | confirmed | failed\ncheckoutAttemptId: string\nfieldErrors: Record<string,string>\nModel checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically."
+      },
+      "no": "CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/cart\nauthenticated session; optional conditional version",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {cartId:\"cart1\",version:7,lines:[{sku:\"sku1\",quantity:2,unitPrice:500}],totals:{amount:1000,currency:\"INR\"},quoteExpiresAt:\"...\"}"
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "mutate",
+      "s": "network",
+      "d": "backend",
+      "l": "mutation / reconciliation",
+      "p": "HTTP",
+      "a": "write",
+      "m": "a"
+    },
+    {
+      "i": "cart-edit-call",
+      "s": "network",
+      "d": "backend",
+      "p": "HTTP",
+      "m": "a",
+      "a": "cart-edit",
+      "l": "PATCH /cart/lines/{sku}"
+    },
+    {
+      "i": "attempt-status-call",
+      "s": "network",
+      "d": "backend",
+      "p": "HTTP",
+      "m": "a",
+      "a": "attempt-status",
+      "l": "GET /checkout/attempts/{checkoutAttemptId}"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "checkout.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Native form labels and autocomplete attributes, inline error associations, focus first invalid field, step headings and an announced pending state. A visual spinner alone does not communicate submission."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadCheckout(input, signal)",
+      "request": "authenticated session; optional conditional version",
+      "response": "{cartId:\"cart1\",version:7,lines:[{sku:\"sku1\",quantity:2,unitPrice:500}],totals:{amount:1000,currency:\"INR\"},quoteExpiresAt:\"...\"}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/cart",
+      "request": "authenticated session; optional conditional version",
+      "response": "{cartId:\"cart1\",version:7,lines:[{sku:\"sku1\",quantity:2,unitPrice:500}],totals:{amount:1000,currency:\"INR\"},quoteExpiresAt:\"...\"}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt."
+    },
+    {
+      "id": "write",
+      "ownerNodeId": "backend",
+      "method": "POST",
+      "path": "/checkout/attempts",
+      "request": "Idempotency-Key: checkoutAttemptId; {cartId,expectedVersion,addressId,paymentToken}",
+      "response": "{attemptId:\"a1\",status:\"pending\",orderId:null}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Show pending confirmation, reuse checkoutAttemptId to query/retry safely; server verifies order ownership. Do not double-charge by generating a fresh attempt automatically."
+    },
+    {
+      "id": "cart-edit",
+      "ownerNodeId": "backend",
+      "method": "PATCH",
+      "path": "/cart/lines/{sku}",
+      "request": "{quantity:3,expectedCartVersion:7,mutationId:\"qty1\"}",
+      "response": "{cartId:\"cart1\",version:8,totals:{amount:1500,currency:\"INR\"}}",
+      "statusCodes": "200/201 success; 400 invalid payload; 401/403 rejected access; 404/410 missing or expired; 409 conflict; 429/5xx retry within policy",
+      "auth": true,
+      "note": "Reconcile quantity edits against a cart version; use authoritative totals and show stock/price corrections before final confirmation."
+    },
+    {
+      "id": "attempt-status",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/checkout/attempts/{checkoutAttemptId}",
+      "request": "Authenticated session; original checkoutAttemptId",
+      "response": "{attemptId:\"a1\",status:\"confirmed\",orderId:\"order1\"}",
+      "statusCodes": "200/201 success; 400 invalid payload; 401/403 rejected access; 404/410 missing or expired; 409 conflict; 429/5xx retry within policy",
+      "auth": true,
+      "note": "After timeout poll the existing attempt within a bounded budget; server validates ownership. Do not mint a fresh payment attempt while the old outcome is uncertain."
+    }
+  ],
+  "entities": [
+    {
+      "name": "CheckoutState",
+      "storeNodeId": "state",
+      "fields": "step: address | delivery | payment | confirmation\ndraftAddress: safe form fields\nsubmitState: idle | submitting | pending | confirmed | failed\ncheckoutAttemptId: string\nfieldErrors: Record<string,string>\nTransitions: Model checkout as explicit states and guard transitions. Disable repeated submit while pending but also reuse one idempotency key for retries of the same attempt. Payment provider fields tokenize sensitive input; query order status after an ambiguous timeout before starting a new attempt."
+    },
+    {
+      "name": "CartSnapshot",
+      "storeNodeId": "cache",
+      "fields": "CartSnapshot: {cartId,version,lines:[{sku,quantity,unitPrice}],totals,quoteExpiresAt}; key [cart,accountId]; server owns prices, stock and final totals; never persist card data or trust client totals."
+    }
+  ]
+}

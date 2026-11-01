@@ -87,6 +87,7 @@ export function validateWalkthrough(ref: ReferenceApproach): string[] {
       !store ||
       ![
         ...GROUPS["@storage"],
+        ...GROUPS["@frontend-state"],
         "cache",
         "coordination",
         "event_stream",

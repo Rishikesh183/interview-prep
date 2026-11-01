@@ -5,6 +5,18 @@
 const DATABASE = ["sql_db", "nosql_kv", "nosql_document", "wide_column"];
 
 export const GROUPS: Record<string, readonly string[]> = {
+  "@frontend": [
+    "ui_component",
+    "client_store",
+    "query_cache",
+    "api_client",
+    "browser_storage",
+    "web_worker",
+    "service_worker",
+    "realtime_client",
+    "router",
+  ],
+  "@frontend-state": ["ui_component", "client_store", "query_cache", "browser_storage", "router"],
   "@client": ["web_client", "mobile_client"],
   "@database": DATABASE,
   "@queue": ["message_queue", "event_stream", "pub_sub"],

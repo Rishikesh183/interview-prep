@@ -29,6 +29,7 @@ export const ProtocolSchema = z.enum([
   "Kafka",
   "SQL",
   "internal",
+  "postMessage",
   "WebRTC",
   "UDP",
 ]);

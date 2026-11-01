@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/", label: "Problems" },
   { href: "/history", label: "History" },
   { href: "/progress", label: "Progress" },
+  { href: "/leaderboard", label: "Leaderboard" },
   { href: "/sandbox", label: "Sandbox" },
   { href: "/learn", label: "Learn" },
 ];
@@ -21,11 +22,14 @@ export function AppHeader() {
   const pathname = usePathname();
   return (
     <header className="border-b">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-        <Link href="/" className="font-semibold tracking-tight">
+      <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-3 px-4 py-2 sm:flex-nowrap sm:gap-6 sm:py-0">
+        <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight sm:text-base">
           SysDesign Arena
         </Link>
-        <nav className="flex min-w-0 gap-4 overflow-x-auto text-sm whitespace-nowrap">
+        <nav
+          aria-label="Main navigation"
+          className="order-last flex w-full min-w-0 gap-4 overflow-x-auto py-2 text-sm whitespace-nowrap sm:order-none sm:w-auto sm:py-0"
+        >
           {LINKS.map((l) => (
             <Link
               key={l.href}

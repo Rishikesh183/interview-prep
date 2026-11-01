@@ -2,12 +2,12 @@
 
 import { Check } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import { STAGES, stageDone } from "@/lib/workspace/stages";
+import { stagesFor, stageDone } from "@/lib/workspace/stages";
 import { cn } from "@/lib/utils";
 import { useAttemptStore } from "@/store/attempt";
 import { useWorkspaceStore } from "@/store/workspace";
 
-export function StageStepper() {
+export function StageStepper({ track = "backend" }: { track?: import("@/lib/schema").Track }) {
   const meta = useAttemptStore((s) => s.meta);
   const setStage = useAttemptStore((s) => s.setStage);
   const counts = useWorkspaceStore(
@@ -22,9 +22,9 @@ export function StageStepper() {
 
   return (
     <ol className="flex items-center gap-1">
-      {STAGES.map((stage, i) => {
+      {stagesFor(track).map((stage, i) => {
         const active = meta.stage === stage.id;
-        const done = stageDone(stage.id, progress);
+        const done = stageDone(stage.id, progress, track);
         return (
           <li key={stage.id} className="flex items-center gap-1">
             {i > 0 && <span className="bg-border h-px w-3" aria-hidden />}

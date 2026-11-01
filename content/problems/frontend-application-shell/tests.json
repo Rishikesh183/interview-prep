@@ -1,0 +1,114 @@
+[
+  {
+    "id": "component-flow",
+    "title": "User interaction reaches a browser view",
+    "kind": "core",
+    "check": {
+      "pathExists": {
+        "from": "@client",
+        "to": ["ui_component", "router"]
+      }
+    },
+    "failHint": "Connect the browser entry to the component that owns the interaction."
+  },
+  {
+    "id": "state-ownership",
+    "title": "State ownership is represented",
+    "kind": "core",
+    "check": {
+      "allOf": [
+        {
+          "hasNode": "@frontend-state"
+        },
+        {
+          "textMentions": {
+            "pattern": "owner|state|scope|query.key|cache.key",
+            "in": ["notes", "labels", "apis", "entities"]
+          }
+        }
+      ]
+    },
+    "failHint": "Separate local, shared, URL and server state; identify its owner and shape."
+  },
+  {
+    "id": "data-contract",
+    "title": "A data boundary and contract are documented",
+    "kind": "core",
+    "check": {
+      "allOf": [
+        {
+          "pathExists": {
+            "from": ["ui_component", "router"],
+            "to": ["external_service", "api_client", "browser_storage"]
+          }
+        },
+        {
+          "apiMatch": {
+            "path": ".+"
+          }
+        }
+      ]
+    },
+    "failHint": "Show where data comes from and define its network or local contract; alternatives can use a local repository."
+  },
+  {
+    "id": "topic-correctness",
+    "title": "The central interaction strategy is explained",
+    "kind": "core",
+    "check": {
+      "textMentions": {
+        "pattern": "code.splitt|modular.monolith|feature.boundar",
+        "in": ["notes", "labels", "apis", "entities"]
+      }
+    },
+    "failHint": "Explain: Start with a modular monolith, route-level code splitting and explicit feature exports. The shell owns navigation/session/error boundaries; feature modules own their state and APIs. SSR public discovery routes selectively and CSR authenticated tools when appropriate. Adopt independently deployed microfrontends only for concrete team/deploy constraints."
+  },
+  {
+    "id": "browser-efficiency",
+    "title": "Browser workload and rendering strategy are addressed",
+    "kind": "core",
+    "check": {
+      "textMentions": {
+        "pattern": "virtualiz|window|bound|budget|code.splitt|debounce|prefetch|tree.shak|batch",
+        "in": ["notes", "labels", "apis", "entities"]
+      }
+    },
+    "failHint": "Explain how mounted DOM, request volume, bytes or retained memory are bounded."
+  },
+  {
+    "id": "accessible-interaction",
+    "title": "Keyboard, focus or semantic behavior is addressed",
+    "kind": "core",
+    "check": {
+      "textMentions": {
+        "pattern": "keyboard|aria-|focus|screen.reader",
+        "in": ["notes", "labels", "apis", "entities"]
+      }
+    },
+    "failHint": "Explain keyboard navigation, focus transitions and semantic states for the main interaction."
+  },
+  {
+    "id": "failure-recovery",
+    "title": "Failure recovery is explicit",
+    "kind": "bonus",
+    "check": {
+      "textMentions": {
+        "pattern": "retry|reconnect|conflict|quota|abort|rollback|obsolete",
+        "in": ["notes", "labels", "apis", "entities"]
+      }
+    },
+    "failHint": "Walk through a failed or stale operation and show what remains usable."
+  },
+  {
+    "id": "tradeoff",
+    "title": "A reasonable alternative is justified",
+    "kind": "bonus",
+    "check": {
+      "textMentions": {
+        "pattern": "trade.off|alternative|simpler|complexity|but",
+        "in": ["notes", "labels", "apis", "entities"]
+      }
+    },
+    "failHint": "State a simpler alternative and when its constraints would be acceptable."
+  }
+]

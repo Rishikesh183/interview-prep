@@ -32,7 +32,15 @@ const SECTIONS: { key: keyof Reqs; label: string; help: string; placeholder: str
   },
 ];
 
-export function Requirements() {
+export function Requirements({ track = "backend" }: { track?: import("@/lib/schema").Track }) {
+  const frontend = track === "frontend";
+  const examples: Record<keyof Reqs, string> = {
+    questions: "Target devices and network?\nKeyboard-only journey?\nOffline support?",
+    functional: "Load data and handle user actions\nLoading, empty and error states",
+    nonFunctional:
+      "Responsive input on target devices\nKeyboard and screen-reader access\nBounded retained data",
+    outOfScope: "Backend infrastructure and ranking algorithms",
+  };
   const requirements = useAttemptStore((s) => s.meta?.requirements);
   const setRequirements = useAttemptStore((s) => s.setRequirements);
   if (!requirements) return null;
@@ -49,8 +57,12 @@ export function Requirements() {
             key={s.key}
             id={`req-${s.key}`}
             label={s.label}
-            help={s.help}
-            placeholder={s.placeholder}
+            help={
+              frontend && s.key === "nonFunctional"
+                ? "Rendering, responsiveness, accessibility and recovery."
+                : s.help
+            }
+            placeholder={frontend ? examples[s.key] : s.placeholder}
             value={requirements[s.key]}
             onChange={(lines) => setRequirements(s.key, lines)}
           />

@@ -1,0 +1,270 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "browser",
+      "t": "web_client",
+      "l": "Browser / User",
+      "x": 0,
+      "y": 130,
+      "c": {},
+      "no": "Keyboard, pointer, touch and assistive-technology entry point. Client architecture only; backend internals are external dependencies."
+    },
+    {
+      "i": "view",
+      "t": "ui_component",
+      "l": "Chat Application Frontend View",
+      "x": 280,
+      "y": 130,
+      "c": {
+        "responsibility": "Design a browser chat client with conversation switching, history, sending and reconnecting. The messaging service handles durable delivery and authorization. Concentrate on browser message state, ordering, scroll behavior and an honest delivery UI.",
+        "contract": "props: identity, locale and initial data; events: selection, change, retry; local contract below",
+        "rendering": "50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history.",
+        "accessibility": "Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content."
+      },
+      "no": "Coordinates this feature. Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom. Alternative: Polling is simpler for low-frequency messaging. WebSocket lowers latency but requires backfill, connection lifecycle and multi-tab policy."
+    },
+    {
+      "i": "detail",
+      "t": "ui_component",
+      "l": "Message Timeline",
+      "x": 560,
+      "y": -60,
+      "c": {
+        "responsibility": "Present the focused interaction for Message Timeline; receive explicit state and callbacks from the view.",
+        "contract": "Controlled props for current value/status; emit user intent, never mutate parent data.",
+        "rendering": "50 messages per page; many conversations but only one active visible timeline; batch incoming events and bound DOM/history.",
+        "accessibility": "Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content."
+      },
+      "no": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom."
+    },
+    {
+      "i": "state",
+      "t": "client_store",
+      "l": "Interaction State",
+      "x": 560,
+      "y": 160,
+      "c": {
+        "scope": "Feature-scoped; ephemeral interaction state. Reset on identity/route change; avoid duplicate server state.",
+        "state": "activeConversationId: string\ndraftsByConversation: Map<id,string>\npendingByClientId: Map<id,Message>\nlastSequenceByConversation: Map<id,number>\natBottom: boolean",
+        "transitions": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom."
+      },
+      "no": "activeConversationId: string\ndraftsByConversation: Map<id,string>\npendingByClientId: Map<id,Message>\nlastSequenceByConversation: Map<id,number>\natBottom: boolean\nRender pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom."
+    },
+    {
+      "i": "cache",
+      "t": "query_cache",
+      "l": "Server State Cache",
+      "x": 560,
+      "y": 380,
+      "c": {
+        "queryKey": "MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another.",
+        "freshness": "Explicit per-key freshness; bounded retention; separate loading/empty/error/stale states.",
+        "invalidation": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+      },
+      "no": "MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another."
+    },
+    {
+      "i": "network",
+      "t": "api_client",
+      "l": "API Adapter",
+      "x": 840,
+      "y": 380,
+      "c": {
+        "contract": "/conversations/{id}/messages?before={cursor}\nconversationId and opaque before cursor, limit=50",
+        "cancellation": "Abort obsolete reads; verify identity/query generation before commit; dispose on unmount.",
+        "retries": "Bounded exponential backoff with jitter for safe operations; explicit mutation identity; respect Retry-After."
+      },
+      "no": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+    },
+    {
+      "i": "backend",
+      "t": "external_service",
+      "l": "Existing Backend API",
+      "x": 1120,
+      "y": 380,
+      "c": {},
+      "no": "Server owns authorization and durable business rules. {items:[{id:\"m1\",clientMessageId:\"local1\",sequence:42,body:\"Hi\",senderId:\"u1\"}],nextBeforeCursor:\"c1\",latestSequence:42}"
+    },
+    {
+      "i": "extra",
+      "t": "realtime_client",
+      "l": "Conversation Connection",
+      "x": 840,
+      "y": 80,
+      "c": {
+        "transport": "WebSocket authenticated session; subscribe conversationId and lastSequence",
+        "recovery": "Jittered backoff; reconnect then backfill missing sequence range via API",
+        "ordering": "Dedup server id/clientMessageId; buffer gaps, cleanup on room switch"
+      },
+      "no": "Receive deltas through a disposable conversation subscription; connection state is distinct from durable message state."
+    }
+  ],
+  "e": [
+    {
+      "i": "open",
+      "s": "browser",
+      "d": "view",
+      "l": "User interaction",
+      "p": "internal",
+      "a": "component"
+    },
+    {
+      "i": "render",
+      "s": "view",
+      "d": "detail",
+      "l": "props → / events return",
+      "p": "internal"
+    },
+    {
+      "i": "intent",
+      "s": "view",
+      "d": "state",
+      "l": "read / dispatch intent",
+      "p": "internal"
+    },
+    {
+      "i": "query",
+      "s": "view",
+      "d": "cache",
+      "l": "observe query key",
+      "p": "internal"
+    },
+    {
+      "i": "fetch",
+      "s": "cache",
+      "d": "network",
+      "l": "cache miss / refresh",
+      "p": "internal",
+      "a": "adapter"
+    },
+    {
+      "i": "http",
+      "s": "network",
+      "d": "backend",
+      "l": "HTTP request; result returns",
+      "p": "HTTP",
+      "a": "read",
+      "m": "a"
+    },
+    {
+      "i": "mutate",
+      "s": "network",
+      "d": "backend",
+      "l": "mutation / reconciliation",
+      "p": "HTTP",
+      "a": "write",
+      "m": "a"
+    },
+    {
+      "i": "feature",
+      "s": "view",
+      "d": "extra",
+      "l": "feature dependency",
+      "p": "internal"
+    },
+    {
+      "i": "stream",
+      "s": "extra",
+      "d": "backend",
+      "l": "WebSocket subscription",
+      "p": "WebSocket",
+      "a": "stream",
+      "m": "a"
+    },
+    {
+      "i": "backfill-call",
+      "s": "network",
+      "d": "backend",
+      "p": "HTTP",
+      "m": "a",
+      "a": "backfill",
+      "l": "GET /conversations/{id}/messages?afterSequence={sequence}"
+    }
+  ],
+  "apis": [
+    {
+      "id": "component",
+      "ownerNodeId": "view",
+      "method": "RPC",
+      "path": "chat.mount(props, events)",
+      "request": "{identity,locale,initialData,onChange,onRetry}; controlled values and callbacks where appropriate",
+      "response": "View state plus change/select/retry events; callback payloads are stable IDs, not DOM nodes",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "Label composer and send button, keep keyboard focus while sending, announce relevant new messages politely without rereading history; do not force scroll while the user is reading older content."
+    },
+    {
+      "id": "adapter",
+      "ownerNodeId": "network",
+      "method": "RPC",
+      "path": "loadChat(input, signal)",
+      "request": "conversationId and opaque before cursor, limit=50",
+      "response": "{items:[{id:\"m1\",clientMessageId:\"local1\",sequence:42,body:\"Hi\",senderId:\"u1\"}],nextBeforeCursor:\"c1\",latestSequence:42}",
+      "statusCodes": "Returns value/Promise; rejected or aborted operations must not commit obsolete state",
+      "auth": false,
+      "pagination": "none",
+      "note": "This is the local browser wrapper. HTTP endpoints belong to Existing Backend API; it owns session enforcement."
+    },
+    {
+      "id": "read",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/conversations/{id}/messages?before={cursor}",
+      "request": "conversationId and opaque before cursor, limit=50",
+      "response": "{items:[{id:\"m1\",clientMessageId:\"local1\",sequence:42,body:\"Hi\",senderId:\"u1\"}],nextBeforeCursor:\"c1\",latestSequence:42}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "cursor",
+      "note": "Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom."
+    },
+    {
+      "id": "write",
+      "ownerNodeId": "backend",
+      "method": "POST",
+      "path": "/conversations/{id}/messages",
+      "request": "{clientMessageId:\"local1\",body:\"Hi\"}",
+      "response": "{id:\"m1\",clientMessageId:\"local1\",sequence:42,status:\"accepted\"}",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+    },
+    {
+      "id": "stream",
+      "ownerNodeId": "backend",
+      "method": "WS",
+      "path": "/events/chat",
+      "request": "Authenticated scope, last sequence/event cursor; resume handshake",
+      "response": "{eventId,type,entityId,version,payload}; heartbeat or gap/reset signal",
+      "statusCodes": "200 success; 400 invalid input; 401/403 session or access denied; 409 version conflict when applicable; 429 retry later; 5xx recoverable failure",
+      "auth": true,
+      "pagination": "none",
+      "note": "Dedup by ID, detect sequence gap and fetch missing range; retry a failed send with its original clientMessageId. Subscription cleanup prevents cross-room leakage."
+    },
+    {
+      "id": "backfill",
+      "ownerNodeId": "backend",
+      "method": "GET",
+      "path": "/conversations/{id}/messages?afterSequence={sequence}",
+      "request": "Conversation ID, last contiguous sequence, bounded limit",
+      "response": "{items:[{id:\"m2\",sequence:43,clientMessageId:\"local2\",body:\"Hello\"}],hasMore:false,latestSequence:43}",
+      "statusCodes": "200/201 success; 400 invalid payload; 401/403 rejected access; 404/410 missing or expired; 409 conflict; 429/5xx retry within policy",
+      "auth": true,
+      "note": "Use afterSequence for reconnect gaps, before cursor for older history. Fetch until contiguous, dedup by stable IDs and buffer later events until the gap closes."
+    }
+  ],
+  "entities": [
+    {
+      "name": "ConversationUi",
+      "storeNodeId": "state",
+      "fields": "activeConversationId: string\ndraftsByConversation: Map<id,string>\npendingByClientId: Map<id,Message>\nlastSequenceByConversation: Map<id,number>\natBottom: boolean\nTransitions: Render pending messages under a stable clientMessageId and reconcile the server acknowledgement into the same row. Apply sequence-ordered events, dedup retries and backfill gaps after reconnect. Auto-scroll only if the reader was already near the bottom."
+    },
+    {
+      "name": "MessagePages",
+      "storeNodeId": "cache",
+      "fields": "MessagePages: {byId,orderedIds,nextBeforeCursor}; key [messages,accountId,conversationId]; dedup using server ID and clientMessageId; retain bounded history, never let one conversation response populate another."
+    }
+  ]
+}

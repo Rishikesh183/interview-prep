@@ -5,12 +5,11 @@ import { liveQuery, type Subscription } from "dexie";
 import { create } from "zustand";
 import { db } from "@/lib/db/dexie";
 import { SyncEngine } from "./engine";
-import { isUuid } from "./mapping";
 import { supabaseRemote } from "./supabaseRemote";
 
 /**
- * Background Dexie ↔ Supabase sync (PHASE-2 §1). The canvas never waits on it:
- * local edits are pushed 5s after they settle, immediately on submit, and when the tab hides.
+ * Background sync for compact progress and explicitly saved solutions only.
+ * Drafts, full attempts and history are local-only and never trigger network writes.
  */
 
 export const PUSH_DEBOUNCE_MS = 5000;
@@ -62,26 +61,17 @@ const pushNow = () => {
   return run((e) => e.pushDirty());
 };
 
-/** What changed locally since the last sync; `justSubmitted` triggers an immediate push. */
+/** Watch only cloud-backed records; local history must not trigger network traffic. */
 async function dirtySummary() {
-  const d = db();
-  const [attempts, synced, tombstones, progress, solutions] = await Promise.all([
-    d.attempts.toArray(),
-    d.syncState.toArray(),
-    d.tombstones.count(),
-    d.progress.toArray(),
-    d.mySolutions.toArray(),
+  const [progress, solutions] = await Promise.all([
+    db().progress.toArray(),
+    db().mySolutions.toArray(),
   ]);
   const progressDirty = progress.filter((p) => (p.pushedAt ?? -1) < p.updatedAt).length;
   const solutionsDirty = solutions.filter(
     (s) => s.deletedAt !== undefined || (s.pushedAt ?? -1) < s.updatedAt,
   ).length;
-  const syncedAt = new Map(synced.map((s) => [s.id, s.syncedUpdatedAt]));
-  const dirty = attempts.filter((a) => isUuid(a.id) && (syncedAt.get(a.id) ?? -1) < a.updatedAt);
-  const justSubmitted = dirty.some(
-    (a) => a.submittedAt && a.submittedAt > (syncedAt.get(a.id) ?? -1),
-  );
-  return { count: dirty.length + tombstones + progressDirty + solutionsDirty, justSubmitted };
+  return { count: progressDirty + solutionsDirty, progressChanged: progressDirty > 0 };
 }
 
 export function startSync(client: SupabaseClient, userId: string): void {
@@ -93,9 +83,9 @@ export function startSync(client: SupabaseClient, userId: string): void {
   });
 
   subscription = liveQuery(dirtySummary).subscribe({
-    next: ({ count, justSubmitted }) => {
+    next: ({ count, progressChanged }) => {
       if (!count) return;
-      if (justSubmitted) void pushNow();
+      if (progressChanged) void pushNow();
       else {
         clearTimeout(timer);
         timer = setTimeout(() => void pushNow(), PUSH_DEBOUNCE_MS);
@@ -130,8 +120,8 @@ export function stopSync(): void {
 }
 
 /**
- * Lets a page wait (briefly) for the first pull after sign-in, so a fresh device opens the
- * synced attempt instead of starting a blank one. Never blocks longer than `timeoutMs`.
+ * Lets a page wait (briefly) for best-progress sync after sign-in before computing
+ * solution-unlock and early-peek rules. Attempts themselves are never pulled. Never blocks longer than `timeoutMs`.
  */
 export function waitForInitialSync(timeoutMs = 4000): Promise<void> {
   return Promise.race([initial, new Promise<void>((r) => setTimeout(r, timeoutMs))]);

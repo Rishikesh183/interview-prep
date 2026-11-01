@@ -6,65 +6,72 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Web"
+      "l": "Web",
+      "no": "User-facing caller for news feed (twitter)."
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "Gateway"
+      "l": "Gateway",
+      "no": "Authenticate, apply admission limits and route requests for news feed (twitter)."
     },
     {
       "i": "post",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Post Service"
+      "l": "Post Service",
+      "no": "Implement the owned APIs and coordinate state transitions for news feed (twitter)."
     },
     {
       "i": "feed",
       "t": "service",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Feed Service",
       "no": "Pull model: merge recent posts of followees; celebrity posts cost nothing extra"
     },
     {
       "i": "authorCache",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Recent posts per author",
       "c": {
         "strategy": "write-through",
         "ttl": "48h"
-      }
+      },
+      "no": "Serve derived or transient hot state for news feed (twitter)."
     },
     {
       "i": "posts",
       "t": "wide_column",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Posts",
       "c": {
         "partitionKey": "author_id",
         "clusteringKey": "created_at"
-      }
+      },
+      "no": "Store partitioned ordered records for news feed (twitter)."
     },
     {
       "i": "follows",
       "t": "graph_db",
-      "x": 780,
-      "y": 260,
-      "l": "Follow graph"
+      "x": 840,
+      "y": 360,
+      "l": "Follow graph",
+      "no": "Serve directed relationship traversals for news feed (twitter)."
     },
     {
       "i": "media",
       "t": "object_storage",
-      "x": 780,
-      "y": 390,
-      "l": "Media"
+      "x": 840,
+      "y": 540,
+      "l": "Media",
+      "no": "Persist immutable large objects for news feed (twitter)."
     }
   ],
   "e": [
@@ -72,18 +79,23 @@
       "i": "e1",
       "s": "client",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "gw",
       "d": "post",
+      "a": "a1",
+      "l": "Call Post Service",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "gw",
       "d": "feed",
+      "a": "a2",
+      "l": "Call Feed Service",
       "h": "r>l"
     },
     {
@@ -91,6 +103,7 @@
       "s": "post",
       "d": "posts",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -98,6 +111,7 @@
       "s": "post",
       "d": "authorCache",
       "o": "w",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -105,6 +119,7 @@
       "s": "post",
       "d": "media",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -112,6 +127,7 @@
       "s": "feed",
       "d": "follows",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -119,6 +135,7 @@
       "s": "feed",
       "d": "authorCache",
       "o": "r",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -126,6 +143,7 @@
       "s": "feed",
       "d": "posts",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -134,26 +152,38 @@
       "id": "a1",
       "ownerNodeId": "post",
       "method": "POST",
-      "path": "/v1/tweets",
-      "auth": true
+      "path": "/v1/posts",
+      "request": "{ \"postId\": \"p1\", \"body\": \"hello\", \"mediaKeys\": [] }",
+      "response": "201 { \"postId\": \"p1\", \"createdAt\": \"...\" }",
+      "statusCodes": "201, 400, 409",
+      "auth": true,
+      "idempotent": true,
+      "note": "Use a transactional outbox or replayable event feed so a committed post is not lost from fan-out."
     },
     {
       "id": "a2",
       "ownerNodeId": "feed",
       "method": "GET",
-      "path": "/v1/feed",
+      "path": "/v1/timeline/home",
+      "request": "No request body; ?cursor=42&limit=20",
+      "response": "200 { \"posts\": [], \"nextCursor\": \"43\" }",
+      "statusCodes": "200, 401",
       "auth": true,
-      "pagination": "cursor"
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "Cursor combines stable ordering keys. Hybrid mode merges celebrity posts at read time; pull mode merges every followed author."
     }
   ],
   "entities": [
     {
-      "name": "Tweet",
-      "fields": "author_id, created_at, tweet_id, text"
+      "name": "Post",
+      "fields": "post_id: string PK\nauthor_id: string partition key\nbody: string\nmedia_keys: string[]\ncreated_at: timestamp sort key",
+      "storeNodeId": "posts"
     },
     {
-      "name": "Follows",
-      "fields": "follower, followee"
+      "name": "Follow",
+      "fields": "follower_id: string\nfollowee_id: string\nPK(follower_id, followee_id)",
+      "storeNodeId": "follows"
     }
   ]
 }

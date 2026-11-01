@@ -1,0 +1,219 @@
+{
+  "version": 1,
+  "overview": "room_inventory(listing_id, date, total, reserved) with a version column; booking increments reserved with a conditional update. Search via Elasticsearch fed by CDC from the DB.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative inventory: 1M listings, 365 bookable days.",
+      "calculation": "1,000,000 × 365 = 365M listing-day rows.",
+      "result": "Partition inventory by listing and index stay_date within that partition.",
+      "implication": "Keep search in a derived index; use transactions or exclusion constraints for the authoritative booking decision."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for hotel booking (airbnb).",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for hotel booking (airbnb).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "search",
+      "purpose": "Implement the owned APIs and coordinate state transitions for hotel booking (airbnb).",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "book",
+      "purpose": "Conditional UPDATE ... SET reserved = reserved + 1 WHERE reserved < total AND version = ? (no overbooking)",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "es",
+      "purpose": "Search derived data with query-oriented indexes for hotel booking (airbnb).",
+      "rationale": "Index updates may lag; recheck authoritative availability/permissions before committing user-visible actions."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for hotel booking (airbnb).",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "cdc",
+      "purpose": "Change data capture (Debezium)",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "indexer",
+      "purpose": "Execute background work with bounded concurrency for hotel booking (airbnb).",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "psp",
+      "purpose": "External system boundary for hotel booking (airbnb).",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "RoomInventory",
+      "purpose": "Per-day room availability for multi-room inventory.",
+      "accessPatterns": ["Read dates in a stay; atomically increment every requested night."],
+      "constraints": [
+        "Check reserved < total for all nights in one transaction; rollback the whole reservation if any night is unavailable."
+      ],
+      "relationships": [
+        "A Reservation covers each listing_id/stay_date row in its half-open stay interval."
+      ]
+    },
+    {
+      "entityName": "Reservation",
+      "purpose": "A guest booking and its payment lifecycle.",
+      "accessPatterns": ["Create a temporary hold; confirm or expire by reservation ID."],
+      "constraints": [
+        "Idempotency key prevents duplicate reservations; payment failure releases capacity in the same state transition."
+      ],
+      "relationships": [
+        "Own the inventory increments or CalendarBlock ranges until confirmation or expiry."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Discover candidate listings.",
+      "rationale": "Search availability is a hint; authoritative availability is checked again at reservation time."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Reserve the whole stay atomically.",
+      "rationale": "A payment callback confirms an existing hold with idempotency; never trust a stale search result."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Guests",
+      "explanation": "In Design, add Web Client and name it “Guests”. Place it in the leftmost caller/background lane. User-facing caller for hotel booking (airbnb). Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Guests. Distribute incoming connections across healthy instances for hotel booking (airbnb). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Search Service",
+      "explanation": "In Design, add Service and name it “Search Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for hotel booking (airbnb). Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["search"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Reservation Service",
+      "explanation": "In Design, add Service and name it “Reservation Service”. Place it in column 3, row 2 of the HLD; its callers are LB. Conditional UPDATE ... SET reserved = reserved + 1 WHERE reserved < total AND version = ? (no overbooking) Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["book"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Listings index",
+      "explanation": "In Design, add Search Index and name it “Listings index”. Place it in column 4, row 1 of the HLD; its callers are Search Service, Index updater. Search derived data with query-oriented indexes for hotel booking (airbnb). Index updates may lag; recheck authoritative availability/permissions before committing user-visible actions. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["es"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Inventory DB",
+      "explanation": "In Design, add SQL Database and name it “Inventory DB”. Place it in column 4, row 2 of the HLD; its callers are Reservation Service. Store authoritative records with transactional constraints for hotel booking (airbnb). Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["RoomInventory", "Reservation"]
+    },
+    {
+      "title": "CDC stream",
+      "explanation": "In Design, add Event Stream and name it “CDC stream”. Place it in column 5, row 1 of the HLD; its callers are Inventory DB. Change data capture (Debezium) Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdc"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Index updater",
+      "explanation": "In Design, add Worker and name it “Index updater”. Place it in column 6, row 1 of the HLD; its callers are CDC stream. Execute background work with bounded concurrency for hotel booking (airbnb). Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["indexer"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Payments",
+      "explanation": "In Design, add External Service and name it “Payments”. Place it in column 4, row 3 of the HLD; its callers are Reservation Service. External system boundary for hotel booking (airbnb). Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["psp"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Search candidates",
+      "steps": [
+        {
+          "title": "Guests → LB → Search Service → Listings index",
+          "explanation": "Search derived listing data; availability is provisional.",
+          "nodeIds": ["client", "lb", "search", "es"],
+          "edgeIds": ["e1", "e2", "e4"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Reserve every night atomically",
+      "steps": [
+        {
+          "title": "Guests → LB → Reservation Service → Inventory DB",
+          "explanation": "Lock or conditionally update all requested listing-day rows in a transaction; rollback if any night lacks capacity.",
+          "nodeIds": ["client", "lb", "book", "db"],
+          "edgeIds": ["e1", "e3", "e5"]
+        },
+        {
+          "title": "Reservation Service → Payments",
+          "explanation": "Authorize payment with a stable reservation key; confirm or compensate the hold.",
+          "nodeIds": ["book", "psp"],
+          "edgeIds": ["e6"]
+        },
+        {
+          "title": "Inventory DB → CDC stream → Index updater → Listings index",
+          "explanation": "Publish committed availability changes asynchronously to search.",
+          "nodeIds": ["db", "cdc", "indexer", "es"],
+          "edgeIds": ["e7", "e8", "e9"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Search shows availability that has just been booked",
+      "handling": "Return 409 at reservation, suggest another listing/date, and do not charge an unconfirmed reservation. Index updates may lag the authoritative calendar.",
+      "nodeIds": ["db", "indexer"]
+    }
+  ],
+  "alternatives": "Use listing-day inventory for multiple interchangeable rooms. Use exclusion-constrained date ranges for single-unit homes or individually assigned rooms; one range per hotel cannot represent a room count.",
+  "sectionApplicability": {}
+}

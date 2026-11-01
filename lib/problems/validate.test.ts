@@ -69,6 +69,12 @@ function dir(
 const errorsOf = (d: RawProblemDir) => validateContent([d]).errors.join("\n");
 
 describe("validateContent", () => {
+  it("requires walkthroughs for published content while allowing legacy parsing", () => {
+    expect(validateContent([dir()]).errors).toEqual([]);
+    expect(validateContent([dir()], { requireWalkthroughs: true }).errors.join("\n")).toMatch(
+      /needs a guided walkthrough/,
+    );
+  });
   it("accepts a valid folder and assembles the problem", () => {
     const { problems, errors } = validateContent([dir()]);
     expect(errors).toEqual([]);

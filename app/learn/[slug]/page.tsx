@@ -39,6 +39,11 @@ export default async function ConceptPage({ params }: Params) {
               <ArrowLeft className="size-3" /> All concepts
             </Link>
             <h1 className="text-2xl font-semibold tracking-tight">{card.title}</h1>
+            {card.kind === "pattern" && (
+              <p className="text-primary text-xs font-medium">
+                Interview pattern · worked example, failure cases and practice questions
+              </p>
+            )}
             <div className="flex flex-wrap gap-1">
               {card.tags.map((t) => (
                 <span key={t} className="bg-muted rounded px-1.5 py-0.5 text-xs">
@@ -48,7 +53,9 @@ export default async function ConceptPage({ params }: Params) {
             </div>
           </div>
           {card.graph && (
-            <div className="h-[300px] overflow-hidden rounded-lg border">
+            <div
+              className={`${card.kind === "pattern" ? "h-[400px]" : "h-[300px]"} overflow-hidden rounded-lg border`}
+            >
               <GraphViewer graph={card.graph} />
             </div>
           )}

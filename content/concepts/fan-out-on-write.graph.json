@@ -1,0 +1,107 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "post",
+      "t": "service",
+      "l": "Post Service",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "l": "Posts + outbox",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "q",
+      "t": "event_stream",
+      "l": "Publication events",
+      "x": 280,
+      "y": 180
+    },
+    {
+      "i": "w",
+      "t": "worker",
+      "l": "Fan-out workers",
+      "x": 560,
+      "y": 180
+    },
+    {
+      "i": "f",
+      "t": "graph_db",
+      "l": "Follower lookup",
+      "x": 840,
+      "y": 0
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "l": "Per-reader timelines",
+      "x": 840,
+      "y": 180
+    },
+    {
+      "i": "read",
+      "t": "service",
+      "l": "Feed Service",
+      "x": 560,
+      "y": 360
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "post",
+      "d": "db",
+      "l": "1. Commit post and event intent",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "db",
+      "d": "q",
+      "l": "2. Relay committed events",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e3",
+      "s": "q",
+      "d": "w",
+      "l": "3. Batch follower delivery",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e4",
+      "s": "w",
+      "d": "f",
+      "l": "List eligible followers",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "w",
+      "d": "cache",
+      "l": "Dedup user_id/post_id inserts",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "read",
+      "d": "cache",
+      "l": "Read precomputed IDs",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "read",
+      "d": "db",
+      "l": "Hydrate and check visibility",
+      "h": "r>l"
+    }
+  ]
+}

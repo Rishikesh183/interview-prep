@@ -6,19 +6,21 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Callers"
+      "l": "Callers",
+      "no": "User-facing caller for unique id generator."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for unique id generator."
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Order Service",
       "no": "Asks for IDs in batches"
@@ -26,7 +28,7 @@
     {
       "i": "idgen",
       "t": "id_generator",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Snowflake generators",
       "no": "41-bit timestamp + 5-bit datacenter + 5-bit worker id + 12-bit sequence; refuses to issue IDs if the clock moves backwards (NTP skew)"
@@ -34,7 +36,7 @@
     {
       "i": "zk",
       "t": "coordination",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "ZooKeeper",
       "c": {
@@ -48,12 +50,14 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "svc",
+      "l": "Call Order Service",
       "h": "r>l"
     },
     {
@@ -61,6 +65,8 @@
       "s": "svc",
       "d": "idgen",
       "p": "gRPC",
+      "a": "a1",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -68,6 +74,7 @@
       "s": "idgen",
       "d": "zk",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -77,10 +84,18 @@
       "ownerNodeId": "idgen",
       "method": "RPC",
       "path": "/ids.Next",
+      "request": "{ \"count\": 100 }",
+      "response": "{ \"ids\": [\"123456789012345678\"] }",
+      "statusCodes": "OK, INVALID_ARGUMENT, CLOCK_REGRESSION, UNAVAILABLE",
       "auth": true,
-      "request": "{ count }",
-      "response": "{ ids[] }"
+      "note": "Serialize 64-bit integers as strings in JSON. Library mode calls this locally; UUIDv7 returns 128-bit values and requires a relaxed ID-width requirement."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "GeneratorState",
+      "fields": "worker_id: int32\nlast_timestamp_ms: int64\nsequence: int32\nlease_epoch: int64",
+      "storeNodeId": "idgen"
+    }
+  ]
 }

@@ -12,24 +12,26 @@
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "c": {
         "content": ["media"],
         "ttl": "30d"
-      }
+      },
+      "no": "Serve cacheable media or static responses close to users for instagram."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
-      "y": 130,
-      "l": "LB"
+      "x": 280,
+      "y": 180,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for instagram."
     },
     {
       "i": "api",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Media API",
       "no": "Issues presigned URLs; like counts are Redis counters flushed in batch"
@@ -37,46 +39,51 @@
     {
       "i": "s3",
       "t": "object_storage",
-      "x": 520,
-      "y": 130,
-      "l": "Photos"
+      "x": 560,
+      "y": 180,
+      "l": "Photos",
+      "no": "Persist immutable large objects for instagram."
     },
     {
       "i": "q",
       "t": "message_queue",
-      "x": 780,
+      "x": 840,
       "y": 0,
-      "l": "Thumbnail jobs"
+      "l": "Thumbnail jobs",
+      "no": "Buffer independently retryable asynchronous work for instagram."
     },
     {
       "i": "thumb",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
-      "l": "Thumbnailers"
+      "l": "Thumbnailers",
+      "no": "Execute background work with bounded concurrency for instagram."
     },
     {
       "i": "meta",
       "t": "nosql_kv",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Posts",
       "c": {
         "partitionKey": "user_id",
         "sortKey": "created_at"
-      }
+      },
+      "no": "Store partitioned point-lookup state for instagram."
     },
     {
       "i": "feed",
       "t": "cache",
-      "x": 780,
-      "y": 260,
+      "x": 840,
+      "y": 360,
       "l": "Feed cache",
       "c": {
         "strategy": "write-through",
         "ttl": "7d",
         "cluster": true
-      }
+      },
+      "no": "Serve derived or transient hot state for instagram."
     }
   ],
   "e": [
@@ -85,12 +92,14 @@
       "s": "client",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "cdn",
       "d": "s3",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -105,12 +114,14 @@
       "i": "e4",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e5",
       "s": "lb",
       "d": "api",
+      "l": "Call Media API",
       "h": "r>l"
     },
     {
@@ -118,6 +129,7 @@
       "s": "api",
       "d": "meta",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -125,6 +137,7 @@
       "s": "api",
       "d": "feed",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -132,6 +145,7 @@
       "s": "api",
       "d": "q",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -139,6 +153,7 @@
       "s": "q",
       "d": "thumb",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -146,6 +161,14 @@
       "s": "thumb",
       "d": "s3",
       "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "thumb",
+      "d": "meta",
+      "l": "Publish READY processing version",
       "h": "r>l"
     }
   ],
@@ -155,17 +178,48 @@
       "ownerNodeId": "api",
       "method": "POST",
       "path": "/v1/uploads",
+      "request": "{ \"contentType\": \"image/jpeg\", \"sizeBytes\": 1048576, \"caption\": \"hello\" }",
+      "response": "201 { \"postId\": \"p1\", \"uploadUrl\": \"signed-or-service-url\" }",
+      "statusCodes": "201, 400, 413",
       "auth": true,
-      "response": "{ uploadUrl, postId }"
+      "note": "Presigned mode transfers bytes to object storage; upload-service mode streams them through the upload fleet."
     },
     {
       "id": "a2",
       "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/posts/{id}/complete",
+      "request": "{ \"uploadId\": \"u1\", \"checksum\": \"sha256...\" }",
+      "response": "202 { \"postId\": \"p1\", \"status\": \"PROCESSING\" }",
+      "statusCodes": "202, 409",
+      "auth": true,
+      "idempotent": true,
+      "note": "A retry must not enqueue unbounded duplicate processing; confirm the referenced object belongs to the user."
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "api",
       "method": "GET",
       "path": "/v1/feed",
+      "request": "No request body; ?cursor=42&limit=20",
+      "response": "200 { \"posts\": [], \"nextCursor\": \"43\" }",
+      "statusCodes": "200, 401",
       "auth": true,
-      "pagination": "cursor"
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "Return CDN URLs for READY variants, not original photo bytes through the API."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "Post",
+      "fields": "post_id: string PK\nauthor_id: string\ncaption: string\nmedia_keys: string[]\nstatus: UPLOADING|PROCESSING|READY\ncreated_at: timestamp",
+      "storeNodeId": "meta"
+    },
+    {
+      "name": "PhotoObject",
+      "fields": "object_key: string PK\npost_id: string\nvariant: original|thumbnail\nchecksum: string",
+      "storeNodeId": "s3"
+    }
+  ]
 }

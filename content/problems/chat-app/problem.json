@@ -46,5 +46,11 @@
     "Message storage model",
     "Delivery guarantees"
   ],
-  "prerequisites": ["websockets-realtime", "pub-sub", "database-choice-sql-vs-nosql"]
+  "prerequisites": [
+    "websockets-realtime",
+    "pub-sub",
+    "database-choice-sql-vs-nosql",
+    "transactional-outbox",
+    "hot-partitions"
+  ]
 }

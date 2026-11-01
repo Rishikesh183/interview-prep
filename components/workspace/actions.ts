@@ -1,4 +1,5 @@
 import { saveAttempt } from "@/lib/db/attempts";
+import { assertSubmissionUser, verifySubmissionUser } from "@/lib/auth/submission";
 import { forfeitsPoints } from "@/lib/db/mySolutions";
 import { recordResult } from "@/lib/db/progress";
 import { computePoints, type PointsBreakdown } from "@/lib/points";
@@ -29,11 +30,16 @@ export function pointsIfSubmitted(problem: Problem): PointsBreakdown | null {
 
 /** Final test run → points → lock the attempt → fold into the best-so-far progress. */
 export async function submitAttempt(problem: Problem): Promise<PointsBreakdown | null> {
+  const expectedId = useAttemptStore.getState().meta?.id;
+  const userId = await verifySubmissionUser();
+  const current = useAttemptStore.getState().meta;
+  if (!expectedId || current?.id !== expectedId || current.problemId !== problem.id) return null;
   runTestsNow(problem);
   const attempt = snapshotAttempt();
   if (!attempt?.testRun || attempt.status !== "in_progress") return null;
   // The solutions page may have been opened (in another tab) since this attempt was loaded.
   const forfeit = await forfeitsPoints(attempt);
+  assertSubmissionUser(userId);
   const meta = useAttemptStore.getState().meta;
   if (!meta?.testRun || meta.status !== "in_progress" || meta.id !== attempt.id) return null;
   if (forfeit && !meta.solutionViewedBeforeSubmit) useAttemptStore.getState().unlockSolutions();

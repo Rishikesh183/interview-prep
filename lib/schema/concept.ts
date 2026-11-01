@@ -4,6 +4,7 @@ import { GraphSchema } from "./graph";
 /** content/concepts/<slug>.md frontmatter (PHASE-2 §4). */
 export const ConceptFrontmatterSchema = z.strictObject({
   title: z.string().min(1),
+  kind: z.enum(["foundation", "pattern"]).default("foundation"),
   tags: z.array(z.string().min(1)).default([]),
   /** Catalog types this card explains; the palette's "Learn" link uses it. */
   components: z.array(z.string().min(1)).default([]),
@@ -29,4 +30,4 @@ export const ConceptSchema = ConceptFrontmatterSchema.extend({
   graph: GraphSchema.optional(),
 });
 export type Concept = z.infer<typeof ConceptSchema>;
-export type ConceptSummary = Pick<Concept, "slug" | "title" | "tags" | "summary">;
+export type ConceptSummary = Pick<Concept, "slug" | "title" | "tags" | "summary" | "kind">;

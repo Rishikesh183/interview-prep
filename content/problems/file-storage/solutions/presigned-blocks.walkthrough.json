@@ -1,0 +1,225 @@
+{
+  "version": 1,
+  "overview": "Client splits files into 4 MB blocks and hashes each (SHA-256). It asks the metadata service which blocks are missing, uploads only those directly to S3 using presigned URLs, then commits a new file version. A notification service pushes change events to the user's other devices over WebSockets.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative file: 100 MB; 4 MB blocks; one changed block.",
+      "calculation": "ceil(100 / 4) = 25 blocks; delta upload = 4 MB instead of 100 MB.",
+      "result": "A one-block edit transfers about 4% of the original file size.",
+      "implication": "Immutable chunking reduces transfer cost; metadata needs atomic version and block-list updates."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Chunks files into 4 MB blocks, SHA-256 each",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for dropbox / google drive.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "meta",
+      "purpose": "Returns presigned URLs for missing blocks; commit creates new version; conflicts → conflicted copy",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for dropbox / google drive.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Content-addressed by hash (dedup)",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Fan-out: every notifier node gets each change",
+      "rationale": "Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications."
+    },
+    {
+      "nodeId": "notify",
+      "purpose": "Maintain long-lived sessions and deliver realtime events for dropbox / google drive.",
+      "rationale": "Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Serve cacheable media or static responses close to users for dropbox / google drive.",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "FileVersion",
+      "purpose": "Atomic metadata version pointing to an immutable block list.",
+      "accessPatterns": [
+        "Commit a version with an expected previous version; list changes after a cursor."
+      ],
+      "constraints": [
+        "Compare-and-swap version prevents lost updates; keep both versions or surface a conflict."
+      ],
+      "relationships": [
+        "block_hashes reference immutable Block objects in file order; commit the complete list atomically."
+      ]
+    },
+    {
+      "entityName": "Block",
+      "purpose": "Immutable file bytes stored independently from metadata.",
+      "accessPatterns": ["Upload missing blocks; fetch a file version by ordered block list."],
+      "constraints": [
+        "Validate checksum and ownership; content dedup must not expose other users' data."
+      ],
+      "relationships": [
+        "FileVersion references content hashes; block reads must still enforce file ownership."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Begin a resumable block upload.",
+      "rationale": "Presigned mode returns signed object-store URLs; upload-service mode returns service chunk URLs."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Publish a new file version after all referenced blocks exist.",
+      "rationale": "Commit the version and change cursor atomically; incomplete blocks must not become a visible file."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Sync file changes to another device.",
+      "rationale": "A durable cursor recovers missed WebSocket hints or long-poll responses."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Desktop client",
+      "explanation": "In Design, add Web Client and name it “Desktop client”. Place it in the leftmost caller/background lane. Chunks files into 4 MB blocks, SHA-256 each Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Desktop client. Distribute incoming connections across healthy instances for dropbox / google drive. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Metadata Service",
+      "explanation": "In Design, add Service and name it “Metadata Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Returns presigned URLs for missing blocks; commit creates new version; conflicts → conflicted copy Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meta"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2", "a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Metadata DB",
+      "explanation": "In Design, add SQL Database and name it “Metadata DB”. Place it in column 4, row 1 of the HLD; its callers are Metadata Service. Store authoritative records with transactional constraints for dropbox / google drive. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["FileVersion"]
+    },
+    {
+      "title": "Block store",
+      "explanation": "In Design, add Object Storage and name it “Block store”. Place it in column 2, row 2 of the HLD; its callers are Desktop client, CDN. Content-addressed by hash (dedup) Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["Block"]
+    },
+    {
+      "title": "Change events",
+      "explanation": "In Design, add Pub/Sub and name it “Change events”. Place it in column 4, row 2 of the HLD; its callers are Metadata Service. Fan-out: every notifier node gets each change Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Sync notifier",
+      "explanation": "In Design, add WebSocket Server and name it “Sync notifier”. Place it in column 5, row 1 of the HLD; its callers are LB, Change events. Maintain long-lived sessions and deliver realtime events for dropbox / google drive. Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["notify"],
+      "edgeIds": ["e3", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 3 of the HLD; its callers are Desktop client. Serve cacheable media or static responses close to users for dropbox / google drive. Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e6", "e7"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Upload changed blocks and commit",
+      "steps": [
+        {
+          "title": "Desktop client → LB → Metadata Service → Metadata DB",
+          "explanation": "Authorize the path, compare block hashes and create an upload session.",
+          "nodeIds": ["client", "lb", "meta", "db"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "Desktop client → Block store",
+          "explanation": "Upload only missing blocks with scoped presigned URLs and checksums.",
+          "nodeIds": ["client", "s3"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "Metadata Service → Metadata DB",
+          "explanation": "Atomically publish a new file version and change cursor after verifying the blocks.",
+          "nodeIds": ["meta", "db"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Metadata Service → Change events → Sync notifier",
+          "explanation": "Send a change hint to other devices after commit.",
+          "nodeIds": ["meta", "q", "notify"],
+          "edgeIds": ["e8", "e9"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Download or recover missed sync",
+      "steps": [
+        {
+          "title": "Desktop client → LB → Metadata Service → Metadata DB",
+          "explanation": "Fetch the file version or changes after a durable cursor.",
+          "nodeIds": ["client", "lb", "meta", "db"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "Desktop client → CDN → Block store",
+          "explanation": "Download the immutable block list through the delivery path.",
+          "nodeIds": ["client", "cdn", "s3"],
+          "edgeIds": ["e6", "e7"]
+        }
+      ],
+      "apiId": "a3"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Upload succeeds but metadata commit fails",
+      "handling": "Leave uploaded blocks unreferenced, allow a retry with the same upload ID, and garbage-collect abandoned blocks after a grace period. Never expose a partial file version.",
+      "nodeIds": ["db"]
+    }
+  ],
+  "alternatives": "Use presigned content-addressed blocks to bypass app-server bandwidth and support delta sync. Use an upload fleet for centralized scanning, validation and transport control at higher transfer cost.",
+  "sectionApplicability": {}
+}

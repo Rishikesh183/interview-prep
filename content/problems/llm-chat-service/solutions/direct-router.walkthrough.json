@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "overview": "A router picks the least-loaded GPU server directly (no queue) and proxies the gRPC token stream back over WebSockets; overload returns 429.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative service budget: 100 concurrent outputs at 30 tokens/s.",
+      "calculation": "100 × 30 = 3,000 output tokens/s, excluding prefill.",
+      "result": "GPU sizing depends on model, sequence length, batching and measured token throughput.",
+      "implication": "Admission control must consider tokens and KV-cache memory, not request count alone."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for llm chat service (chatgpt).",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Token-based limits per user tier",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "chat",
+      "purpose": "Choose a healthy GPU replica with available token capacity. Proxy WebSocket/gRPC token streams directly; reject overload with 429 and Retry-After rather than queueing.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store documents and their versioned lifecycle for llm chat service (chatgpt).",
+      "rationale": "Index the access keys and use conditional updates for state changes; avoid unbounded embedded histories."
+    },
+    {
+      "nodeId": "gpu",
+      "purpose": "Continuous batching and KV-cache reuse within one replica; propagate cancellation from the router.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Conversation",
+      "purpose": "Conversation ownership and durable message history.",
+      "accessPatterns": ["Load an authorized prompt history; append user and assistant messages."],
+      "constraints": ["Bound context length and isolate user data."],
+      "relationships": [
+        "Message records are partitioned by conversation_id; membership authorizes send and history access."
+      ]
+    },
+    {
+      "entityName": "Generation",
+      "purpose": "Generation lifecycle and usage accounting.",
+      "accessPatterns": ["Dedup request retries; finalize usage and cancellation."],
+      "constraints": [
+        "Token chunks are transient unless explicitly persisted; never promise resumability from a missing chunk log."
+      ],
+      "relationships": [
+        "conversation_id references the authorized Conversation; request_id distinguishes retries from new prompts."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Submit a prompt and stream generated tokens.",
+      "rationale": "Reserve token budget, propagate cancellation, and dedup requestId. SSE works over HTTP; direct-router mode may proxy the same token events over WebSockets."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Chat UI",
+      "explanation": "In Design, add Web Client and name it “Chat UI”. Place it in the leftmost caller/background lane. User-facing caller for llm chat service (chatgpt). Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "API Gateway",
+      "explanation": "In Design, add API Gateway and name it “API Gateway”. Place it in column 2, row 1 of the HLD; its callers are Chat UI. Token-based limits per user tier Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Connection-aware inference router",
+      "explanation": "In Design, add Service and name it “Connection-aware inference router”. Place it in column 3, row 1 of the HLD; its callers are API Gateway. Choose a healthy GPU replica with available token capacity. Proxy WebSocket/gRPC token streams directly; reject overload with 429 and Retry-After rather than queueing. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["chat"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Conversations",
+      "explanation": "In Design, add Document DB and name it “Conversations”. Place it in column 4, row 1 of the HLD; its callers are Connection-aware inference router. Store documents and their versioned lifecycle for llm chat service (chatgpt). Index the access keys and use conditional updates for state changes; avoid unbounded embedded histories. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["Conversation", "Generation"]
+    },
+    {
+      "title": "GPU inference replicas",
+      "explanation": "In Design, add Worker and name it “GPU inference replicas”. Place it in column 5, row 1 of the HLD; its callers are Connection-aware inference router. Continuous batching and KV-cache reuse within one replica; propagate cancellation from the router. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gpu"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Route directly to a GPU",
+      "steps": [
+        {
+          "title": "Chat UI → API Gateway → Connection-aware inference router → Conversations",
+          "explanation": "Authorize, reserve token budget and persist the request.",
+          "nodeIds": ["client", "gw", "chat", "db"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Connection-aware inference router → GPU inference replicas",
+          "explanation": "Choose available token/KV-cache capacity and proxy the response stream directly.",
+          "nodeIds": ["chat", "gpu"],
+          "edgeIds": ["e4"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Reject overload or cancel",
+      "steps": [
+        {
+          "title": "Chat UI → API Gateway → Connection-aware inference router",
+          "explanation": "If every replica is full, return 429 with retry information; there is no durable inference queue.",
+          "nodeIds": ["client", "gw", "chat"],
+          "edgeIds": ["e1", "e2"]
+        },
+        {
+          "title": "Connection-aware inference router → GPU inference replicas",
+          "explanation": "Propagate cancellation and release capacity; an interrupted generation is not silently resumed.",
+          "nodeIds": ["chat", "gpu"],
+          "edgeIds": ["e4"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "GPU dies after streaming part of an answer",
+      "handling": "Mark the generation interrupted and settle measured usage. Retry creates a clearly identified new attempt; do not silently splice unrelated completions into the old stream.",
+      "nodeIds": ["gpu"]
+    }
+  ],
+  "alternatives": "Use a bounded queue for short bursts and tier scheduling. Route directly for lower latency when callers tolerate immediate 429 rejection. Neither creates capacity during sustained overload.",
+  "sectionApplicability": {}
+}

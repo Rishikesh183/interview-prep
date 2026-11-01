@@ -9,44 +9,49 @@
       "l": "Host agents",
       "c": {
         "provider": "push agent on every host"
-      }
+      },
+      "no": "External system boundary for metrics & monitoring."
     },
     {
       "i": "users",
       "t": "web_client",
       "x": 0,
-      "y": 130,
-      "l": "Dashboards"
+      "y": 180,
+      "l": "Dashboards",
+      "no": "User-facing caller for metrics & monitoring."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for metrics & monitoring."
     },
     {
       "i": "collect",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Collectors"
+      "l": "Collectors",
+      "no": "Implement the owned APIs and coordinate state transitions for metrics & monitoring."
     },
     {
       "i": "kafka",
       "t": "event_stream",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Metrics stream",
       "c": {
         "partitions": 64,
         "partitionKey": "series_id"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for metrics & monitoring."
     },
     {
       "i": "flink",
       "t": "stream_processor",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Rollups",
       "c": {
@@ -57,50 +62,56 @@
     {
       "i": "writer",
       "t": "worker",
-      "x": 1040,
-      "y": 130,
-      "l": "TSDB writers"
+      "x": 1120,
+      "y": 180,
+      "l": "TSDB writers",
+      "no": "Execute background work with bounded concurrency for metrics & monitoring."
     },
     {
       "i": "tsdb",
       "t": "time_series_db",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "TSDB",
       "c": {
         "retention": "15d raw, 1y rolled up"
-      }
+      },
+      "no": "Store timestamped series with time-range indexes for metrics & monitoring."
     },
     {
       "i": "alerts",
       "t": "service",
-      "x": 1300,
-      "y": 130,
-      "l": "Alert evaluator"
+      "x": 1400,
+      "y": 180,
+      "l": "Alert evaluator",
+      "no": "Implement the owned APIs and coordinate state transitions for metrics & monitoring."
     },
     {
       "i": "notify",
       "t": "notification_service",
-      "x": 1560,
+      "x": 1680,
       "y": 0,
       "l": "Notifier",
       "c": {
         "channels": ["email", "sms"]
-      }
+      },
+      "no": "Route delivery hints to the chosen channel for metrics & monitoring."
     },
     {
       "i": "pager",
       "t": "external_service",
-      "x": 1820,
+      "x": 1960,
       "y": 0,
-      "l": "PagerDuty"
+      "l": "PagerDuty",
+      "no": "External system boundary for metrics & monitoring."
     },
     {
       "i": "query",
       "t": "service",
-      "x": 520,
-      "y": 130,
-      "l": "Query Service"
+      "x": 560,
+      "y": 180,
+      "l": "Query Service",
+      "no": "Implement the owned APIs and coordinate state transitions for metrics & monitoring."
     }
   ],
   "e": [
@@ -108,24 +119,30 @@
       "i": "e1",
       "s": "agents",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "users",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "collect",
+      "a": "a2",
+      "l": "Call Collectors",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "lb",
       "d": "query",
+      "a": "a1",
+      "l": "Call Query Service",
       "h": "r>l"
     },
     {
@@ -133,6 +150,7 @@
       "s": "collect",
       "d": "kafka",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -140,6 +158,7 @@
       "s": "kafka",
       "d": "writer",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -147,6 +166,7 @@
       "s": "kafka",
       "d": "flink",
       "m": "a",
+      "l": "Call Rollups",
       "h": "r>l"
     },
     {
@@ -154,6 +174,7 @@
       "s": "writer",
       "d": "tsdb",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -161,6 +182,7 @@
       "s": "flink",
       "d": "tsdb",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -168,18 +190,21 @@
       "s": "flink",
       "d": "alerts",
       "p": "gRPC",
+      "l": "Call Alert evaluator",
       "h": "r>l"
     },
     {
       "i": "e11",
       "s": "alerts",
       "d": "notify",
+      "l": "Call Notifier",
       "h": "r>l"
     },
     {
       "i": "e12",
       "s": "notify",
       "d": "pager",
+      "l": "Call PagerDuty",
       "h": "r>l"
     },
     {
@@ -187,6 +212,7 @@
       "s": "query",
       "d": "tsdb",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -196,9 +222,31 @@
       "ownerNodeId": "query",
       "method": "GET",
       "path": "/v1/query",
+      "request": "No request body; ?expr=cpu_usage&start=0&end=60&step=15",
+      "response": "200 { \"series\": [{ \"labels\": {\"host\":\"a\"}, \"points\": [[0,0.5]] }] }",
+      "statusCodes": "200, 400, 429",
       "auth": true,
-      "request": "?expr&start&end&step"
+      "idempotent": true,
+      "note": "Apply query cost limits; choose raw or rolled-up resolution based on requested time span."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "collect",
+      "method": "POST",
+      "path": "/v1/metrics/batch",
+      "request": "{ \"samples\": [{ \"metric\": \"cpu_usage\", \"labels\": {\"host\":\"a\"}, \"timestamp\": 1, \"value\": 0.5 }] }",
+      "response": "202 { \"accepted\": 1 }",
+      "statusCodes": "202, 400, 429",
+      "auth": true,
+      "idempotent": true,
+      "note": "Acknowledge after WAL/stream append and reject excessive label cardinality."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "Sample",
+      "fields": "series_id: hash(metric_name, labels)\ntimestamp: int64 sort key\nvalue: float64",
+      "storeNodeId": "tsdb"
+    }
+  ]
 }

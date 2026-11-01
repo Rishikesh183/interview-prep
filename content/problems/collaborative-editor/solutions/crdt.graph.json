@@ -1,0 +1,192 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Editor",
+      "no": "User-facing caller for google docs."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Routes by document id: all editors of a doc share one session server"
+    },
+    {
+      "i": "collab",
+      "t": "websocket_server",
+      "x": 560,
+      "y": 0,
+      "l": "CRDT sync servers",
+      "c": {
+        "instances": 4
+      },
+      "no": "Yjs-style CRDT operations use stable client IDs and logical clocks. Apply locally, persist before ack, relay across replicas; reconnect exchanges state vectors."
+    },
+    {
+      "i": "ops",
+      "t": "nosql_kv",
+      "x": 840,
+      "y": 0,
+      "l": "Op log",
+      "c": {
+        "partitionKey": "doc_id",
+        "sortKey": "seq",
+        "consistency": "strong"
+      },
+      "no": "Store partitioned point-lookup state for google docs."
+    },
+    {
+      "i": "snap",
+      "t": "object_storage",
+      "x": 840,
+      "y": 180,
+      "l": "Snapshots",
+      "no": "Snapshot every 500 ops; load = snapshot + tail of the op log"
+    },
+    {
+      "i": "docs",
+      "t": "service",
+      "x": 560,
+      "y": 180,
+      "l": "Docs API",
+      "no": "Implement the owned APIs and coordinate state transitions for google docs."
+    },
+    {
+      "i": "meta",
+      "t": "sql_db",
+      "x": 840,
+      "y": 360,
+      "l": "Doc metadata",
+      "c": {
+        "replicas": 2
+      },
+      "no": "Store authoritative records with transactional constraints for google docs."
+    },
+    {
+      "i": "ps",
+      "t": "pub_sub",
+      "x": 840,
+      "y": 540,
+      "l": "Document channels",
+      "no": "Relay CRDT updates and ephemeral cursor presence; replay missed durable operations from the op log."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "p": "WebSocket",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "collab",
+      "a": "a1",
+      "l": "Call CRDT sync servers",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "docs",
+      "a": "a2",
+      "l": "Call Docs API",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "collab",
+      "d": "ops",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "collab",
+      "d": "snap",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "docs",
+      "d": "meta",
+      "o": "rw",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "docs",
+      "d": "snap",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "collab",
+      "d": "ps",
+      "m": "a",
+      "l": "Publish document update",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "ps",
+      "d": "collab",
+      "m": "a",
+      "a": "a1",
+      "l": "Fan-out to connected editors",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "collab",
+      "method": "WS",
+      "path": "/v1/documents/{id}/session",
+      "request": "{ \"type\": \"edit\", \"operationId\": \"op1\", \"baseRevision\": 42, \"update\": \"encoded-op\" }",
+      "response": "{ \"type\": \"ack\", \"operationId\": \"op1\", \"revisionOrClock\": \"43\" }; broadcast update",
+      "statusCodes": "101; forbidden, stale_revision, unavailable",
+      "auth": true,
+      "note": "Persist edits before ack. OT transforms against the server revision; CRDT exchanges state vectors and missing updates."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "docs",
+      "method": "GET",
+      "path": "/v1/documents/{id}",
+      "request": "No request body.",
+      "response": "200 { \"snapshotUrl\": \"signed-url\", \"checkpoint\": \"42\", \"operations\": [] }",
+      "statusCodes": "200, 403, 404",
+      "auth": true,
+      "idempotent": true,
+      "note": "Authorize both snapshot access and log replay; a snapshot reduces startup replay work."
+    }
+  ],
+  "entities": [
+    {
+      "name": "Operation",
+      "fields": "document_id: string partition key\noperation_id: string UNIQUE\nactor_id: string\nsequence_or_clock: int64\npayload: bytes",
+      "storeNodeId": "ops"
+    },
+    {
+      "name": "Document",
+      "fields": "document_id: string PK\nowner_id: string\npermissions: map\nsnapshot_key: string\ncheckpoint: string",
+      "storeNodeId": "meta"
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "overview": "Consistent hashing with vnodes; any node coordinates; N=3, W=2, R=2; vector clocks with client-side merge; hinted handoff, read repair and Merkle-tree anti-entropy; gossip for membership.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Three replicas with read/write quorum sizes of two.",
+      "calculation": "R + W = 2 + 2 = 4 > N = 3.",
+      "result": "Acknowledged replica sets intersect in the healthy, non-sloppy case.",
+      "implication": "Quorum overlap alone does not give linearizability with concurrent writes; choose causal reconciliation or consensus explicitly."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for distributed kv store.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for distributed kv store.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "coord",
+      "purpose": "Any node coordinates: consistent hashing with vnodes; N=3, W=2, R=2 quorum; vector clocks; hinted handoff, read repair, Merkle anti-entropy; gossip membership",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "store",
+      "purpose": "Each key replicated to the next N-1 nodes on the ring",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "KeyVersion",
+      "purpose": "Durable versioned key-value records.",
+      "accessPatterns": ["GET by key; PUT with causal or expected-version context."],
+      "constraints": [
+        "Replicate every key. Dynamo exposes concurrent siblings; Raft commits one version order per range."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Read the latest available key version.",
+      "rationale": "Return causal context for Dynamo reconciliation, or a committed leader-read version for range consensus."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Write a new version of a key.",
+      "rationale": "Acknowledge only after the required replica quorum; retry using the same operation ID or version precondition."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Clients",
+      "explanation": "In Design, add Web Client and name it “Clients”. Place it in the leftmost caller/background lane. User-facing caller for distributed kv store. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Clients. Distribute incoming connections across healthy instances for distributed kv store. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Coordinator nodes",
+      "explanation": "In Design, add Service and name it “Coordinator nodes”. Place it in column 3, row 1 of the HLD; its callers are LB. Any node coordinates: consistent hashing with vnodes; N=3, W=2, R=2 quorum; vector clocks; hinted handoff, read repair, Merkle anti-entropy; gossip membership Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["coord"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Storage nodes",
+      "explanation": "In Design, add Key-Value Store and name it “Storage nodes”. Place it in column 4, row 1 of the HLD; its callers are Coordinator nodes. Each key replicated to the next N-1 nodes on the ring Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["store"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["KeyVersion"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Quorum write",
+      "steps": [
+        {
+          "title": "Clients → LB → Coordinator nodes → Storage nodes",
+          "explanation": "The coordinator hashes the key, merges client context, writes N replicas and waits for W acknowledgements. Concurrent siblings remain explicit.",
+          "nodeIds": ["client", "lb", "coord", "store"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a2"
+    },
+    {
+      "id": "flow-2",
+      "title": "Quorum read and repair",
+      "steps": [
+        {
+          "title": "Clients → LB → Coordinator nodes → Storage nodes",
+          "explanation": "Read R replicas, compare vector clocks and return causally maximal versions. Repair stale replicas; sloppy quorums need separate consistency analysis.",
+          "nodeIds": ["client", "lb", "coord", "store"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A replica or leader is unavailable",
+      "handling": "Dynamo can use hinted handoff and repair with explicit conflict semantics. Range consensus needs a reachable majority; elect a fenced leader and repair followers from the log.",
+      "nodeIds": ["store"]
+    }
+  ],
+  "alternatives": "Use Dynamo-style replication when application conflict resolution and partition availability are acceptable. Use leader-per-range consensus for committed per-key order, accepting unavailable writes without a majority.",
+  "sectionApplicability": {}
+}

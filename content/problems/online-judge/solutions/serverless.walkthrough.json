@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "overview": "Each submission triggers an isolated function per language runtime; results pushed via WebSocket.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative workload: 100 submissions/s, 5 s average execution.",
+      "calculation": "100 × 5 = 500 simultaneous execution slots before headroom.",
+      "result": "At 256 MB per sandbox, 500 slots need about 128 GB isolated memory.",
+      "implication": "Scale by queue age and runtime; maintain hard CPU, memory, disk, process and network limits."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for online judge (leetcode).",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for online judge (leetcode).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "api",
+      "purpose": "Implement the owned APIs and coordinate state transitions for online judge (leetcode).",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for online judge (leetcode).",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for online judge (leetcode).",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "judge",
+      "purpose": "One isolated execution per submission with explicit time limits, memory limits, filesystem and network limits. Dedup submission_id and persist verdict before acknowledging the trigger.",
+      "rationale": "Treat duplicate triggers and timeouts as expected; split workloads within runtime/resource limits."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Persist immutable large objects for online judge (leetcode).",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Submission",
+      "purpose": "Submission identity, code location and authoritative verdict.",
+      "accessPatterns": [
+        "Create idempotently; poll verdict; conditionally claim and finish execution."
+      ],
+      "constraints": [
+        "A stale worker cannot overwrite a newer execution attempt; enforce fencing/version."
+      ],
+      "relationships": [
+        "problem_id plus test_version pins the immutable TestBundle used for judging."
+      ]
+    },
+    {
+      "entityName": "TestBundle",
+      "purpose": "Versioned hidden test inputs and expected outputs.",
+      "accessPatterns": ["Workers fetch a pinned test version."],
+      "constraints": [
+        "Tests are readable by isolated trusted workers, never by submitted code or clients."
+      ],
+      "relationships": [
+        "Submissions pin a version so retries cannot silently use a changed test bundle."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Persist source and schedule sandboxed judging.",
+      "rationale": "Publish execution only after the submission record is durable; enforce user quotas."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Read the submission verdict.",
+      "rationale": "Poll with backoff or use a notification hint; hidden test details must remain private."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Browser",
+      "explanation": "In Design, add Web Client and name it “Browser”. Place it in the leftmost caller/background lane. User-facing caller for online judge (leetcode). Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Browser. Distribute incoming connections across healthy instances for online judge (leetcode). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Submission API",
+      "explanation": "In Design, add Service and name it “Submission API”. Place it in column 3, row 1 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for online judge (leetcode). Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["api"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Submissions",
+      "explanation": "In Design, add SQL Database and name it “Submissions”. Place it in column 4, row 1 of the HLD; its callers are Submission API, Isolated judge functions. Store authoritative records with transactional constraints for online judge (leetcode). Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["Submission"]
+    },
+    {
+      "title": "Judge queue",
+      "explanation": "In Design, add Message Queue and name it “Judge queue”. Place it in column 4, row 2 of the HLD; its callers are Submission API. Buffer independently retryable asynchronous work for online judge (leetcode). Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Isolated judge functions",
+      "explanation": "In Design, add Serverless Function and name it “Isolated judge functions”. Place it in column 5, row 1 of the HLD; its callers are Judge queue. One isolated execution per submission with explicit time limits, memory limits, filesystem and network limits. Dedup submission_id and persist verdict before acknowledging the trigger. Treat duplicate triggers and timeouts as expected; split workloads within runtime/resource limits. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["judge"],
+      "edgeIds": ["e5", "e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Hidden test data",
+      "explanation": "In Design, add Object Storage and name it “Hidden test data”. Place it in column 6, row 1 of the HLD; its callers are Isolated judge functions. Persist immutable large objects for online judge (leetcode). Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": ["TestBundle"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Invoke an isolated judge function",
+      "steps": [
+        {
+          "title": "Browser → LB → Submission API → Submissions",
+          "explanation": "Store the submission and durable dispatch marker.",
+          "nodeIds": ["client", "lb", "api", "db"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Submission API → Judge queue → Isolated judge functions → Hidden test data",
+          "explanation": "Trigger a function with resource/network limits and a pinned test bundle.",
+          "nodeIds": ["api", "q", "judge", "s3"],
+          "edgeIds": ["e4", "e5", "e6"]
+        },
+        {
+          "title": "Isolated judge functions → Submissions",
+          "explanation": "Persist a conditional verdict before acknowledging a possibly duplicated invocation.",
+          "nodeIds": ["judge", "db"],
+          "edgeIds": ["e7"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Read a verdict",
+      "steps": [
+        {
+          "title": "Browser → LB → Submission API → Submissions",
+          "explanation": "Poll status with backoff. If push is added, it remains a hint to retrieve this durable result.",
+          "nodeIds": ["client", "lb", "api", "db"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A sandbox times out or a judge crashes",
+      "handling": "Kill the entire process tree/microVM, reclaim resources and persist an execution outcome. Redeliver infrastructure failures by submission_id; a user-code timeout is a verdict, not an infinite retry.",
+      "nodeIds": ["db", "judge"]
+    }
+  ],
+  "alternatives": "Use workers for tight runtime and sandbox control. Use isolated serverless execution for bounded jobs that fit runtime and isolation limits; both require durable verdicts and retry fencing.",
+  "sectionApplicability": {}
+}

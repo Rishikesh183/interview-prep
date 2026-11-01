@@ -1,0 +1,103 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Callers",
+      "no": "User-facing caller for unique id generator."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for unique id generator."
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Order Service",
+      "no": "Asks for IDs in batches"
+    },
+    {
+      "i": "idgen",
+      "t": "id_generator",
+      "x": 840,
+      "y": 0,
+      "l": "Independent range allocators",
+      "c": {
+        "strategy": "ticket-server"
+      },
+      "no": "Two ticket servers allocate disjoint odd/even counter ranges using transactional high-water marks. Worker IDs are implicit in the disjoint namespace. Range allocation is monotonic, but local consumption is not timestamp ordered; clock skew does not affect uniqueness."
+    },
+    {
+      "i": "counter",
+      "t": "sql_db",
+      "x": 1120,
+      "y": 0,
+      "l": "Ticket high-water marks",
+      "c": {
+        "replicas": 3
+      },
+      "no": "Allocate disjoint ranges atomically; lost ranges create gaps and must never be reused."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "svc",
+      "l": "Call Order Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "idgen",
+      "p": "gRPC",
+      "a": "a1",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "idgen",
+      "d": "counter",
+      "l": "Reserve next range transactionally",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "idgen",
+      "method": "RPC",
+      "path": "/ids.Next",
+      "request": "{ \"count\": 100 }",
+      "response": "{ \"ids\": [\"123456789012345678\"] }",
+      "statusCodes": "OK, INVALID_ARGUMENT, CLOCK_REGRESSION, UNAVAILABLE",
+      "auth": true,
+      "note": "Serialize 64-bit integers as strings in JSON. Library mode calls this locally; UUIDv7 returns 128-bit values and requires a relaxed ID-width requirement."
+    }
+  ],
+  "entities": [
+    {
+      "name": "TicketRange",
+      "fields": "namespace: odd|even\nhigh_watermark: int64\nrange_size: int32\nlease_epoch: int64",
+      "storeNodeId": "counter"
+    }
+  ]
+}

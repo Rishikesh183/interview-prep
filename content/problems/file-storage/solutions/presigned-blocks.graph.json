@@ -12,14 +12,15 @@
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for dropbox / google drive."
     },
     {
       "i": "meta",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Metadata Service",
       "no": "Returns presigned URLs for missing blocks; commit creates new version; conflicts → conflicted copy"
@@ -27,49 +28,52 @@
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Metadata DB",
       "c": {
         "replicas": 3,
         "sharding": "hash",
         "shardKey": "namespace_id"
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for dropbox / google drive."
     },
     {
       "i": "s3",
       "t": "object_storage",
-      "x": 260,
-      "y": 130,
+      "x": 280,
+      "y": 180,
       "l": "Block store",
       "no": "Content-addressed by hash (dedup)"
     },
     {
       "i": "q",
       "t": "pub_sub",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Change events",
       "no": "Fan-out: every notifier node gets each change"
     },
     {
       "i": "notify",
       "t": "websocket_server",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Sync notifier",
       "c": {
         "instances": 10
-      }
+      },
+      "no": "Maintain long-lived sessions and deliver realtime events for dropbox / google drive."
     },
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
-      "y": 260,
+      "x": 280,
+      "y": 360,
       "c": {
         "content": ["media"]
-      }
+      },
+      "no": "Serve cacheable media or static responses close to users for dropbox / google drive."
     }
   ],
   "e": [
@@ -77,18 +81,21 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "meta",
+      "l": "Call Metadata Service",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "notify",
+      "l": "Call Sync notifier",
       "h": "r>l"
     },
     {
@@ -96,6 +103,7 @@
       "s": "meta",
       "d": "db",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -111,12 +119,14 @@
       "s": "client",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e7",
       "s": "cdn",
       "d": "s3",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -124,6 +134,7 @@
       "s": "meta",
       "d": "q",
       "m": "a",
+      "l": "Call Change events",
       "h": "r>l"
     },
     {
@@ -131,6 +142,7 @@
       "s": "q",
       "d": "notify",
       "m": "a",
+      "l": "Call Sync notifier",
       "h": "r>l"
     }
   ],
@@ -140,36 +152,47 @@
       "ownerNodeId": "meta",
       "method": "POST",
       "path": "/v1/files/{path}/upload-session",
+      "request": "{ \"blocks\": [{ \"hash\": \"sha256...\", \"size\": 4194304 }] }",
+      "response": "201 { \"uploadId\": \"u1\", \"missingBlocks\": [], \"uploadUrls\": [] }",
+      "statusCodes": "201, 400, 403",
       "auth": true,
-      "response": "{ missingBlocks: [{hash, presignedUrl}] }"
+      "note": "Presigned mode returns signed object-store URLs; upload-service mode returns service chunk URLs."
     },
     {
       "id": "a2",
       "ownerNodeId": "meta",
       "method": "POST",
       "path": "/v1/files/{path}/commit",
+      "request": "{ \"uploadId\": \"u1\", \"expectedVersion\": 2, \"blockHashes\": [\"sha256...\"] }",
+      "response": "201 { \"fileId\": \"f1\", \"version\": 3 }",
+      "statusCodes": "201, 409",
       "auth": true,
-      "idempotent": true,
-      "request": "{ blockHashes[], baseVersion }",
-      "statusCodes": "200, 409"
+      "note": "Commit the version and change cursor atomically; incomplete blocks must not become a visible file."
     },
     {
       "id": "a3",
       "ownerNodeId": "meta",
       "method": "GET",
       "path": "/v1/changes",
+      "request": "No request body; ?cursor=42&limit=100",
+      "response": "200 { \"changes\": [], \"nextCursor\": \"43\" }",
+      "statusCodes": "200, 403",
       "auth": true,
-      "pagination": "cursor"
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "A durable cursor recovers missed WebSocket hints or long-poll responses."
     }
   ],
   "entities": [
     {
       "name": "FileVersion",
-      "fields": "file_id, version, block_hashes[], size, modified_by"
+      "fields": "file_id: string\nversion: int64\nowner_id: string\npath: string\nblock_hashes: string[]\nupdated_at: timestamp",
+      "storeNodeId": "db"
     },
     {
       "name": "Block",
-      "fields": "hash PK, size, s3_key, ref_count"
+      "fields": "block_hash: string PK\nobject_key: string\nsize_bytes: int64\nchecksum: string",
+      "storeNodeId": "s3"
     }
   ]
 }

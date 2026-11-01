@@ -6,18 +6,20 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Checkout"
+      "l": "Checkout",
+      "no": "User-facing caller for payment system / wallet."
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
-      "y": 0
+      "x": 280,
+      "y": 0,
+      "no": "Authenticate, apply admission limits and route requests for payment system / wallet."
     },
     {
       "i": "pay",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Payment Service",
       "no": "Idempotency key → payment row; retries return stored result"
@@ -25,7 +27,7 @@
     {
       "i": "ledger",
       "t": "sql_db",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Ledger DB",
       "c": {
@@ -37,24 +39,26 @@
     {
       "i": "psp",
       "t": "external_service",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "PSP",
       "c": {
         "provider": "Stripe, Adyen"
-      }
+      },
+      "no": "External system boundary for payment system / wallet."
     },
     {
       "i": "webhooks",
       "t": "message_queue",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
-      "l": "Webhook queue"
+      "l": "Webhook queue",
+      "no": "Buffer independently retryable asynchronous work for payment system / wallet."
     },
     {
       "i": "wh",
       "t": "worker",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Webhook processors",
       "no": "Retry with backoff; idempotent status transitions"
@@ -62,17 +66,18 @@
     {
       "i": "recon",
       "t": "batch_processor",
-      "x": 0,
-      "y": 130,
+      "x": 840,
+      "y": 360,
       "l": "Reconciliation",
       "no": "Reconcile ledger vs PSP settlement reports"
     },
     {
       "i": "files",
       "t": "object_storage",
-      "x": 260,
-      "y": 130,
-      "l": "Settlement files"
+      "x": 280,
+      "y": 180,
+      "l": "Settlement files",
+      "no": "Persist immutable large objects for payment system / wallet."
     }
   ],
   "e": [
@@ -80,12 +85,14 @@
       "i": "e1",
       "s": "client",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "gw",
       "d": "pay",
+      "l": "Call Payment Service",
       "h": "r>l"
     },
     {
@@ -93,12 +100,14 @@
       "s": "pay",
       "d": "ledger",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "pay",
       "d": "psp",
+      "l": "Call PSP",
       "h": "r>l"
     },
     {
@@ -115,6 +124,7 @@
       "s": "webhooks",
       "d": "wh",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -122,6 +132,7 @@
       "s": "wh",
       "d": "ledger",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -129,6 +140,7 @@
       "s": "recon",
       "d": "files",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -136,6 +148,7 @@
       "s": "recon",
       "d": "ledger",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -145,20 +158,36 @@
       "ownerNodeId": "pay",
       "method": "POST",
       "path": "/v1/payments",
+      "request": "{ \"idempotencyKey\": \"checkout42\", \"amountMinor\": 10000, \"currency\": \"INR\", \"paymentToken\": \"provider-token\" }",
+      "response": "201/202 { \"paymentId\": \"p1\", \"status\": \"PROCESSING\" }",
+      "statusCodes": "201, 202, 400, 402, 409",
       "auth": true,
       "idempotent": true,
-      "request": "{ orderId, amount, currency, idempotencyKey }",
-      "statusCodes": "201, 402, 409"
+      "note": "Return the prior result for the same key and payload. A timeout does not mean the provider failed; reconcile by provider reference."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "pay",
+      "method": "GET",
+      "path": "/v1/payments/{id}",
+      "request": "No request body.",
+      "response": "200 { \"paymentId\": \"p1\", \"status\": \"SUCCEEDED\" }",
+      "statusCodes": "200, 403, 404",
+      "auth": true,
+      "idempotent": true,
+      "note": "Only an authorized caller sees this payment; settlement and payment authorization are distinct states."
     }
   ],
   "entities": [
     {
       "name": "Payment",
-      "fields": "id, idempotency_key UNIQUE, order_id, amount, status, psp_ref"
+      "fields": "payment_id: string PK\nidempotency_key: string UNIQUE\namount_minor: int64\ncurrency: string\nstatus: PENDING|PROCESSING|SUCCEEDED|FAILED\nprovider_id: string?",
+      "storeNodeId": "ledger"
     },
     {
       "name": "LedgerEntry",
-      "fields": "id, txn_id, account_id, debit, credit, created_at (append-only)"
+      "fields": "entry_id: string PK\ntransaction_id: string INDEX\naccount_id: string\namount_minor_signed: int64\ncurrency: string",
+      "storeNodeId": "ledger"
     }
   ]
 }

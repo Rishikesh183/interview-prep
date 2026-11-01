@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "overview": "Redis-Cluster style 16384 hash slots, a proxy tier routes requests, primaries replicate to replicas, gossip detects failures and promotes replicas.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative hot set: 10M keys at 1 KB/value.",
+      "calculation": "10,000,000 × 1 KB ≈ 10 GB payload; two copies ≈ 20 GB before overhead.",
+      "result": "Metadata, fragmentation and failover headroom increase the memory budget.",
+      "implication": "Partition memory across shards; size for a failed shard moving to survivors."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for distributed cache.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for distributed cache.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "app",
+      "purpose": "Smart client library holds the consistent hashing ring (150 virtual nodes per server); local near cache for hot keys",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "Each key also written to the next node on the ring (replica) for failover",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "sd",
+      "purpose": "Gossip heartbeats; publishes the ring to clients",
+      "rationale": "Refresh stale metadata and bound retries; avoid treating an old map as permanent ownership."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for distributed cache.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "proxy",
+      "purpose": "Proxy computes Redis-style 16384 hash slots; application clients do not maintain the hash ring. Refresh slot ownership on MOVED and retry safely.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "replica",
+      "purpose": "Replicate each primary slot shard; promote a replica after failure. Cached values remain disposable.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "CacheEntry",
+      "purpose": "Disposable hot data with bounded staleness.",
+      "accessPatterns": ["GET by key; SET/DELETE by key; bulk warmup only with rate limits."],
+      "constraints": [
+        "TTL and eviction can remove any entry. Cache failure must not become permanent data loss."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Read a key from its owning cache shard.",
+      "rationale": "Client-ring or proxy routing chooses the shard. A miss causes the application, not the cache, to fetch the source of truth."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Store an expiring value.",
+      "rationale": "Hash key routing must be consistent for GET and SET. Never treat replication of cached data as a durable write guarantee."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Users",
+      "explanation": "In Design, add Web Client and name it “Users”. Place it in the leftmost caller/background lane. User-facing caller for distributed cache. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Users. Distribute incoming connections across healthy instances for distributed cache. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "App servers",
+      "explanation": "In Design, add Service and name it “App servers”. Place it in column 3, row 1 of the HLD; its callers are LB. Smart client library holds the consistent hashing ring (150 virtual nodes per server); local near cache for hot keys Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["app"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Cache cluster",
+      "explanation": "In Design, add Cache and name it “Cache cluster”. Place it in column 4, row 1 of the HLD; its callers are Cache routing proxies. Each key also written to the next node on the ring (replica) for failover Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cache"],
+      "edgeIds": [],
+      "apiIds": ["a1", "a2"],
+      "entityNames": ["CacheEntry"]
+    },
+    {
+      "title": "Slot ownership metadata",
+      "explanation": "In Design, add Service Discovery and name it “Slot ownership metadata”. Place it in column 4, row 2 of the HLD; its callers are Cache routing proxies. Gossip heartbeats; publishes the ring to clients Refresh stale metadata and bound retries; avoid treating an old map as permanent ownership. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sd"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Source of truth",
+      "explanation": "In Design, add SQL Database and name it “Source of truth”. Place it in column 4, row 3 of the HLD; its callers are App servers. Store authoritative records with transactional constraints for distributed cache. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Cache routing proxies",
+      "explanation": "In Design, add Service and name it “Cache routing proxies”. Place it in column 4, row 4 of the HLD; its callers are App servers. Proxy computes Redis-style 16384 hash slots; application clients do not maintain the hash ring. Refresh slot ownership on MOVED and retry safely. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["proxy"],
+      "edgeIds": ["e6", "e7", "e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Cache replicas",
+      "explanation": "In Design, add Cache and name it “Cache replicas”. Place it in column 5, row 1 of the HLD; its callers are Cache cluster. Replicate each primary slot shard; promote a replica after failure. Cached values remain disposable. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["replica"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Proxy routes a key",
+      "steps": [
+        {
+          "title": "Users → LB → App servers → Cache routing proxies → Slot ownership metadata",
+          "explanation": "A proxy resolves the slot-owner map; application callers do not maintain the hash ring.",
+          "nodeIds": ["client", "lb", "app", "proxy", "sd"],
+          "edgeIds": ["e1", "e2", "e6", "e8"]
+        },
+        {
+          "title": "Cache routing proxies → Cache cluster → Cache replicas",
+          "explanation": "Route GET/SET to the primary slot shard; replicate cached values to failover replicas.",
+          "nodeIds": ["proxy", "cache", "replica"],
+          "edgeIds": ["e7", "e9"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Miss and source lookup",
+      "steps": [
+        {
+          "title": "App servers → Cache routing proxies → Cache cluster",
+          "explanation": "A miss returns to the application and may occur after a slot move.",
+          "nodeIds": ["app", "proxy", "cache"],
+          "edgeIds": ["e6", "e7"]
+        },
+        {
+          "title": "App servers → Source of truth",
+          "explanation": "The application fetches the source record with a bounded concurrency budget.",
+          "nodeIds": ["app", "db"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "App servers → Cache routing proxies → Cache cluster",
+          "explanation": "Cache the result; avoid a retry loop when slot ownership changes.",
+          "nodeIds": ["app", "proxy", "cache"],
+          "edgeIds": ["e6", "e7"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A cache shard dies or membership changes",
+      "handling": "Treat misses as recoverable; rebuild gradually with request coalescing and jittered TTLs. Bound source-of-truth load, and version membership to prevent inconsistent routing loops.",
+      "nodeIds": ["cache", "db", "replica"]
+    }
+  ],
+  "alternatives": "Use a client-side ring when applications can share a versioned routing library. Use proxies/hash slots for simpler clients, accepting another hop and a separately scaled routing fleet.",
+  "sectionApplicability": {}
+}

@@ -6,23 +6,25 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "Mobile app"
+      "l": "Mobile app",
+      "no": "Mobile caller with intermittent connectivity for chat app (whatsapp)."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "L4 LB",
       "c": {
         "layer": "L4",
         "algorithm": "least-conn"
-      }
+      },
+      "no": "Distribute incoming connections across healthy instances for chat app (whatsapp)."
     },
     {
       "i": "ws",
       "t": "websocket_server",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Chat servers",
       "c": {
@@ -33,36 +35,37 @@
     {
       "i": "ps",
       "t": "pub_sub",
-      "x": 0,
-      "y": 130,
+      "x": 840,
+      "y": 0,
       "l": "Redis Pub/Sub",
       "no": "Channel per user id; the node holding the socket subscribes"
     },
     {
       "i": "msg",
       "t": "service",
-      "x": 780,
-      "y": 0,
+      "x": 840,
+      "y": 180,
       "l": "Message Service",
       "no": "Assigns per-conversation sequence (snowflake) for ordering"
     },
     {
       "i": "cass",
       "t": "wide_column",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Cassandra",
       "c": {
         "partitionKey": "conversation_id",
         "clusteringKey": "message_id",
         "consistencyLevel": "LOCAL_QUORUM"
-      }
+      },
+      "no": "Store partitioned ordered records for chat app (whatsapp)."
     },
     {
       "i": "presence",
       "t": "cache",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 360,
       "l": "Presence Redis",
       "c": {
         "strategy": "write-through",
@@ -73,27 +76,29 @@
     {
       "i": "notif",
       "t": "notification_service",
-      "x": 1040,
-      "y": 130,
+      "x": 1120,
+      "y": 180,
       "l": "Push Notifications",
       "no": "Offline users"
     },
     {
       "i": "apns",
       "t": "external_service",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "APNs / FCM",
       "c": {
         "provider": "APNs, FCM"
-      }
+      },
+      "no": "External system boundary for chat app (whatsapp)."
     },
     {
       "i": "hist",
       "t": "service",
-      "x": 520,
-      "y": 130,
-      "l": "History API"
+      "x": 560,
+      "y": 180,
+      "l": "History API",
+      "no": "Implement the owned APIs and coordinate state transitions for chat app (whatsapp)."
     }
   ],
   "e": [
@@ -102,18 +107,23 @@
       "s": "client",
       "d": "lb",
       "p": "WebSocket",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "ws",
+      "a": "a1",
+      "l": "Call Chat servers",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "hist",
+      "a": "a2",
+      "l": "Call History API",
       "h": "r>l"
     },
     {
@@ -121,6 +131,7 @@
       "s": "ws",
       "d": "msg",
       "p": "gRPC",
+      "l": "Call Message Service",
       "h": "r>l"
     },
     {
@@ -128,6 +139,7 @@
       "s": "msg",
       "d": "cass",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -143,6 +155,7 @@
       "s": "ps",
       "d": "ws",
       "m": "a",
+      "a": "a1",
       "l": "deliver",
       "h": "r>l"
     },
@@ -151,6 +164,7 @@
       "s": "ws",
       "d": "presence",
       "o": "w",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -166,6 +180,7 @@
       "i": "e10",
       "s": "notif",
       "d": "apns",
+      "l": "Call APNs / FCM",
       "h": "r>l"
     },
     {
@@ -173,6 +188,7 @@
       "s": "hist",
       "d": "cass",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -182,28 +198,37 @@
       "ownerNodeId": "ws",
       "method": "WS",
       "path": "/v1/connect",
+      "request": "{ \"type\": \"send\", \"conversationId\": \"c1\", \"messageId\": \"client-42\", \"body\": \"hello\" }",
+      "response": "{ \"type\": \"ack\", \"messageId\": \"client-42\", \"sequence\": 18 }; { \"type\": \"message\", \"sequence\": 18, \"body\": \"hello\" }",
+      "statusCodes": "101; invalid_message, forbidden, unavailable",
       "auth": true,
-      "request": "send {conversationId, clientMsgId, body}",
-      "response": "ack {messageId, seq}"
+      "idempotent": true,
+      "note": "Dedup by messageId; distinguish durable acceptance, recipient delivery and read receipts. Reconnect resumes from the last acknowledged sequence."
     },
     {
       "id": "a2",
       "ownerNodeId": "hist",
       "method": "GET",
       "path": "/v1/conversations/{id}/messages",
+      "request": "No request body; ?afterSequence=17&limit=50",
+      "response": "200 { \"messages\": [{ \"sequence\": 18, \"body\": \"hello\" }], \"nextCursor\": \"18\" }",
+      "statusCodes": "200, 401, 403",
       "auth": true,
+      "idempotent": true,
       "pagination": "cursor",
-      "response": "{ messages, nextCursor }"
+      "note": "Use cursor pagination over conversation sequence, never a global ordering requirement."
     }
   ],
   "entities": [
     {
       "name": "Message",
-      "fields": "conversation_id (partition), message_id (clustering, snowflake), sender_id, body, status"
+      "fields": "conversation_id: string partition key\nsequence: int64 sort key\nmessage_id: string UNIQUE\nsender_id: string\nbody: string\ncreated_at: timestamp",
+      "storeNodeId": "cass"
     },
     {
       "name": "Conversation",
-      "fields": "id, members[], type (direct/group)"
+      "fields": "conversation_id: string PK\nmember_ids: string[]\nlast_sequence: int64",
+      "storeNodeId": "cass"
     }
   ]
 }

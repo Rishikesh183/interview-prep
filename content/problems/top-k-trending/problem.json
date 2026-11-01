@@ -35,6 +35,7 @@
   "prerequisites": [
     "message-queues-vs-streams",
     "caching-strategies",
-    "back-of-envelope-estimation"
+    "back-of-envelope-estimation",
+    "hot-partitions"
   ]
 }

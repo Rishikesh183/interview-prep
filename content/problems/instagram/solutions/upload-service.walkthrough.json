@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "overview": "A dedicated upload service streams photos to S3 and enqueues processing; simpler auth and validation, more bandwidth on your fleet.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative uploads: 10M photos/day at 2 MB/original.",
+      "calculation": "10,000,000 × 2 MB = 20 TB/day before variants and replicas.",
+      "result": "Media bandwidth and storage dominate small metadata records.",
+      "implication": "Upload directly or through a dedicated fleet; generate variants asynchronously and deliver through CDN."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Uploads photos straight to S3 with a presigned URL",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Serve cacheable media or static responses close to users for instagram.",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for instagram.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "api",
+      "purpose": "Issues presigned URLs; like counts are Redis counters flushed in batch",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Persist immutable large objects for instagram.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for instagram.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "thumb",
+      "purpose": "Execute background work with bounded concurrency for instagram.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "meta",
+      "purpose": "Store partitioned point-lookup state for instagram.",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "feed",
+      "purpose": "Serve derived or transient hot state for instagram.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "up",
+      "purpose": "Authenticate upload, enforce size/type, scan content and stream bytes to object storage with bounded memory.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Post",
+      "purpose": "Post metadata controlling visibility.",
+      "accessPatterns": ["Create upload metadata; list READY posts in feed order."],
+      "constraints": [
+        "Use conditional transitions so duplicate thumbnail jobs cannot regress READY to PROCESSING."
+      ],
+      "relationships": [
+        "media_keys reference PhotoObject variants; publish READY only when required variants exist."
+      ]
+    },
+    {
+      "entityName": "PhotoObject",
+      "purpose": "Immutable photo originals and generated variants.",
+      "accessPatterns": ["Upload an original; CDN fetches the appropriate published variant."],
+      "constraints": [
+        "Signed uploads constrain size/type; publish only validated variants; revoke visibility at the metadata layer."
+      ],
+      "relationships": [
+        "post_id associates originals and variants with Post; metadata controls feed visibility."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Begin a validated photo upload.",
+      "rationale": "Presigned mode transfers bytes to object storage; upload-service mode streams them through the upload fleet."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Verify upload completion and schedule processing.",
+      "rationale": "A retry must not enqueue unbounded duplicate processing; confirm the referenced object belongs to the user."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Read a paginated media feed.",
+      "rationale": "Return CDN URLs for READY variants, not original photo bytes through the API."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "App",
+      "explanation": "In Design, add Mobile Client and name it “App”. Place it in the leftmost caller/background lane. Uploads photos straight to S3 with a presigned URL Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 1 of the HLD; its callers are App. Serve cacheable media or static responses close to users for instagram. Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 2 of the HLD; its callers are App. Distribute incoming connections across healthy instances for instagram. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Media API",
+      "explanation": "In Design, add Service and name it “Media API”. Place it in column 3, row 1 of the HLD; its callers are LB. Issues presigned URLs; like counts are Redis counters flushed in batch Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["api"],
+      "edgeIds": ["e5"],
+      "apiIds": ["a2", "a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Photos",
+      "explanation": "In Design, add Object Storage and name it “Photos”. Place it in column 3, row 2 of the HLD; its callers are CDN, Thumbnailers, Upload Service. Persist immutable large objects for instagram. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": ["PhotoObject"]
+    },
+    {
+      "title": "Thumbnail jobs",
+      "explanation": "In Design, add Message Queue and name it “Thumbnail jobs”. Place it in column 4, row 1 of the HLD; its callers are Upload Service. Buffer independently retryable asynchronous work for instagram. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Thumbnailers",
+      "explanation": "In Design, add Worker and name it “Thumbnailers”. Place it in column 5, row 1 of the HLD; its callers are Thumbnail jobs. Execute background work with bounded concurrency for instagram. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["thumb"],
+      "edgeIds": ["e9", "e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Posts",
+      "explanation": "In Design, add Key-Value Store and name it “Posts”. Place it in column 4, row 2 of the HLD; its callers are Media API, Thumbnailers. Store partitioned point-lookup state for instagram. Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meta"],
+      "edgeIds": ["e6", "e14"],
+      "apiIds": [],
+      "entityNames": ["Post"]
+    },
+    {
+      "title": "Feed cache",
+      "explanation": "In Design, add Cache and name it “Feed cache”. Place it in column 4, row 3 of the HLD; its callers are Media API. Serve derived or transient hot state for instagram. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["feed"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Upload Service",
+      "explanation": "In Design, add Service and name it “Upload Service”. Place it in column 3, row 3 of the HLD; its callers are LB. Authenticate upload, enforce size/type, scan content and stream bytes to object storage with bounded memory. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["up"],
+      "edgeIds": ["e11", "e12", "e13"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Stream a validated photo",
+      "steps": [
+        {
+          "title": "App → LB → Upload Service → Photos",
+          "explanation": "The upload service authenticates, validates and streams the original to object storage.",
+          "nodeIds": ["client", "lb", "up", "s3"],
+          "edgeIds": ["e4", "e11", "e12"]
+        },
+        {
+          "title": "Upload Service → Thumbnail jobs → Thumbnailers → Photos",
+          "explanation": "Queue deterministic variant processing after a complete upload.",
+          "nodeIds": ["up", "q", "thumb", "s3"],
+          "edgeIds": ["e13", "e9", "e10"]
+        },
+        {
+          "title": "Thumbnailers → Posts",
+          "explanation": "Commit READY metadata only after variant completion is verified.",
+          "nodeIds": ["thumb", "meta"],
+          "edgeIds": ["e14"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Read feed and thumbnails",
+      "steps": [
+        {
+          "title": "App → LB → Media API → Feed cache",
+          "explanation": "Fetch feed IDs and ready metadata.",
+          "nodeIds": ["client", "lb", "api", "feed"],
+          "edgeIds": ["e4", "e5", "e7"]
+        },
+        {
+          "title": "App → CDN → Photos",
+          "explanation": "Deliver media variants through CDN.",
+          "nodeIds": ["client", "cdn", "s3"],
+          "edgeIds": ["e1", "e2"]
+        }
+      ],
+      "apiId": "a3"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Thumbnail job is duplicated or a variant fails",
+      "handling": "Use deterministic object keys and conditional metadata transitions. Retry failed variants; keep the post PROCESSING or show an explicit placeholder instead of broken media.",
+      "nodeIds": ["thumb", "meta", "feed"]
+    }
+  ],
+  "alternatives": "Use presigned uploads to bypass app-tier media bandwidth. Use an upload service when inline validation and scanning justify the additional bandwidth and scaling cost.",
+  "sectionApplicability": {}
+}

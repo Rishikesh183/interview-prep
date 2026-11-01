@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "overview": "Each search server builds an in-memory quadtree (leaf ≤ 100 businesses) at startup from the DB; rebuilt nightly with rolling restarts.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative directory: 100M businesses, 100 B of geo-index payload each.",
+      "calculation": "100,000,000 × 100 B ≈ 10 GB of index payload before tree/replica overhead.",
+      "result": "Replicating the complete tree on every server is expensive.",
+      "implication": "Shard by geographic region and replicate hot regions; use exact-distance filtering for cell-boundary correctness."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for proximity service (yelp).",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for proximity service (yelp).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "search",
+      "purpose": "Queries the target geohash cell plus its 8 neighbours (boundaries)",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "biz",
+      "purpose": "Implement the owned APIs and coordinate state transitions for proximity service (yelp).",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "geo",
+      "purpose": "Split dense cells until at most 100 businesses per leaf. Traverse cells intersecting the radius, then exact-distance filter; swap rebuilt versioned trees atomically.",
+      "rationale": "Search every intersecting cell and exact-distance filter; the geo view is not an authoritative exclusive assignment."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "Serve derived or transient hot state for proximity service (yelp).",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for proximity service (yelp).",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "rebuild",
+      "purpose": "Owner edits show up the next day",
+      "rationale": "Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Business",
+      "purpose": "Authoritative business location and searchable attributes.",
+      "accessPatterns": ["Create/update a business; hydrate candidate IDs from a geo index."],
+      "constraints": [
+        "Validate coordinates; exact-distance filtering removes false positives from cell traversal."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Find businesses within a radius.",
+      "rationale": "Search every intersecting cell, then exact-distance filter and rank. A fixed nine-cell scan is only sufficient for a bounded radius/cell-size combination. Bind cursors to the query center/radius and stable distance/ID ordering."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Register a business and update the derived geo index.",
+      "rationale": "Publish index changes through a durable change feed; document freshness if rebuilding periodically."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "App",
+      "explanation": "In Design, add Mobile Client and name it “App”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for proximity service (yelp). Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are App. Distribute incoming connections across healthy instances for proximity service (yelp). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Search Service",
+      "explanation": "In Design, add Service and name it “Search Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Queries the target geohash cell plus its 8 neighbours (boundaries) Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["search"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Business Service",
+      "explanation": "In Design, add Service and name it “Business Service”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for proximity service (yelp). Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["biz"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "In-memory quadtrees",
+      "explanation": "In Design, add Geo Index and name it “In-memory quadtrees”. Place it in column 4, row 1 of the HLD; its callers are Search Service, Nightly index rebuild. Split dense cells until at most 100 businesses per leaf. Traverse cells intersecting the radius, then exact-distance filter; swap rebuilt versioned trees atomically. Search every intersecting cell and exact-distance filter; the geo view is not an authoritative exclusive assignment. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["geo"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Cell cache",
+      "explanation": "In Design, add Cache and name it “Cell cache”. Place it in column 4, row 2 of the HLD; its callers are Search Service. Serve derived or transient hot state for proximity service (yelp). Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cache"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Businesses",
+      "explanation": "In Design, add SQL Database and name it “Businesses”. Place it in column 4, row 3 of the HLD; its callers are Search Service, Business Service, Nightly index rebuild. Store authoritative records with transactional constraints for proximity service (yelp). Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e6", "e7"],
+      "apiIds": [],
+      "entityNames": ["Business"]
+    },
+    {
+      "title": "Nightly index rebuild",
+      "explanation": "In Design, add Batch Processor and name it “Nightly index rebuild”. Place it in column 4, row 4 of the HLD. Owner edits show up the next day Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["rebuild"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Search an adaptive spatial tree",
+      "steps": [
+        {
+          "title": "App → LB → Search Service → In-memory quadtrees",
+          "explanation": "Traverse quadtree leaves intersecting the search circle; dense regions split more deeply.",
+          "nodeIds": ["client", "lb", "search", "geo"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "Search Service → Businesses",
+          "explanation": "Hydrate candidates and apply exact-distance, active-state and category filtering.",
+          "nodeIds": ["search", "db"],
+          "edgeIds": ["e6"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Swap a rebuilt tree",
+      "steps": [
+        {
+          "title": "Nightly index rebuild → Businesses",
+          "explanation": "Read an authoritative versioned snapshot.",
+          "nodeIds": ["rebuild", "db"],
+          "edgeIds": ["e8"]
+        },
+        {
+          "title": "Nightly index rebuild → In-memory quadtrees",
+          "explanation": "Build the new tree off the serving path; atomically swap the version across healthy replicas.",
+          "nodeIds": ["rebuild", "geo"],
+          "edgeIds": ["e9"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Geo index is stale after a business moves",
+      "handling": "Version the source record and index update; rebuild or replay changes. Filter inactive/deleted businesses during hydration and expose a defined freshness bound.",
+      "nodeIds": ["cache", "db"]
+    }
+  ],
+  "alternatives": "Use geohash cells for simple incremental indexing, searching all cells intersecting the radius. Use region-sharded quadtrees for density-adaptive searches when building and atomically swapping in-memory trees is acceptable.",
+  "sectionApplicability": {}
+}

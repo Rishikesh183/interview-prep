@@ -6,27 +6,28 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "Shoppers"
+      "l": "Shoppers",
+      "no": "Mobile caller with intermittent connectivity for e-commerce flash sale."
     },
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "no": "Sale page is static"
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
-      "y": 130,
+      "x": 280,
+      "y": 180,
       "l": "Gateway",
       "no": "Per-user rate limit rejects excess early"
     },
     {
       "i": "sale",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Sale Service",
       "no": "Lua: DECR stock only if > 0, so we never oversell"
@@ -34,44 +35,48 @@
     {
       "i": "redis",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Stock counter",
       "c": {
         "strategy": "write-through",
         "eviction": "TTL",
         "ttl": "2h"
-      }
+      },
+      "no": "Serve derived or transient hot state for e-commerce flash sale."
     },
     {
       "i": "q",
       "t": "message_queue",
-      "x": 780,
-      "y": 130,
-      "l": "Orders"
+      "x": 840,
+      "y": 180,
+      "l": "Orders",
+      "no": "Buffer independently retryable asynchronous work for e-commerce flash sale."
     },
     {
       "i": "orders",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
-      "l": "Order workers"
+      "l": "Order workers",
+      "no": "Execute background work with bounded concurrency for e-commerce flash sale."
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Orders DB",
       "c": {
         "replicas": 2
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for e-commerce flash sale."
     },
     {
       "i": "sweeper",
       "t": "scheduler",
       "x": 0,
-      "y": 130,
+      "y": 180,
       "l": "Unpaid sweeper",
       "c": {
         "cron": "* * * * *"
@@ -85,18 +90,22 @@
       "s": "client",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "client",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "gw",
       "d": "sale",
+      "a": "a1",
+      "l": "Call Sale Service",
       "h": "r>l"
     },
     {
@@ -104,6 +113,7 @@
       "s": "sale",
       "d": "redis",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -111,6 +121,7 @@
       "s": "sale",
       "d": "q",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -118,6 +129,7 @@
       "s": "q",
       "d": "orders",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -125,6 +137,7 @@
       "s": "orders",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -132,6 +145,7 @@
       "s": "sweeper",
       "d": "db",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -139,6 +153,7 @@
       "s": "sweeper",
       "d": "redis",
       "o": "w",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     }
   ],
@@ -148,11 +163,25 @@
       "ownerNodeId": "sale",
       "method": "POST",
       "path": "/v1/sales/{saleId}/buy",
+      "request": "{ \"requestId\": \"r1\", \"quantity\": 1 }",
+      "response": "202 { \"reservationId\": \"h1\", \"orderStatus\": \"PENDING\" }",
+      "statusCodes": "202, 409, 429",
       "auth": true,
       "idempotent": true,
       "rateLimited": true,
-      "statusCodes": "202, 409, 429"
+      "note": "Dedup requestId, enforce one purchase per policy, and return sold-out/admission responses explicitly."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "PurchaseReservation",
+      "fields": "sale_id: string\nuser_id: string\ntoken_id: string UNIQUE\nlease_version: int64\nexpires_at: timestamp\nstate: HELD|REDEEMED|RELEASED",
+      "storeNodeId": "redis"
+    },
+    {
+      "name": "Order",
+      "fields": "order_id: string PK\nsale_id: string\nuser_id: string\ntoken_id: string UNIQUE\nstatus: PENDING|PAID|EXPIRED",
+      "storeNodeId": "db"
+    }
+  ]
 }

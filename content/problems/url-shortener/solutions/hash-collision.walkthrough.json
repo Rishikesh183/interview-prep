@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "overview": "Hash a destination plus salt into a short base62 code and conditionally insert it under a uniqueness constraint. On collision with a different destination, choose a new salt and retry. Stable destination deduplication requires a separate unique fingerprint policy. Redirects use cache-aside SQL lookups and 302 responses so expiry stays under server control.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "100M new mappings/month; 100 reads per write; 500 B/mapping.",
+      "calculation": "100,000,000 / (30 × 86,400) ≈ 39 writes/s; reads ≈ 3,900/s; 3× peak ≈ 11,700 reads/s.",
+      "result": "Five-year raw mapping storage ≈ 3 TB, before replication and indexes.",
+      "implication": "Optimize redirects with a shared cache; scale stateless services and replicate durable mappings."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for url shortener.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Auth + rate limiting on create",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Hash the destination with salt, truncate to a base62 code, conditionally insert and retry on collision. Return 302 for expiry control; deterministic URL dedup needs its own fingerprint uniqueness rule.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "Serve derived or transient hot state for url shortener.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "UNIQUE(code) catches collisions",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "UrlMapping",
+      "purpose": "Durable mapping from a short code to its destination.",
+      "accessPatterns": ["Insert a unique code; point-read by code on redirect."],
+      "constraints": [
+        "Use a conditional insert or UNIQUE(code); check expiry before returning or caching a destination."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Create a short link, with optional alias and expiry.",
+      "rationale": "Validate the URL scheme; reserve the code atomically. A duplicate alias is a conflict, not an overwrite."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Resolve a short link to a destination.",
+      "rationale": "Cache-aside lookup; 302 keeps expiry policy under server control. Bound cache TTL by expires_at."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "App",
+      "explanation": "In Design, add Mobile Client and name it “App”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for url shortener. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "API Gateway",
+      "explanation": "In Design, add API Gateway and name it “API Gateway”. Place it in column 2, row 1 of the HLD; its callers are App. Auth + rate limiting on create Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "URL Service",
+      "explanation": "In Design, add Service and name it “URL Service”. Place it in column 3, row 1 of the HLD; its callers are API Gateway. Hash the destination with salt, truncate to a base62 code, conditionally insert and retry on collision. Return 302 for expiry control; deterministic URL dedup needs its own fingerprint uniqueness rule. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Redis",
+      "explanation": "In Design, add Cache and name it “Redis”. Place it in column 4, row 1 of the HLD; its callers are URL Service. Serve derived or transient hot state for url shortener. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cache"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Postgres",
+      "explanation": "In Design, add SQL Database and name it “Postgres”. Place it in column 4, row 2 of the HLD; its callers are URL Service. UNIQUE(code) catches collisions Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["UrlMapping"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Create using a truncated hash",
+      "steps": [
+        {
+          "title": "App → API Gateway → URL Service",
+          "explanation": "Validate the request and hash a normalized destination plus salt.",
+          "nodeIds": ["client", "gw", "svc"],
+          "edgeIds": ["e1", "e2"]
+        },
+        {
+          "title": "URL Service → Postgres",
+          "explanation": "Insert under UNIQUE(code); if another destination owns the code, retry with a new salt. A repeated destination needs a separate unique fingerprint policy if deduplication is promised.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e4"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Redirect and expiry",
+      "steps": [
+        {
+          "title": "App → API Gateway → URL Service → Redis",
+          "explanation": "Try a valid cached mapping; permanent browser caching is inappropriate for expiring links.",
+          "nodeIds": ["client", "gw", "svc", "cache"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "URL Service → Postgres",
+          "explanation": "On miss, check existence and expiry in SQL.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "URL Service → Redis",
+          "explanation": "Cache the result with a lifetime bounded by expires_at; return 302.",
+          "nodeIds": ["svc", "cache"],
+          "edgeIds": ["e3"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Cache is unavailable or a link has expired",
+      "handling": "Read the durable store with a bounded timeout and protect it from a cache-miss stampede. Reject expired mappings even before TTL cleanup runs.",
+      "nodeIds": ["cache", "db"]
+    }
+  ],
+  "alternatives": "Use counter ranges when collision-free allocation justifies operating a namespace allocator. Use salted hashing to avoid that allocator, accepting conditional-insert retries and a separate policy for destination deduplication.",
+  "sectionApplicability": {}
+}

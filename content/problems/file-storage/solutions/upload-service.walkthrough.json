@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "overview": "Clients send resumable chunked uploads to an upload service that writes chunks to object storage and records them in metadata. Devices long-poll a changes endpoint for sync. Conflicts are resolved by keeping both versions.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative file: 100 MB; 4 MB blocks; one changed block.",
+      "calculation": "ceil(100 / 4) = 25 blocks; delta upload = 4 MB instead of 100 MB.",
+      "result": "A one-block edit transfers about 4% of the original file size.",
+      "implication": "Immutable chunking reduces transfer cost; metadata needs atomic version and block-list updates."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for dropbox / google drive.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Authenticate, apply admission limits and route requests for dropbox / google drive.",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "up",
+      "purpose": "Resumable chunked upload; SHA-1 per chunk for dedup",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "sync",
+      "purpose": "Long-poll /changes; conflicting edits keep both versions",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "blobs",
+      "purpose": "Persist immutable large objects for dropbox / google drive.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "meta",
+      "purpose": "Store documents and their versioned lifecycle for dropbox / google drive.",
+      "rationale": "Index the access keys and use conditional updates for state changes; avoid unbounded embedded histories."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "FileVersion",
+      "purpose": "Atomic metadata version pointing to an immutable block list.",
+      "accessPatterns": [
+        "Commit a version with an expected previous version; list changes after a cursor."
+      ],
+      "constraints": [
+        "Compare-and-swap version prevents lost updates; keep both versions or surface a conflict."
+      ],
+      "relationships": [
+        "block_hashes reference immutable Block objects in file order; commit the complete list atomically."
+      ]
+    },
+    {
+      "entityName": "Block",
+      "purpose": "Immutable file bytes stored independently from metadata.",
+      "accessPatterns": ["Upload missing blocks; fetch a file version by ordered block list."],
+      "constraints": [
+        "Validate checksum and ownership; content dedup must not expose other users' data."
+      ],
+      "relationships": [
+        "FileVersion references content hashes; block reads must still enforce file ownership."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Begin a resumable block upload.",
+      "rationale": "Presigned mode returns signed object-store URLs; upload-service mode returns service chunk URLs."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Upload or resume one immutable chunk.",
+      "rationale": "Retry the same chunk number and checksum safely; metadata commit is a separate operation."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Publish a new file version after all referenced blocks exist.",
+      "rationale": "Commit the version and change cursor atomically; incomplete blocks must not become a visible file."
+    },
+    {
+      "apiId": "a4",
+      "purpose": "Sync file changes to another device.",
+      "rationale": "A durable cursor recovers missed WebSocket hints or long-poll responses."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Clients",
+      "explanation": "In Design, add Mobile Client and name it “Clients”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for dropbox / google drive. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Gateway",
+      "explanation": "In Design, add API Gateway and name it “Gateway”. Place it in column 2, row 1 of the HLD; its callers are Clients. Authenticate, apply admission limits and route requests for dropbox / google drive. Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Upload Service",
+      "explanation": "In Design, add Service and name it “Upload Service”. Place it in column 3, row 1 of the HLD; its callers are Gateway. Resumable chunked upload; SHA-1 per chunk for dedup Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["up"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2", "a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Sync Service",
+      "explanation": "In Design, add Service and name it “Sync Service”. Place it in column 3, row 2 of the HLD; its callers are Gateway. Long-poll /changes; conflicting edits keep both versions Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sync"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a4"],
+      "entityNames": []
+    },
+    {
+      "title": "Chunk storage",
+      "explanation": "In Design, add Object Storage and name it “Chunk storage”. Place it in column 4, row 1 of the HLD; its callers are Upload Service. Persist immutable large objects for dropbox / google drive. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["blobs"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["Block"]
+    },
+    {
+      "title": "Metadata",
+      "explanation": "In Design, add Document DB and name it “Metadata”. Place it in column 4, row 2 of the HLD; its callers are Upload Service, Sync Service. Store documents and their versioned lifecycle for dropbox / google drive. Index the access keys and use conditional updates for state changes; avoid unbounded embedded histories. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meta"],
+      "edgeIds": ["e5", "e6"],
+      "apiIds": [],
+      "entityNames": ["FileVersion"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Upload through the service",
+      "steps": [
+        {
+          "title": "Clients → Gateway → Upload Service → Chunk storage",
+          "explanation": "Validate chunk identity and checksum, then stream bytes with bounded memory.",
+          "nodeIds": ["client", "gw", "up", "blobs"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "Upload Service → Metadata",
+          "explanation": "Commit the ordered block list and new file version after all chunks exist.",
+          "nodeIds": ["up", "meta"],
+          "edgeIds": ["e5"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Poll changes on another device",
+      "steps": [
+        {
+          "title": "Clients → Gateway → Sync Service → Metadata",
+          "explanation": "Read changes after the last durable cursor; retain conflicting versions instead of silently overwriting.",
+          "nodeIds": ["client", "gw", "sync", "meta"],
+          "edgeIds": ["e1", "e3", "e6"]
+        }
+      ],
+      "apiId": "a4"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Upload succeeds but metadata commit fails",
+      "handling": "Leave uploaded blocks unreferenced, allow a retry with the same upload ID, and garbage-collect abandoned blocks after a grace period. Never expose a partial file version.",
+      "nodeIds": []
+    }
+  ],
+  "alternatives": "Use presigned content-addressed blocks to bypass app-server bandwidth and support delta sync. Use an upload fleet for centralized scanning, validation and transport control at higher transfer cost.",
+  "sectionApplicability": {}
+}

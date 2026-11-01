@@ -14,18 +14,41 @@
   },
   {
     "id": "aggregation",
-    "title": "A stream processor aggregates clicks in windows",
+    "title": "Windowed stream or bounded micro-batch aggregation",
     "kind": "core",
     "weight": 1,
     "check": {
-      "nodeConfig": {
-        "type": "stream_processor",
-        "where": {
-          "windowing": "^(tumbling|sliding|session)$"
+      "anyOf": [
+        {
+          "nodeConfig": {
+            "type": "stream_processor",
+            "where": {
+              "windowing": "^(tumbling|sliding|session)$"
+            }
+          }
+        },
+        {
+          "allOf": [
+            {
+              "hasNode": "batch_processor"
+            },
+            {
+              "pathExists": {
+                "from": "batch_processor",
+                "to": "object_storage"
+              }
+            },
+            {
+              "pathExists": {
+                "from": "batch_processor",
+                "to": "data_warehouse"
+              }
+            }
+          ]
         }
-      }
+      ]
     },
-    "failHint": "Advertisers want clicks per ad per minute. What computes that continuously?"
+    "failHint": "Which component computes counts for a bounded time window, and what inputs and outputs does it use?"
   },
   {
     "id": "dedup",

@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "overview": "The API gateway runs the limiter as middleware. Token buckets per API key live in a Redis cluster and are refilled lazily inside a Lua script (atomic read-modify-write). Over-limit → 429 with Retry-After.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative fleet: 20 gateway instances, shared limit 100 requests/s/subject.",
+      "calculation": "Independent counters would admit 20 × 100 = 2,000 requests/s.",
+      "result": "One coordinated state key enforces the intended global quota.",
+      "implication": "Shard by subject/policy, use atomic scripts and account for hot-subject contention."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for rate limiter.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for rate limiter.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Token bucket per API key via Lua script; 429 + Retry-After; fail open on Redis errors",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "redis",
+      "purpose": "Bucket state: tokens + last_refill, atomic Lua",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "rules",
+      "purpose": "Per-tier limits, cached in gateway memory",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Implement the owned APIs and coordinate state transitions for rate limiter.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "LimitState",
+      "purpose": "Shared per-subject limiter state.",
+      "accessPatterns": ["Check and consume quota atomically on every protected request."],
+      "constraints": [
+        "Use one Lua transaction for read/compute/write/expiry; hash-tag keys that must be updated together."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Decide whether one request may reach the backend.",
+      "rationale": "Gateway middleware may invoke this internally; the separate limiter variant exposes the same internal contract. Define whether retries consume quota again."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Example backend endpoint protected by the limiter.",
+      "rationale": "The backend executes only after the admission decision; use a coarse emergency local cap during shared-store outages."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "API clients",
+      "explanation": "In Design, add Web Client and name it “API clients”. Place it in the leftmost caller/background lane. User-facing caller for rate limiter. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are API clients. Distribute incoming connections across healthy instances for rate limiter. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "API Gateway",
+      "explanation": "In Design, add API Gateway and name it “API Gateway”. Place it in column 3, row 1 of the HLD; its callers are LB. Token bucket per API key via Lua script; 429 + Retry-After; fail open on Redis errors Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Redis cluster",
+      "explanation": "In Design, add Cache and name it “Redis cluster”. Place it in column 4, row 1 of the HLD; its callers are API Gateway. Bucket state: tokens + last_refill, atomic Lua Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["redis"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["LimitState"]
+    },
+    {
+      "title": "Rules DB",
+      "explanation": "In Design, add SQL Database and name it “Rules DB”. Place it in column 4, row 2 of the HLD; its callers are API Gateway. Per-tier limits, cached in gateway memory Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["rules"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Backend API",
+      "explanation": "In Design, add Service and name it “Backend API”. Place it in column 4, row 3 of the HLD; its callers are API Gateway. Implement the owned APIs and coordinate state transitions for rate limiter. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e5"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Allow or reject at the gateway",
+      "steps": [
+        {
+          "title": "API clients → LB → API Gateway → Redis cluster",
+          "explanation": "Read/refill/consume token-bucket state in one Lua operation. A denied request returns 429 with Retry-After.",
+          "nodeIds": ["client", "lb", "gw", "redis"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "API Gateway → Backend API",
+          "explanation": "Only the allowed branch executes the protected backend.",
+          "nodeIds": ["gw", "svc"],
+          "edgeIds": ["e5"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Refresh policy and handle outage",
+      "steps": [
+        {
+          "title": "API Gateway → Rules DB",
+          "explanation": "Cache versioned limiter policies outside the per-request hot path.",
+          "nodeIds": ["gw", "rules"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "API Gateway → Redis cluster",
+          "explanation": "If Redis times out, apply the endpoint-specific fail-open/closed policy and emergency local cap.",
+          "nodeIds": ["gw", "redis"],
+          "edgeIds": ["e3"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "The shared counter store is unreachable",
+      "handling": "Choose fail-open for availability-oriented reads with a local emergency cap; fail-closed for expensive or sensitive operations. Bound the decision timeout and return a documented retry response.",
+      "nodeIds": ["redis", "rules"]
+    }
+  ],
+  "alternatives": "Use gateway token buckets for burst allowance and fewer hops. Use a dedicated sliding-window limiter for centralized policy and smoother quotas, accepting another decision hop. Define outage behavior per endpoint.",
+  "sectionApplicability": {}
+}

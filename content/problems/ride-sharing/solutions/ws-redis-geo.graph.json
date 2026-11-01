@@ -6,39 +6,43 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "Driver app"
+      "l": "Driver app",
+      "no": "Mobile caller with intermittent connectivity for uber / ola."
     },
     {
       "i": "rider",
       "t": "mobile_client",
       "x": 0,
-      "y": 130,
-      "l": "Rider app"
+      "y": 180,
+      "l": "Rider app",
+      "no": "Mobile caller with intermittent connectivity for uber / ola."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "LB",
       "c": {
         "layer": "L4"
-      }
+      },
+      "no": "Distribute incoming connections across healthy instances for uber / ola."
     },
     {
       "i": "loc",
       "t": "websocket_server",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Location gateway",
       "c": {
         "instances": 100
-      }
+      },
+      "no": "Maintain long-lived sessions and deliver realtime events for uber / ola."
     },
     {
       "i": "geo",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Redis GEO (per city)",
       "c": {
@@ -51,52 +55,56 @@
     {
       "i": "match",
       "t": "service",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Matching Service",
       "no": "Atomic Lua: available → assigned (exactly one rider)"
     },
     {
       "i": "trip",
       "t": "service",
-      "x": 780,
-      "y": 130,
-      "l": "Trip Service"
+      "x": 840,
+      "y": 180,
+      "l": "Trip Service",
+      "no": "Implement the owned APIs and coordinate state transitions for uber / ola."
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Trips DB",
       "c": {
         "replicas": 3,
         "sharding": "hash",
         "shardKey": "city_id"
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for uber / ola."
     },
     {
       "i": "pay",
       "t": "external_service",
-      "x": 1040,
-      "y": 130,
+      "x": 1120,
+      "y": 180,
       "l": "Payments",
       "c": {
         "provider": "Stripe/Adyen"
-      }
+      },
+      "no": "External system boundary for uber / ola."
     },
     {
       "i": "notif",
       "t": "notification_service",
-      "x": 780,
-      "y": 260,
-      "l": "Push"
+      "x": 840,
+      "y": 360,
+      "l": "Push",
+      "no": "Route delivery hints to the chosen channel for uber / ola."
     },
     {
       "i": "trips",
       "t": "pub_sub",
-      "x": 780,
-      "y": 390,
+      "x": 840,
+      "y": 540,
       "l": "Trip channels",
       "no": "Live driver location fanned out to the rider's gateway node"
     }
@@ -107,30 +115,37 @@
       "s": "driver",
       "d": "lb",
       "p": "WebSocket",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "rider",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "loc",
+      "a": "a2",
+      "l": "Call Location gateway",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "lb",
       "d": "match",
+      "a": "a1",
+      "l": "Call Matching Service",
       "h": "r>l"
     },
     {
       "i": "e5",
       "s": "lb",
       "d": "trip",
+      "l": "Call Trip Service",
       "h": "r>l"
     },
     {
@@ -138,6 +153,7 @@
       "s": "loc",
       "d": "geo",
       "o": "w",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -145,6 +161,7 @@
       "s": "match",
       "d": "geo",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -152,6 +169,7 @@
       "s": "match",
       "d": "trip",
       "p": "gRPC",
+      "l": "Call Trip Service",
       "h": "r>l"
     },
     {
@@ -159,12 +177,14 @@
       "s": "trip",
       "d": "db",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e10",
       "s": "trip",
       "d": "pay",
+      "l": "Call Payments",
       "h": "r>l"
     },
     {
@@ -172,6 +192,7 @@
       "s": "match",
       "d": "notif",
       "p": "gRPC",
+      "l": "Call Push",
       "h": "r>l"
     },
     {
@@ -180,6 +201,7 @@
       "d": "trips",
       "p": "internal",
       "m": "a",
+      "l": "Call Trip channels",
       "h": "r>l"
     },
     {
@@ -188,6 +210,8 @@
       "d": "loc",
       "p": "internal",
       "m": "a",
+      "a": "a2",
+      "l": "Call Location gateway",
       "h": "r>l"
     }
   ],
@@ -197,27 +221,48 @@
       "ownerNodeId": "match",
       "method": "POST",
       "path": "/v1/rides",
+      "request": "{ \"requestId\": \"r1\", \"pickup\": {\"lat\":12.97,\"lng\":77.59}, \"destination\": {\"lat\":13.0,\"lng\":77.6} }",
+      "response": "202 { \"tripId\": \"t1\", \"status\": \"SEARCHING\" }",
+      "statusCodes": "202, 409, 429",
       "auth": true,
       "idempotent": true,
-      "request": "{ pickup, dropoff, product }",
-      "statusCodes": "201, 409"
+      "note": "A geo candidate is not an assignment; conditionally claim before notifying the driver."
     },
     {
       "id": "a2",
       "ownerNodeId": "loc",
       "method": "WS",
       "path": "/v1/driver/location",
-      "auth": true
+      "request": "{ \"driverId\": \"d1\", \"lat\": 12.97, \"lng\": 77.59, \"sequence\": 8, \"sentAt\": 1 }",
+      "response": "{ \"type\": \"ack\", \"sequence\": 8 }; trip assignment events",
+      "statusCodes": "101; unauthorized, stale_update",
+      "auth": true,
+      "idempotent": true,
+      "note": "Kafka mode can use HTTP batch ingestion for the same message shape; ordering is per driver, not global."
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "trip",
+      "method": "POST",
+      "path": "/v1/trips/{id}/accept",
+      "request": "{ \"offerId\": \"o1\", \"offerVersion\": 8, \"requestId\": \"r1\" }",
+      "response": "200 { \"tripId\": \"t1\", \"status\": \"ASSIGNED\" }",
+      "statusCodes": "200, 403, 409, 410",
+      "auth": true,
+      "idempotent": true,
+      "note": "Accept only the current unexpired driver offer; reject stale versions and repeated claims from another driver."
     }
   ],
   "entities": [
     {
       "name": "Trip",
-      "fields": "id, rider_id, driver_id, status, pickup, dropoff, fare, city_id"
+      "fields": "trip_id: string PK\nrider_id: string\ndriver_id: string?\nstatus: REQUESTED|ASSIGNED|ACTIVE|COMPLETED\nversion: int64",
+      "storeNodeId": "db"
     },
     {
       "name": "DriverLocation",
-      "fields": "driver_id, lat, lng, geohash, updated_at (in Redis)"
+      "fields": "driver_id: string member\ncity_or_cell: string\nlatitude: float64\nlongitude: float64\nupdated_at: timestamp\navailable: boolean",
+      "storeNodeId": "geo"
     }
   ]
 }

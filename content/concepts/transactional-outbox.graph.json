@@ -1,0 +1,86 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "api",
+      "t": "service",
+      "l": "Order Service",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "l": "Orders + Outbox (one TX)",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "relay",
+      "t": "worker",
+      "l": "Outbox relay / CDC",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "l": "Committed event delivery",
+      "x": 840,
+      "y": 0
+    },
+    {
+      "i": "consumer",
+      "t": "worker",
+      "l": "Inventory consumer",
+      "x": 840,
+      "y": 220
+    },
+    {
+      "i": "state",
+      "t": "sql_db",
+      "l": "Inventory + ProcessedEvent",
+      "x": 560,
+      "y": 220
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "api",
+      "d": "db",
+      "l": "Atomic order + event insert",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "relay",
+      "d": "db",
+      "l": "Read committed events / checkpoint",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "relay",
+      "d": "q",
+      "l": "Publish with stable event_id",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e4",
+      "s": "q",
+      "d": "consumer",
+      "l": "At-least-once delivery",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e5",
+      "s": "consumer",
+      "d": "state",
+      "l": "Dedup and effect in one TX",
+      "h": "r>l"
+    }
+  ]
+}

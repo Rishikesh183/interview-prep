@@ -29,7 +29,7 @@ let cache: Problem[] | null = null;
 
 export function loadProblems(): Problem[] {
   if (cache) return cache;
-  const { problems, errors } = validateContent(readProblemDirs());
+  const { problems, errors } = validateContent(readProblemDirs(), { requireWalkthroughs: true });
   if (errors.length) {
     throw new Error(`Invalid content (run pnpm validate:content):\n${errors.join("\n")}`);
   }

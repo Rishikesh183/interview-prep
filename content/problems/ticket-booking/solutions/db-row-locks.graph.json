@@ -6,19 +6,21 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Web"
+      "l": "Web",
+      "no": "User-facing caller for ticket booking (bookmyshow)."
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "Gateway"
+      "l": "Gateway",
+      "no": "Authenticate, apply admission limits and route requests for ticket booking (bookmyshow)."
     },
     {
       "i": "wr",
       "t": "message_queue",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Waiting room queue",
       "c": {
@@ -29,7 +31,7 @@
     {
       "i": "svc",
       "t": "service",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Booking Service",
       "no": "SELECT ... FOR UPDATE; status=HELD, held_until=now+10m"
@@ -37,18 +39,19 @@
     {
       "i": "db",
       "t": "sql_db",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Seats DB",
       "c": {
         "isolation": "repeatable-read"
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for ticket booking (bookmyshow)."
     },
     {
       "i": "sweeper",
       "t": "scheduler",
       "x": 0,
-      "y": 130,
+      "y": 180,
       "l": "Hold sweeper",
       "c": {
         "cron": "* * * * *"
@@ -58,9 +61,10 @@
     {
       "i": "pay",
       "t": "external_service",
-      "x": 1040,
-      "y": 130,
-      "l": "PSP"
+      "x": 1120,
+      "y": 180,
+      "l": "PSP",
+      "no": "External system boundary for ticket booking (bookmyshow)."
     }
   ],
   "e": [
@@ -68,6 +72,7 @@
       "i": "e1",
       "s": "client",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
@@ -75,6 +80,7 @@
       "s": "gw",
       "d": "wr",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -82,12 +88,14 @@
       "s": "wr",
       "d": "svc",
       "m": "a",
+      "l": "Call Booking Service",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "gw",
       "d": "svc",
+      "l": "Call Booking Service",
       "h": "r>l"
     },
     {
@@ -95,6 +103,7 @@
       "s": "svc",
       "d": "db",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -102,12 +111,14 @@
       "s": "sweeper",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e7",
       "s": "svc",
       "d": "pay",
+      "l": "Call PSP",
       "h": "r>l"
     }
   ],
@@ -116,23 +127,37 @@
       "id": "a1",
       "ownerNodeId": "svc",
       "method": "POST",
-      "path": "/v1/seats/hold",
+      "path": "/v1/shows/{showId}/holds",
+      "request": "{ \"seatIds\": [\"A1\",\"A2\"], \"requestId\": \"r1\" }",
+      "response": "201 { \"holdId\": \"h1\", \"expiresAt\": \"...\" }",
+      "statusCodes": "201, 409, 429",
       "auth": true,
-      "idempotent": true
+      "idempotent": true,
+      "note": "The hold must be all-or-nothing and tied to the authenticated owner."
     },
     {
       "id": "a2",
       "ownerNodeId": "svc",
       "method": "POST",
-      "path": "/v1/bookings/{holdId}/confirm",
+      "path": "/v1/bookings",
+      "request": "{ \"holdId\": \"h1\", \"paymentToken\": \"provider-token\", \"requestId\": \"checkout1\" }",
+      "response": "201 { \"bookingId\": \"b1\", \"status\": \"CONFIRMED\" }",
+      "statusCodes": "201, 402, 409, 410",
       "auth": true,
-      "idempotent": true
+      "idempotent": true,
+      "note": "Use provider idempotency and a durable booking state machine; compensate an authorization if the hold expired before confirmation."
     }
   ],
   "entities": [
     {
       "name": "Seat",
-      "fields": "show_id, seat_id, status, held_by, held_until, version"
+      "fields": "show_id: string\nseat_id: string\nstatus: AVAILABLE|HELD|BOOKED\nhold_id: string?\nheld_until: timestamp?\nPK(show_id, seat_id)",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "SeatHold",
+      "fields": "hold_id: string\nshow_id: string\nseat_ids: string[]\nowner_id: string\nexpires_at: timestamp\nversion: int64",
+      "storeNodeId": "db"
     }
   ]
 }

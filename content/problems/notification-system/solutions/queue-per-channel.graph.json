@@ -9,19 +9,21 @@
       "l": "Internal services",
       "c": {
         "provider": "order, auth, marketing"
-      }
+      },
+      "no": "External system boundary for notification system."
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "Gateway"
+      "l": "Gateway",
+      "no": "Authenticate, apply admission limits and route requests for notification system."
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Notification Service",
       "no": "Validates, checks preferences, dedups on idempotency key, renders template"
@@ -29,47 +31,51 @@
     {
       "i": "prefs",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Preferences cache",
       "c": {
         "strategy": "cache-aside",
         "ttl": "10m"
-      }
+      },
+      "no": "Serve derived or transient hot state for notification system."
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Notifications DB",
       "no": "preferences, templates, delivery log"
     },
     {
       "i": "qpush",
       "t": "message_queue",
-      "x": 780,
-      "y": 260,
-      "l": "Push queue"
+      "x": 840,
+      "y": 360,
+      "l": "Push queue",
+      "no": "Buffer independently retryable asynchronous work for notification system."
     },
     {
       "i": "qemail",
       "t": "message_queue",
-      "x": 780,
-      "y": 390,
-      "l": "Email queue"
+      "x": 840,
+      "y": 540,
+      "l": "Email queue",
+      "no": "Buffer independently retryable asynchronous work for notification system."
     },
     {
       "i": "qsms",
       "t": "message_queue",
-      "x": 780,
-      "y": 520,
-      "l": "SMS queue"
+      "x": 840,
+      "y": 720,
+      "l": "SMS queue",
+      "no": "Buffer independently retryable asynchronous work for notification system."
     },
     {
       "i": "wpush",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Push workers",
       "no": "Exponential backoff, 5 retries then DLQ"
@@ -77,37 +83,42 @@
     {
       "i": "wemail",
       "t": "worker",
-      "x": 1040,
-      "y": 130,
-      "l": "Email workers"
+      "x": 1120,
+      "y": 180,
+      "l": "Email workers",
+      "no": "Execute background work with bounded concurrency for notification system."
     },
     {
       "i": "wsms",
       "t": "worker",
-      "x": 1040,
-      "y": 260,
-      "l": "SMS workers"
+      "x": 1120,
+      "y": 360,
+      "l": "SMS workers",
+      "no": "Execute background work with bounded concurrency for notification system."
     },
     {
       "i": "apns",
       "t": "external_service",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
-      "l": "APNs/FCM"
+      "l": "APNs/FCM",
+      "no": "External system boundary for notification system."
     },
     {
       "i": "ses",
       "t": "external_service",
-      "x": 1300,
-      "y": 130,
-      "l": "SES"
+      "x": 1400,
+      "y": 180,
+      "l": "SES",
+      "no": "External system boundary for notification system."
     },
     {
       "i": "twilio",
       "t": "external_service",
-      "x": 1300,
-      "y": 260,
-      "l": "Twilio"
+      "x": 1400,
+      "y": 360,
+      "l": "Twilio",
+      "no": "External system boundary for notification system."
     }
   ],
   "e": [
@@ -115,12 +126,15 @@
       "i": "e1",
       "s": "caller",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "gw",
       "d": "svc",
+      "a": "a1",
+      "l": "Call Notification Service",
       "h": "r>l"
     },
     {
@@ -128,6 +142,7 @@
       "s": "svc",
       "d": "prefs",
       "o": "r",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -135,6 +150,7 @@
       "s": "svc",
       "d": "db",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -142,6 +158,7 @@
       "s": "svc",
       "d": "qpush",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -149,6 +166,7 @@
       "s": "svc",
       "d": "qemail",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -156,6 +174,7 @@
       "s": "svc",
       "d": "qsms",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -163,6 +182,7 @@
       "s": "qpush",
       "d": "wpush",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -170,6 +190,7 @@
       "s": "qemail",
       "d": "wemail",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -177,24 +198,28 @@
       "s": "qsms",
       "d": "wsms",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
       "i": "e11",
       "s": "wpush",
       "d": "apns",
+      "l": "Call APNs/FCM",
       "h": "r>l"
     },
     {
       "i": "e12",
       "s": "wemail",
       "d": "ses",
+      "l": "Call SES",
       "h": "r>l"
     },
     {
       "i": "e13",
       "s": "wsms",
       "d": "twilio",
+      "l": "Call Twilio",
       "h": "r>l"
     }
   ],
@@ -204,20 +229,25 @@
       "ownerNodeId": "svc",
       "method": "POST",
       "path": "/v1/notifications",
+      "request": "{ \"idempotencyKey\": \"order-42-receipt\", \"userId\": \"u1\", \"channels\": [\"email\"], \"template\": \"receipt\", \"data\": {} }",
+      "response": "202 { \"notificationId\": \"n1\", \"status\": \"PENDING\" }",
+      "statusCodes": "202, 400, 409, 429",
       "auth": true,
       "idempotent": true,
-      "request": "{ userId, template, vars, channels?, idempotencyKey }",
-      "statusCodes": "202, 400, 409"
+      "rateLimited": true,
+      "note": "Check preferences, dedup the idempotency key and publish durably before acknowledging."
     }
   ],
   "entities": [
     {
-      "name": "Preference",
-      "fields": "user_id, channel, enabled, quiet_hours"
+      "name": "UserPreference",
+      "fields": "user_id: string PK\nchannel: string\nenabled: boolean\nquiet_hours: interval\nversion: int64",
+      "storeNodeId": "db"
     },
     {
       "name": "NotificationLog",
-      "fields": "id, user_id, channel, status, idempotency_key"
+      "fields": "notification_id: string PK\nidempotency_key: string UNIQUE\nuser_id: string\nchannel: string\nstatus: PENDING|SENT|FAILED\nattempt: int32",
+      "storeNodeId": "db"
     }
   ]
 }

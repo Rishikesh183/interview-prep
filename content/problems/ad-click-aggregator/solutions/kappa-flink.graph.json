@@ -6,26 +6,29 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Ad viewer"
+      "l": "Ad viewer",
+      "no": "User-facing caller for ad click aggregator."
     },
     {
       "i": "adv",
       "t": "web_client",
       "x": 0,
-      "y": 130,
-      "l": "Advertisers"
+      "y": 180,
+      "l": "Advertisers",
+      "no": "User-facing caller for ad click aggregator."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for ad click aggregator."
     },
     {
       "i": "click",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Click Service",
       "no": "Logs {click_id, ad_id, ts} then 302-redirects"
@@ -33,17 +36,18 @@
     {
       "i": "kafka",
       "t": "event_stream",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Clicks",
       "c": {
         "partitionKey": "ad_id"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for ad click aggregator."
     },
     {
       "i": "flink",
       "t": "stream_processor",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Aggregator",
       "c": {
@@ -54,29 +58,32 @@
     {
       "i": "olap",
       "t": "data_warehouse",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
-      "l": "OLAP store"
+      "l": "OLAP store",
+      "no": "Serve materialized aggregate queries for ad click aggregator."
     },
     {
       "i": "sink",
       "t": "worker",
-      "x": 1040,
-      "y": 130,
-      "l": "S3 sink"
+      "x": 1120,
+      "y": 180,
+      "l": "S3 sink",
+      "no": "Execute background work with bounded concurrency for ad click aggregator."
     },
     {
       "i": "raw",
       "t": "object_storage",
-      "x": 1300,
-      "y": 130,
-      "l": "Raw clicks"
+      "x": 1400,
+      "y": 180,
+      "l": "Raw clicks",
+      "no": "Persist immutable large objects for ad click aggregator."
     },
     {
       "i": "recon",
       "t": "batch_processor",
-      "x": 0,
-      "y": 260,
+      "x": 840,
+      "y": 180,
       "l": "Reconciliation",
       "c": {
         "schedule": "nightly"
@@ -86,9 +93,10 @@
     {
       "i": "query",
       "t": "service",
-      "x": 520,
-      "y": 130,
-      "l": "Query Service"
+      "x": 560,
+      "y": 180,
+      "l": "Query Service",
+      "no": "Implement the owned APIs and coordinate state transitions for ad click aggregator."
     }
   ],
   "e": [
@@ -96,24 +104,30 @@
       "i": "e1",
       "s": "user",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "adv",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "click",
+      "a": "a1",
+      "l": "Call Click Service",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "lb",
       "d": "query",
+      "a": "a2",
+      "l": "Call Query Service",
       "h": "r>l"
     },
     {
@@ -121,6 +135,7 @@
       "s": "click",
       "d": "kafka",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -128,6 +143,7 @@
       "s": "kafka",
       "d": "flink",
       "m": "a",
+      "l": "Call Aggregator",
       "h": "r>l"
     },
     {
@@ -135,6 +151,7 @@
       "s": "kafka",
       "d": "sink",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -142,6 +159,7 @@
       "s": "flink",
       "d": "olap",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -149,6 +167,7 @@
       "s": "sink",
       "d": "raw",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -156,6 +175,7 @@
       "s": "recon",
       "d": "raw",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -163,6 +183,7 @@
       "s": "recon",
       "d": "olap",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -170,6 +191,7 @@
       "s": "query",
       "d": "olap",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -179,17 +201,36 @@
       "ownerNodeId": "click",
       "method": "GET",
       "path": "/c/{clickId}",
+      "request": "No request body; signed ad/campaign tracking parameters.",
+      "response": "302 Location: https://advertiser.example/product",
+      "statusCodes": "302, 400, 404, 503",
       "auth": false,
-      "response": "302 Location: advertiser URL"
+      "idempotent": true,
+      "note": "Acknowledge/log durably before counting; duplicate click IDs do not produce duplicate billable events."
     },
     {
       "id": "a2",
       "ownerNodeId": "query",
       "method": "GET",
       "path": "/v1/ads/{adId}/metrics",
+      "request": "No request body; ?start=0&end=3600&bucket=1m",
+      "response": "200 { \"buckets\": [{ \"start\": 0, \"clicks\": 42 }], \"asOf\": 3600 }",
+      "statusCodes": "200, 403, 400",
       "auth": true,
-      "request": "?from&to&granularity=minute"
+      "idempotent": true,
+      "note": "Expose the aggregation freshness and late-event correction policy; operational totals and settled billing can differ."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "ClickEvent",
+      "fields": "click_id: string UNIQUE\nad_id: string partition key\nevent_time: timestamp\ningest_time: timestamp\nredirect_url: string",
+      "storeNodeId": "raw"
+    },
+    {
+      "name": "AdMinute",
+      "fields": "ad_id: string\nwindow_start: timestamp\nclick_count: int64\nversion: int64\nPK(ad_id, window_start)",
+      "storeNodeId": "olap"
+    }
+  ]
 }

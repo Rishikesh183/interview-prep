@@ -1,4 +1,4 @@
-/** The 25 concept cards (PHASE-2 §4), in reading order; files live in content/concepts. */
+/** Foundations followed by interview patterns; files live in content/concepts. */
 export const CONCEPT_SLUGS = [
   "scalability-basics",
   "load-balancing",
@@ -25,4 +25,13 @@ export const CONCEPT_SLUGS = [
   "back-of-envelope-estimation",
   "fault-tolerance-retries",
   "observability",
+  "fan-out-on-write",
+  "fan-out-on-read",
+  "hybrid-fan-out",
+  "transactional-outbox",
+  "change-data-capture",
+  "sagas-distributed-transactions",
+  "backpressure-load-shedding",
+  "hot-partitions",
+  "cache-stampede",
 ] as const;

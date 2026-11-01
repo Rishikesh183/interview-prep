@@ -1,0 +1,231 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Apps",
+      "no": "Mobile caller with intermittent connectivity for top-k trending."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for top-k trending."
+    },
+    {
+      "i": "ingest",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Event ingest",
+      "no": "Implement the owned APIs and coordinate state transitions for top-k trending."
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 840,
+      "y": 0,
+      "l": "Events",
+      "c": {
+        "partitionKey": "item_id"
+      },
+      "no": "Retain ordered events for replayable consumers for top-k trending."
+    },
+    {
+      "i": "flink",
+      "t": "stream_processor",
+      "x": 1120,
+      "y": 0,
+      "l": "Counters",
+      "c": {
+        "windowing": "sliding"
+      },
+      "no": "Count-min sketch + min-heap per partition, partial top-K every minute"
+    },
+    {
+      "i": "merge",
+      "t": "worker",
+      "x": 1400,
+      "y": 0,
+      "l": "Top-K merger",
+      "no": "Merges partial lists into the global top 100 per window"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 1680,
+      "y": 0,
+      "l": "Trending cache",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "2m"
+      },
+      "no": "Serve derived or transient hot state for top-k trending."
+    },
+    {
+      "i": "archive",
+      "t": "worker",
+      "x": 1120,
+      "y": 180,
+      "l": "Archiver",
+      "no": "Execute background work with bounded concurrency for top-k trending."
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 1400,
+      "y": 180,
+      "l": "Raw events",
+      "no": "Persist immutable large objects for top-k trending."
+    },
+    {
+      "i": "trends",
+      "t": "service",
+      "x": 560,
+      "y": 180,
+      "l": "Trends API",
+      "no": "Implement the owned APIs and coordinate state transitions for top-k trending."
+    },
+    {
+      "i": "batch",
+      "t": "batch_processor",
+      "x": 840,
+      "y": 180,
+      "l": "Exact historical counts",
+      "no": "Recompute counts from raw events by window. Publish a new version after successful completion; do not overwrite the live partial window."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "ingest",
+      "a": "a1",
+      "l": "Call Event ingest",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "trends",
+      "a": "a2",
+      "l": "Call Trends API",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "ingest",
+      "d": "kafka",
+      "m": "a",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "kafka",
+      "d": "flink",
+      "m": "a",
+      "l": "Call Counters",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "kafka",
+      "d": "archive",
+      "m": "a",
+      "l": "Consume work",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "flink",
+      "d": "merge",
+      "p": "internal",
+      "l": "Consume work",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "merge",
+      "d": "redis",
+      "o": "w",
+      "l": "Lookup / update hot state",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "archive",
+      "d": "s3",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "trends",
+      "d": "redis",
+      "o": "r",
+      "l": "Lookup / update hot state",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "batch",
+      "d": "s3",
+      "l": "Read historical event windows",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "batch",
+      "d": "redis",
+      "l": "Publish exact completed windows",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "ingest",
+      "method": "POST",
+      "path": "/v1/events",
+      "request": "{ \"eventId\": \"e1\", \"itemId\": \"i1\", \"occurredAt\": 1 }",
+      "response": "202 { \"accepted\": true }",
+      "statusCodes": "202, 400, 429",
+      "auth": true,
+      "idempotent": true,
+      "note": "Dedup event IDs within the policy window; separate event time from processing time."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "trends",
+      "method": "GET",
+      "path": "/v1/trending",
+      "request": "No request body; ?window=1h&limit=100",
+      "response": "200 { \"items\": [], \"windowEnd\": 3600, \"approximate\": true }",
+      "statusCodes": "200, 400",
+      "auth": false,
+      "idempotent": true,
+      "note": "Expose window and approximation/freshness semantics; do not recompute a global sort on every query."
+    }
+  ],
+  "entities": [
+    {
+      "name": "TrendingWindow",
+      "fields": "window_start: timestamp\nwindow_size: interval\nitem_id: string\nestimated_count: int64\nversion: int64\nPK(window_start, window_size, item_id)",
+      "storeNodeId": "redis"
+    }
+  ]
+}

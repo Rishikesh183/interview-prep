@@ -12,34 +12,38 @@
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
-      "y": 0
+      "x": 280,
+      "y": 0,
+      "no": "Authenticate, apply admission limits and route requests for youtube / netflix."
     },
     {
       "i": "api",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Video Service"
+      "l": "Video Service",
+      "no": "Implement the owned APIs and coordinate state transitions for youtube / netflix."
     },
     {
       "i": "s3in",
       "t": "object_storage",
-      "x": 260,
-      "y": 130,
-      "l": "Uploads bucket"
+      "x": 280,
+      "y": 180,
+      "l": "Uploads bucket",
+      "no": "Persist immutable large objects for youtube / netflix."
     },
     {
       "i": "events",
       "t": "message_queue",
-      "x": 520,
-      "y": 130,
-      "l": "Upload events"
+      "x": 560,
+      "y": 180,
+      "l": "Upload events",
+      "no": "Buffer independently retryable asynchronous work for youtube / netflix."
     },
     {
       "i": "fn",
       "t": "serverless_fn",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Encode functions",
       "c": {
@@ -50,28 +54,31 @@
     {
       "i": "s3out",
       "t": "object_storage",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
-      "l": "Encoded bucket"
+      "l": "Encoded bucket",
+      "no": "Persist immutable large objects for youtube / netflix."
     },
     {
       "i": "meta",
       "t": "nosql_kv",
-      "x": 1040,
-      "y": 130,
+      "x": 1120,
+      "y": 180,
       "l": "Video metadata",
       "c": {
         "partitionKey": "video_id"
-      }
+      },
+      "no": "Store partitioned point-lookup state for youtube / netflix."
     },
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
-      "y": 260,
+      "x": 280,
+      "y": 360,
       "c": {
         "content": ["media"]
-      }
+      },
+      "no": "Serve cacheable media or static responses close to users for youtube / netflix."
     }
   ],
   "e": [
@@ -79,12 +86,14 @@
       "i": "e1",
       "s": "app",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "gw",
       "d": "api",
+      "l": "Call Video Service",
       "h": "r>l"
     },
     {
@@ -92,6 +101,7 @@
       "s": "api",
       "d": "meta",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -99,6 +109,7 @@
       "s": "app",
       "d": "s3in",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -106,6 +117,7 @@
       "s": "s3in",
       "d": "events",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -113,6 +125,7 @@
       "s": "events",
       "d": "fn",
       "m": "a",
+      "l": "Call Encode functions",
       "h": "r>l"
     },
     {
@@ -120,6 +133,7 @@
       "s": "fn",
       "d": "s3out",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -127,6 +141,7 @@
       "s": "fn",
       "d": "meta",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -134,12 +149,14 @@
       "s": "app",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e10",
       "s": "cdn",
       "d": "s3out",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -148,21 +165,48 @@
       "id": "a1",
       "ownerNodeId": "api",
       "method": "POST",
-      "path": "/v1/uploads",
-      "auth": true
+      "path": "/v1/videos",
+      "request": "{ \"title\": \"demo\", \"sizeBytes\": 104857600, \"contentType\": \"video/mp4\" }",
+      "response": "201 { \"videoId\": \"v1\", \"uploadId\": \"u1\", \"uploadUrls\": [] }",
+      "statusCodes": "201, 400, 413",
+      "auth": true,
+      "note": "API returns signed upload parts; the creator sends media bytes to raw object storage."
     },
     {
       "id": "a2",
       "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/videos/{id}/complete",
+      "request": "{ \"uploadId\": \"u1\", \"parts\": [{ \"number\": 1, \"etag\": \"...\" }] }",
+      "response": "202 { \"videoId\": \"v1\", \"status\": \"PROCESSING\" }",
+      "statusCodes": "202, 409",
+      "auth": true,
+      "idempotent": true,
+      "note": "Use an outbox/object-store event and dedup processing version; duplicate completion must not publish incomplete media."
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "api",
       "method": "GET",
-      "path": "/v1/watch/{videoId}",
-      "auth": false
+      "path": "/v1/videos/{id}/manifest",
+      "request": "No request body.",
+      "response": "200 { \"manifestUrl\": \"https://cdn/video/v1/master.m3u8\", \"renditions\": [\"240p\",\"720p\"] }",
+      "statusCodes": "200, 404, 409",
+      "auth": false,
+      "idempotent": true,
+      "note": "The player fetches HLS/DASH segments from CDN and switches bitrate adaptively."
     }
   ],
   "entities": [
     {
       "name": "Video",
-      "fields": "video_id, title, status, manifest_url"
+      "fields": "video_id: string PK\nowner_id: string\ntitle: string\nstatus: UPLOADING|PROCESSING|READY|FAILED\nmanifest_key: string?\nrenditions: string[]",
+      "storeNodeId": "meta"
+    },
+    {
+      "name": "MediaObject",
+      "fields": "object_key: string PK\nvideo_id: string\nprocessing_version: string\nkind: raw|segment|manifest\nchecksum: string",
+      "storeNodeId": "s3in"
     }
   ]
 }

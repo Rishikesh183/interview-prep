@@ -14,7 +14,21 @@ export const STAGES: { id: Stage; label: string; hint: string }[] = [
 ];
 
 /** Node types that can own API endpoints. */
-export const API_OWNER_TYPES = ["service", "api_gateway", "websocket_server"];
+export const API_OWNER_TYPES = [
+  "service",
+  "api_gateway",
+  "websocket_server",
+  "worker",
+  "serverless_fn",
+  "scheduler",
+  "rate_limiter",
+  "id_generator",
+  "cache",
+  "nosql_kv",
+  "coordination",
+  "event_stream",
+  "message_queue",
+];
 
 export type Progress = Pick<Attempt, "requirements" | "estimation" | "entities" | "status"> & {
   apiCount: number;

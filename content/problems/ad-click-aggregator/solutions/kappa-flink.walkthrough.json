@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "overview": "Click service logs click_id + ad_id to Kafka and 302-redirects. Flink dedups by click_id, aggregates in 1-min tumbling windows with watermarks for late events, and writes to an OLAP store (ClickHouse/Pinot) with idempotent upserts. Raw clicks also land in S3; a nightly Spark job recomputes for billing reconciliation.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative ingest: 100K clicks/s at 100 B per event.",
+      "calculation": "100,000 × 100 B = 10 MB/s; ×86,400 ≈ 864 GB/day raw.",
+      "result": "A one-minute batch contains around 6M events before deduplication.",
+      "implication": "Partition ingestion, retain raw events and materialize small window aggregates for queries."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "user",
+      "purpose": "User-facing caller for ad click aggregator.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "adv",
+      "purpose": "User-facing caller for ad click aggregator.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for ad click aggregator.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "click",
+      "purpose": "Logs {click_id, ad_id, ts} then 302-redirects",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "kafka",
+      "purpose": "Retain ordered events for replayable consumers for ad click aggregator.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "flink",
+      "purpose": "Dedup by click_id, 1-min tumbling windows, watermarks for late events, exactly-once sinks",
+      "rationale": "Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay."
+    },
+    {
+      "nodeId": "olap",
+      "purpose": "Serve materialized aggregate queries for ad click aggregator.",
+      "rationale": "Partition by relevant time/ad dimensions and publish window versions so retries do not double count."
+    },
+    {
+      "nodeId": "sink",
+      "purpose": "Execute background work with bounded concurrency for ad click aggregator.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "raw",
+      "purpose": "Persist immutable large objects for ad click aggregator.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "recon",
+      "purpose": "Recomputes from raw clicks for billing",
+      "rationale": "Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation."
+    },
+    {
+      "nodeId": "query",
+      "purpose": "Implement the owned APIs and coordinate state transitions for ad click aggregator.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "ClickEvent",
+      "purpose": "Immutable source events retained for replay and billing reconciliation.",
+      "accessPatterns": ["Append an accepted click; replay an event-time range."],
+      "constraints": [
+        "Dedup click_id within a defined retention window; validate redirects and never count a retried click twice."
+      ],
+      "relationships": []
+    },
+    {
+      "entityName": "AdMinute",
+      "purpose": "Materialized event-time click totals.",
+      "accessPatterns": ["Upsert one ad/minute aggregate; query an advertiser time range."],
+      "constraints": [
+        "Use idempotent window/version upserts; define watermarks and corrections for late data."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Record a click and redirect to the verified advertiser URL.",
+      "rationale": "Acknowledge/log durably before counting; duplicate click IDs do not produce duplicate billable events."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Query authorized ad click totals.",
+      "rationale": "Expose the aggregation freshness and late-event correction policy; operational totals and settled billing can differ."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Ad viewer",
+      "explanation": "In Design, add Web Client and name it “Ad viewer”. Place it in the leftmost caller/background lane. User-facing caller for ad click aggregator. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["user"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Advertisers",
+      "explanation": "In Design, add Web Client and name it “Advertisers”. Place it in the leftmost caller/background lane. User-facing caller for ad click aggregator. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["adv"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Ad viewer, Advertisers. Distribute incoming connections across healthy instances for ad click aggregator. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1", "e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Click Service",
+      "explanation": "In Design, add Service and name it “Click Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Logs {click_id, ad_id, ts} then 302-redirects Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["click"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Clicks",
+      "explanation": "In Design, add Event Stream and name it “Clicks”. Place it in column 4, row 1 of the HLD; its callers are Click Service. Retain ordered events for replayable consumers for ad click aggregator. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["kafka"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Aggregator",
+      "explanation": "In Design, add Stream Processor and name it “Aggregator”. Place it in column 5, row 1 of the HLD; its callers are Clicks. Dedup by click_id, 1-min tumbling windows, watermarks for late events, exactly-once sinks Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["flink"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "OLAP store",
+      "explanation": "In Design, add Data Warehouse and name it “OLAP store”. Place it in column 6, row 1 of the HLD; its callers are Aggregator, Reconciliation, Query Service. Serve materialized aggregate queries for ad click aggregator. Partition by relevant time/ad dimensions and publish window versions so retries do not double count. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["olap"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": ["AdMinute"]
+    },
+    {
+      "title": "S3 sink",
+      "explanation": "In Design, add Worker and name it “S3 sink”. Place it in column 5, row 2 of the HLD; its callers are Clicks. Execute background work with bounded concurrency for ad click aggregator. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sink"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Raw clicks",
+      "explanation": "In Design, add Object Storage and name it “Raw clicks”. Place it in column 6, row 2 of the HLD; its callers are S3 sink, Reconciliation. Persist immutable large objects for ad click aggregator. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["raw"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": ["ClickEvent"]
+    },
+    {
+      "title": "Reconciliation",
+      "explanation": "In Design, add Batch Processor and name it “Reconciliation”. Place it in column 4, row 2 of the HLD. Recomputes from raw clicks for billing Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["recon"],
+      "edgeIds": ["e10", "e11"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Query Service",
+      "explanation": "In Design, add Service and name it “Query Service”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for ad click aggregator. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["query"],
+      "edgeIds": ["e4", "e12"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Record and aggregate a click",
+      "steps": [
+        {
+          "title": "Ad viewer → LB → Click Service",
+          "explanation": "Validate the signed ad destination and dedup the click identity.",
+          "nodeIds": ["user", "lb", "click"],
+          "edgeIds": ["e1", "e3"]
+        },
+        {
+          "title": "Click Service → Clicks → Aggregator → OLAP store",
+          "explanation": "Append durably; aggregate event-time windows with watermarks and idempotent upserts.",
+          "nodeIds": ["click", "kafka", "flink", "olap"],
+          "edgeIds": ["e5", "e6", "e8"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Archive and reconcile",
+      "steps": [
+        {
+          "title": "Clicks → S3 sink → Raw clicks",
+          "explanation": "Persist immutable raw events for replay.",
+          "nodeIds": ["kafka", "sink", "raw"],
+          "edgeIds": ["e7", "e9"]
+        },
+        {
+          "title": "Reconciliation → Raw clicks",
+          "explanation": "Read the settled billing interval.",
+          "nodeIds": ["recon", "raw"],
+          "edgeIds": ["e10"]
+        },
+        {
+          "title": "Reconciliation → OLAP store",
+          "explanation": "Publish corrected totals with a new aggregate version.",
+          "nodeIds": ["recon", "olap"],
+          "edgeIds": ["e11"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Late or duplicate events change a previously shown count",
+      "handling": "Dedup by click_id, use event-time windows and publish corrected aggregate versions. Reconcile billing from raw events with a documented cutoff.",
+      "nodeIds": ["sink"]
+    }
+  ],
+  "alternatives": "Use windowed streaming for low-latency aggregates and explicit late-event handling. Use micro-batches when minute-level freshness is sufficient and simpler bounded-input processing outweighs the latency floor. Both retain raw events and reconcile billing.",
+  "sectionApplicability": {}
+}

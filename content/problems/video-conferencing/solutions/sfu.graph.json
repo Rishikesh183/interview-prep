@@ -12,7 +12,7 @@
     {
       "i": "dns",
       "t": "dns",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "Geo DNS",
       "c": {
@@ -23,8 +23,8 @@
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
-      "y": 130,
+      "x": 280,
+      "y": 180,
       "l": "Signaling LB",
       "c": {
         "algorithm": "consistent-hash"
@@ -34,53 +34,57 @@
     {
       "i": "sig",
       "t": "websocket_server",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Signaling",
       "c": {
         "instances": 6
-      }
+      },
+      "no": "Maintain long-lived sessions and deliver realtime events for video conferencing (zoom)."
     },
     {
       "i": "meet",
       "t": "service",
-      "x": 520,
-      "y": 130,
-      "l": "Meeting Service"
+      "x": 560,
+      "y": 180,
+      "l": "Meeting Service",
+      "no": "Implement the owned APIs and coordinate state transitions for video conferencing (zoom)."
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Meetings",
       "c": {
         "replicas": 2
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for video conferencing (zoom)."
     },
     {
       "i": "mlb",
       "t": "load_balancer",
-      "x": 260,
-      "y": 260,
+      "x": 280,
+      "y": 360,
       "l": "Media LB",
       "c": {
         "layer": "L4"
-      }
+      },
+      "no": "Distribute incoming connections across healthy instances for video conferencing (zoom)."
     },
     {
       "i": "sfu",
       "t": "service",
-      "x": 520,
-      "y": 260,
+      "x": 560,
+      "y": 360,
       "l": "Regional SFU",
       "no": "Selective forwarding unit: forwards the right simulcast layer to each receiver (no mixing)"
     },
     {
       "i": "turn",
       "t": "external_service",
-      "x": 260,
-      "y": 390,
+      "x": 280,
+      "y": 540,
       "l": "STUN/TURN",
       "c": {
         "provider": "coturn"
@@ -90,16 +94,18 @@
     {
       "i": "rec",
       "t": "worker",
-      "x": 780,
-      "y": 130,
-      "l": "Recording bots"
+      "x": 840,
+      "y": 180,
+      "l": "Recording bots",
+      "no": "Execute background work with bounded concurrency for video conferencing (zoom)."
     },
     {
       "i": "s3",
       "t": "object_storage",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
-      "l": "Recordings"
+      "l": "Recordings",
+      "no": "Persist immutable large objects for video conferencing (zoom)."
     }
   ],
   "e": [
@@ -108,6 +114,7 @@
       "s": "client",
       "d": "dns",
       "o": "r",
+      "l": "Call Geo DNS",
       "h": "r>l"
     },
     {
@@ -115,18 +122,22 @@
       "s": "client",
       "d": "lb",
       "p": "WebSocket",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "sig",
+      "a": "a3",
+      "l": "Call Signaling",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "lb",
       "d": "meet",
+      "l": "Call Meeting Service",
       "h": "r>l"
     },
     {
@@ -134,28 +145,31 @@
       "s": "meet",
       "d": "db",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e6",
       "s": "client",
       "d": "turn",
-      "p": "TCP",
+      "p": "UDP",
+      "l": "STUN/TURN ICE negotiation or relay",
       "h": "r>l"
     },
     {
       "i": "e7",
       "s": "client",
       "d": "mlb",
-      "p": "TCP",
-      "l": "WebRTC media",
+      "p": "WebRTC",
+      "l": "SRTP media; separate from signaling",
       "h": "r>l"
     },
     {
       "i": "e8",
       "s": "mlb",
       "d": "sfu",
-      "p": "TCP",
+      "p": "WebRTC",
+      "l": "SRTP media; separate from signaling",
       "h": "r>l"
     },
     {
@@ -163,6 +177,7 @@
       "s": "sfu",
       "d": "rec",
       "p": "internal",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -170,6 +185,7 @@
       "s": "rec",
       "d": "s3",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -179,17 +195,41 @@
       "ownerNodeId": "meet",
       "method": "POST",
       "path": "/v1/meetings",
+      "request": "{ \"requestId\": \"r1\", \"recordingEnabled\": false }",
+      "response": "201 { \"meetingId\": \"m1\", \"joinUrl\": \"https://meet/m1\" }",
+      "statusCodes": "201, 400",
       "auth": true,
-      "response": "{ meetingId, joinUrl }"
+      "idempotent": true,
+      "note": "Recording permissions and retention are explicit; allocate a nearby media region."
     },
     {
       "id": "a2",
       "ownerNodeId": "meet",
       "method": "POST",
       "path": "/v1/meetings/{id}/join",
+      "request": "{ \"participantId\": \"u1\", \"capabilities\": [\"simulcast\"] }",
+      "response": "200 { \"token\": \"short-lived\", \"mediaRegion\": \"ap-south\", \"iceServers\": [] }",
+      "statusCodes": "200, 403, 404",
       "auth": true,
-      "response": "{ token, sfuRegion, iceServers }"
+      "note": "Signaling exchanges SDP/ICE over WebSockets; RTP media goes to SFU/MCU or TURN, independently of the API."
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "sig",
+      "method": "WS",
+      "path": "/v1/meetings/{id}/signal",
+      "request": "{ \"type\": \"offer\", \"sdp\": \"...\" }; { \"type\": \"ice\", \"candidate\": \"...\" }",
+      "response": "{ \"type\": \"answer\", \"sdp\": \"...\" }; participant events",
+      "statusCodes": "101; forbidden, session_expired",
+      "auth": true,
+      "note": "Use ICE with STUN/TURN; WebSocket signaling does not carry the video media stream."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "Meeting",
+      "fields": "meeting_id: string PK\nhost_id: string\nregion: string\nparticipant_ids: string[]\nstatus: ACTIVE|ENDED\nrecording_key: string?",
+      "storeNodeId": "db"
+    }
+  ]
 }

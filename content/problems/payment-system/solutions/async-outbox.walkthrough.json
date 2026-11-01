@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "overview": "Checkout writes a payment order and an outbox event in one transaction. A relay publishes outbox events to a queue; payment executors call the PSP with retries and the idempotency key; results update the ledger. Wallet balances are derived from ledger entries.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative ledger: 1K payments/s, at least two postings/payment.",
+      "calculation": "1,000 × 2 = 2,000 ledger entry inserts/s, plus intent and outbox updates.",
+      "result": "Provider calls and transactional writes have different latency/throughput budgets.",
+      "implication": "Partition by account/merchant when needed, while preserving transaction atomicity and idempotency."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for payment system / wallet.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for payment system / wallet.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "auth",
+      "purpose": "Validate caller identity and issue/verify scoped credentials for payment system / wallet.",
+      "rationale": "Authorization is rechecked by the resource owner; use bounded credential lifetime and key rotation."
+    },
+    {
+      "nodeId": "orders",
+      "purpose": "Order + outbox row in one transaction",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Double-entry ledger, append-only",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "relay",
+      "purpose": "Execute background work with bounded concurrency for payment system / wallet.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for payment system / wallet.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "exec",
+      "purpose": "Calls PSP with idempotency key; retries with backoff",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "psp",
+      "purpose": "External system boundary for payment system / wallet.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "recon",
+      "purpose": "Daily reconcile against PSP reports",
+      "rationale": "Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Payment",
+      "purpose": "Payment intent and authoritative state machine.",
+      "accessPatterns": [
+        "Create by idempotency key; apply provider response or callback idempotently."
+      ],
+      "constraints": [
+        "Bind idempotency key to amount/currency/customer; reject reuse with a different payload."
+      ],
+      "relationships": [
+        "LedgerEntry.transaction_id groups balanced postings for the payment business transaction; refunds append linked reversals."
+      ]
+    },
+    {
+      "entityName": "LedgerEntry",
+      "purpose": "Immutable balanced financial postings.",
+      "accessPatterns": ["Append balanced entries in one transaction; derive account balances."],
+      "constraints": [
+        "Sum signed amounts to zero per transaction/currency. Never edit a posted entry; append a reversal."
+      ],
+      "relationships": [
+        "transaction_id groups balanced postings, linked to the payment business transaction identity."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Create or retrieve the same logical payment.",
+      "rationale": "Return the prior result for the same key and payload. A timeout does not mean the provider failed; reconcile by provider reference."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Read the authoritative payment status.",
+      "rationale": "Only an authorized caller sees this payment; settlement and payment authorization are distinct states."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "App",
+      "explanation": "In Design, add Mobile Client and name it “App”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for payment system / wallet. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are App. Distribute incoming connections across healthy instances for payment system / wallet. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Auth",
+      "explanation": "In Design, add Auth Service and name it “Auth”. Place it in column 3, row 1 of the HLD; its callers are LB. Validate caller identity and issue/verify scoped credentials for payment system / wallet. Authorization is rechecked by the resource owner; use bounded credential lifetime and key rotation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["auth"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Payment Orders",
+      "explanation": "In Design, add Service and name it “Payment Orders”. Place it in column 3, row 2 of the HLD; its callers are LB. Order + outbox row in one transaction Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["orders"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Payments + ledger",
+      "explanation": "In Design, add SQL Database and name it “Payments + ledger”. Place it in column 4, row 1 of the HLD; its callers are Payment Orders, Outbox relay, Payment executors, Reconciliation job. Double-entry ledger, append-only Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["Payment", "LedgerEntry"]
+    },
+    {
+      "title": "Outbox relay",
+      "explanation": "In Design, add Worker and name it “Outbox relay”. Place it in column 4, row 2 of the HLD. Execute background work with bounded concurrency for payment system / wallet. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["relay"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Payment commands",
+      "explanation": "In Design, add Message Queue and name it “Payment commands”. Place it in column 2, row 2 of the HLD; its callers are Outbox relay. Buffer independently retryable asynchronous work for payment system / wallet. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Payment executors",
+      "explanation": "In Design, add Worker and name it “Payment executors”. Place it in column 3, row 3 of the HLD; its callers are Payment commands. Calls PSP with idempotency key; retries with backoff Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["exec"],
+      "edgeIds": ["e7", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "PSP",
+      "explanation": "In Design, add External Service and name it “PSP”. Place it in column 4, row 3 of the HLD; its callers are Payment executors. External system boundary for payment system / wallet. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["psp"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Reconciliation job",
+      "explanation": "In Design, add Scheduler and name it “Reconciliation job”. Place it in the leftmost caller/background lane. Daily reconcile against PSP reports Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["recon"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Commit intent then execute",
+      "steps": [
+        {
+          "title": "App → LB → Payment Orders → Payments + ledger",
+          "explanation": "Write payment intent and outbox in one transaction; return PROCESSING.",
+          "nodeIds": ["client", "lb", "orders", "db"],
+          "edgeIds": ["e1", "e3", "e4"]
+        },
+        {
+          "title": "Outbox relay → Payments + ledger",
+          "explanation": "Claim committed outbox rows.",
+          "nodeIds": ["relay", "db"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "Outbox relay → Payment commands → Payment executors → PSP",
+          "explanation": "Publish at least once and call the PSP with a stable idempotency key.",
+          "nodeIds": ["relay", "q", "exec", "psp"],
+          "edgeIds": ["e6", "e7", "e8"]
+        },
+        {
+          "title": "Payment executors → Payments + ledger",
+          "explanation": "Record provider outcome and balanced ledger changes transactionally.",
+          "nodeIds": ["exec", "db"],
+          "edgeIds": ["e9"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Recover ambiguous provider outcome",
+      "steps": [
+        {
+          "title": "Payment commands → Payment executors → PSP",
+          "explanation": "Retry/query the same payment reference after timeout, never a new charge identity.",
+          "nodeIds": ["q", "exec", "psp"],
+          "edgeIds": ["e7", "e8"]
+        },
+        {
+          "title": "Reconciliation job → Payments + ledger",
+          "explanation": "Reconcile pending/stuck payments against provider status before finalizing.",
+          "nodeIds": ["recon", "db"],
+          "edgeIds": ["e10"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Provider charges but the response is lost",
+      "handling": "Do not issue a fresh logical charge. Retry/query with the same provider idempotency key, process signed webhooks idempotently and reconcile settlement files with immutable ledger entries.",
+      "nodeIds": ["db", "relay", "exec"]
+    }
+  ],
+  "alternatives": "Use synchronous provider calls for simpler checkout when latency is acceptable. Use an outbox and executors for responsive asynchronous processing. Both require immutable balanced ledgers, stable provider identity and reconciliation.",
+  "sectionApplicability": {}
+}

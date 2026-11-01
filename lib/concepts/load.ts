@@ -29,5 +29,11 @@ export function getConcept(slug: string): Concept | undefined {
 }
 
 export function conceptSummaries(): ConceptSummary[] {
-  return loadConcepts().map(({ slug, title, tags, summary }) => ({ slug, title, tags, summary }));
+  return loadConcepts().map(({ slug, title, tags, summary, kind }) => ({
+    slug,
+    title,
+    tags,
+    summary,
+    kind,
+  }));
 }

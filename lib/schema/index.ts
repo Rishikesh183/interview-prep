@@ -12,3 +12,4 @@ export * from "./stored";
 export * from "./remote";
 export * from "./concept";
 export * from "./mySolution";
+export * from "./walkthrough";

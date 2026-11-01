@@ -12,24 +12,26 @@
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "c": {
         "content": ["api"],
         "ttl": "5m"
-      }
+      },
+      "no": "Serve cacheable media or static responses close to users for typeahead / autocomplete."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for typeahead / autocomplete."
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Suggest Service",
       "no": "Serves a trie with cached top-10 per prefix node; sharded by first two letters, replicated"
@@ -37,27 +39,29 @@
     {
       "i": "tries",
       "t": "nosql_kv",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Serialized tries",
       "c": {
         "partitionKey": "prefix_shard"
-      }
+      },
+      "no": "Store partitioned point-lookup state for typeahead / autocomplete."
     },
     {
       "i": "log",
       "t": "event_stream",
-      "x": 1040,
-      "y": 130,
+      "x": 1120,
+      "y": 180,
       "l": "Query log",
       "c": {
         "topic": "queries"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for typeahead / autocomplete."
     },
     {
       "i": "spark",
       "t": "batch_processor",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Top-K builder",
       "no": "Aggregates counts, rebuilds the trie"
@@ -69,18 +73,22 @@
       "s": "client",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "cdn",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "svc",
+      "a": "a1",
+      "l": "Call Suggest Service",
       "h": "r>l"
     },
     {
@@ -88,6 +96,7 @@
       "s": "svc",
       "d": "tries",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -95,6 +104,7 @@
       "s": "svc",
       "d": "log",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -102,6 +112,7 @@
       "s": "log",
       "d": "spark",
       "m": "a",
+      "l": "Call Top-K builder",
       "h": "r>l"
     },
     {
@@ -109,6 +120,7 @@
       "s": "spark",
       "d": "tries",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -118,9 +130,20 @@
       "ownerNodeId": "svc",
       "method": "GET",
       "path": "/v1/suggest",
+      "request": "No request body; ?q=system&locale=en&limit=10",
+      "response": "200 { \"suggestions\": [\"system design\"], \"version\": 8 }",
+      "statusCodes": "200, 400, 429",
       "auth": false,
-      "request": "?q=prefix&locale=en"
+      "idempotent": true,
+      "rateLimited": true,
+      "note": "Debounce client requests and cache normalized-prefix results. Apply privacy filtering before publishing query logs."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "PrefixSuggestions",
+      "fields": "locale: string\nprefix: string partition key\nranked_queries: (query, score)[]\nversion: int64",
+      "storeNodeId": "tries"
+    }
+  ]
 }

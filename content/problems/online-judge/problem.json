@@ -37,5 +37,10 @@
     "Result delivery (polling vs push)"
   ],
   "rubricFocus": ["Isolation", "Async execution", "Scaling under contest load"],
-  "prerequisites": ["message-queues-vs-streams", "fault-tolerance-retries", "scalability-basics"]
+  "prerequisites": [
+    "message-queues-vs-streams",
+    "fault-tolerance-retries",
+    "scalability-basics",
+    "backpressure-load-shedding"
+  ]
 }

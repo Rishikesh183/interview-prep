@@ -41,5 +41,11 @@
     "Dedup / exactly-once",
     "OLAP query store"
   ],
-  "prerequisites": ["message-queues-vs-streams", "idempotency", "back-of-envelope-estimation"]
+  "prerequisites": [
+    "message-queues-vs-streams",
+    "idempotency",
+    "back-of-envelope-estimation",
+    "hot-partitions",
+    "backpressure-load-shedding"
+  ]
 }

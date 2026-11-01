@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "overview": "Location pings are produced to Kafka partitioned by geohash prefix. Geo-index workers consume and maintain in-memory H3 cell → drivers maps, sharded by region. Dispatch queries the owning shard and claims a driver with a conditional write on the driver's state row.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative active fleet: 1M drivers pinging every 5 seconds.",
+      "calculation": "1,000,000 / 5 = 200K location updates/s.",
+      "result": "Location writes dominate trip creation and have short useful lifetimes.",
+      "implication": "Shard geo state by region/city; persist trip assignments separately from ephemeral location data."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "driver",
+      "purpose": "Mobile caller with intermittent connectivity for uber / ola.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "rider",
+      "purpose": "User-facing caller for uber / ola.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Authenticate, apply admission limits and route requests for uber / ola.",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "ingest",
+      "purpose": "Implement the owned APIs and coordinate state transitions for uber / ola.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "kafka",
+      "purpose": "Retain ordered events for replayable consumers for uber / ola.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "indexer",
+      "purpose": "Consume pings, update cells",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "geo",
+      "purpose": "In-memory H3/S2 cells → drivers",
+      "rationale": "Search every intersecting cell and exact-distance filter; the geo view is not an authoritative exclusive assignment."
+    },
+    {
+      "nodeId": "dispatch",
+      "purpose": "Conditional write on driver state: claim exactly one",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "state",
+      "purpose": "Store partitioned point-lookup state for uber / ola.",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "trips",
+      "purpose": "Store authoritative records with transactional constraints for uber / ola.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "psp",
+      "purpose": "External system boundary for uber / ola.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Trip",
+      "purpose": "Authoritative trip state and driver assignment.",
+      "accessPatterns": ["Create a trip; conditionally claim one driver; advance the trip state."],
+      "constraints": [
+        "A conditional write/fenced lease prevents two trips from claiming the same driver."
+      ],
+      "relationships": [
+        "driver_id links the durable assignment to a fresh DriverLocation candidate; the geo lookup alone does not claim ownership."
+      ]
+    },
+    {
+      "entityName": "DriverLocation",
+      "purpose": "Recent location and availability used for matching.",
+      "accessPatterns": ["Update location from pings; query nearby available drivers."],
+      "constraints": [
+        "Reject stale timestamps and expire drivers from search after missed heartbeats; Redis GEO members require explicit per-member expiry logic."
+      ],
+      "relationships": [
+        "Trip records the accepted assignment separately from ephemeral location membership."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Start a trip request and asynchronous matching.",
+      "rationale": "A geo candidate is not an assignment; conditionally claim before notifying the driver."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Report driver location with a bounded update rate.",
+      "rationale": "Kafka mode can use HTTP batch ingestion for the same message shape; ordering is per driver, not global."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Accept a current trip offer without racing an expired or reassigned lease.",
+      "rationale": "Accept only the current unexpired driver offer; reject stale versions and repeated claims from another driver."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Drivers",
+      "explanation": "In Design, add Mobile Client and name it “Drivers”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for uber / ola. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["driver"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Riders",
+      "explanation": "In Design, add Web Client and name it “Riders”. Place it in the leftmost caller/background lane. User-facing caller for uber / ola. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["rider"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Gateway",
+      "explanation": "In Design, add API Gateway and name it “Gateway”. Place it in column 2, row 1 of the HLD; its callers are Drivers, Riders. Authenticate, apply admission limits and route requests for uber / ola. Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1", "e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Location ingest",
+      "explanation": "In Design, add Service and name it “Location ingest”. Place it in column 3, row 1 of the HLD; its callers are Gateway. Implement the owned APIs and coordinate state transitions for uber / ola. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ingest"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Locations",
+      "explanation": "In Design, add Event Stream and name it “Locations”. Place it in column 4, row 1 of the HLD; its callers are Location ingest. Retain ordered events for replayable consumers for uber / ola. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["kafka"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Geo indexers",
+      "explanation": "In Design, add Worker and name it “Geo indexers”. Place it in column 5, row 1 of the HLD; its callers are Locations. Consume pings, update cells Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["indexer"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Geo index shards",
+      "explanation": "In Design, add Geo Index and name it “Geo index shards”. Place it in column 6, row 1 of the HLD; its callers are Geo indexers, Dispatch Service. In-memory H3/S2 cells → drivers Search every intersecting cell and exact-distance filter; the geo view is not an authoritative exclusive assignment. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["geo"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": ["DriverLocation"]
+    },
+    {
+      "title": "Dispatch Service",
+      "explanation": "In Design, add Service and name it “Dispatch Service”. Place it in column 3, row 2 of the HLD; its callers are Gateway. Conditional write on driver state: claim exactly one Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["dispatch"],
+      "edgeIds": ["e4", "e8"],
+      "apiIds": ["a1", "a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Driver state",
+      "explanation": "In Design, add Key-Value Store and name it “Driver state”. Place it in column 4, row 2 of the HLD; its callers are Dispatch Service. Store partitioned point-lookup state for uber / ola. Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["state"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Trips",
+      "explanation": "In Design, add SQL Database and name it “Trips”. Place it in column 4, row 3 of the HLD; its callers are Dispatch Service. Store authoritative records with transactional constraints for uber / ola. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["trips"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": ["Trip"]
+    },
+    {
+      "title": "PSP",
+      "explanation": "In Design, add External Service and name it “PSP”. Place it in column 4, row 4 of the HLD; its callers are Dispatch Service. External system boundary for uber / ola. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["psp"],
+      "edgeIds": ["e11"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Ingest pings and build a geo view",
+      "steps": [
+        {
+          "title": "Drivers → Gateway → Location ingest → Locations → Geo indexers → Geo index shards",
+          "explanation": "Partition pings by regional ownership, reject old per-driver sequences and maintain fresh candidate cells.",
+          "nodeIds": ["driver", "gw", "ingest", "kafka", "indexer", "geo"],
+          "edgeIds": ["e1", "e3", "e5", "e6", "e7"]
+        }
+      ],
+      "apiId": "a2"
+    },
+    {
+      "id": "flow-2",
+      "title": "Claim a driver and create a trip",
+      "steps": [
+        {
+          "title": "Riders → Gateway → Dispatch Service → Geo index shards",
+          "explanation": "Query nearby available candidates.",
+          "nodeIds": ["rider", "gw", "dispatch", "geo"],
+          "edgeIds": ["e2", "e4", "e8"]
+        },
+        {
+          "title": "Dispatch Service → Driver state",
+          "explanation": "Conditionally change the driver from AVAILABLE to CLAIMED with a lease/version.",
+          "nodeIds": ["dispatch", "state"],
+          "edgeIds": ["e9"]
+        },
+        {
+          "title": "Dispatch Service → Trips",
+          "explanation": "Persist the assigned trip; reconcile failed multi-store transitions.",
+          "nodeIds": ["dispatch", "trips"],
+          "edgeIds": ["e10"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Two matchers select the same nearby driver",
+      "handling": "Only one conditional availability claim succeeds; retry the losing matcher with another candidate. Expire stale location membership and fence late acceptance of an expired offer.",
+      "nodeIds": ["indexer", "state", "trips"]
+    }
+  ],
+  "alternatives": "Use WebSockets and city Redis GEO for low-latency disposable location state. Use a replayable location stream and region indexers for rebuilds and analytics, while monitoring location lag. Both need exclusive driver claims.",
+  "sectionApplicability": {}
+}

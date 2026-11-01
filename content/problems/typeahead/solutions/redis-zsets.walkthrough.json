@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "overview": "For each prefix up to 10 chars keep a Redis sorted set of top queries; a streaming job increments scores.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative query vocabulary: 10M distinct queries, up to 10 prefixes each.",
+      "calculation": "10,000,000 × 10 = up to 100M prefix memberships before sharing/pruning.",
+      "result": "Naively indexing every prefix multiplies storage and update work.",
+      "implication": "Precompute top-K and prune long-tail prefixes; batch trie builds trade freshness for simpler serving."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Debounce 150 ms; browser cache for repeated prefixes",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Serve cacheable media or static responses close to users for typeahead / autocomplete.",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for typeahead / autocomplete.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Serves a trie with cached top-10 per prefix node; sharded by first two letters, replicated",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "tries",
+      "purpose": "Key by locale and normalized prefix; sorted-set members are queries ranked by score. Bound prefix length and prune the long tail.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "log",
+      "purpose": "Retain ordered events for replayable consumers for typeahead / autocomplete.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "spark",
+      "purpose": "Consume query log, dedup event IDs, expand prefixes up to 10 characters and update decayed popularity scores.",
+      "rationale": "Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "PrefixSuggestions",
+      "purpose": "Precomputed best queries per normalized prefix.",
+      "accessPatterns": ["Fetch the top suggestions in one lookup; publish a new ranking version."],
+      "constraints": [
+        "Normalize case/locale consistently; bound prefixes and result count to prevent index explosion."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Return fast top suggestions for a prefix.",
+      "rationale": "Debounce client requests and cache normalized-prefix results. Apply privacy filtering before publishing query logs."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Search box",
+      "explanation": "In Design, add Web Client and name it “Search box”. Place it in the leftmost caller/background lane. Debounce 150 ms; browser cache for repeated prefixes Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 1 of the HLD; its callers are Search box. Serve cacheable media or static responses close to users for typeahead / autocomplete. Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 3, row 1 of the HLD; its callers are CDN. Distribute incoming connections across healthy instances for typeahead / autocomplete. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Suggest Service",
+      "explanation": "In Design, add Service and name it “Suggest Service”. Place it in column 4, row 1 of the HLD; its callers are LB. Serves a trie with cached top-10 per prefix node; sharded by first two letters, replicated Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Prefix sorted sets",
+      "explanation": "In Design, add Cache and name it “Prefix sorted sets”. Place it in column 5, row 1 of the HLD; its callers are Suggest Service, Prefix score updater. Key by locale and normalized prefix; sorted-set members are queries ranked by score. Bound prefix length and prune the long tail. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["tries"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["PrefixSuggestions"]
+    },
+    {
+      "title": "Query log",
+      "explanation": "In Design, add Event Stream and name it “Query log”. Place it in column 5, row 2 of the HLD; its callers are Suggest Service. Retain ordered events for replayable consumers for typeahead / autocomplete. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["log"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Prefix score updater",
+      "explanation": "In Design, add Stream Processor and name it “Prefix score updater”. Place it in column 6, row 1 of the HLD; its callers are Query log. Consume query log, dedup event IDs, expand prefixes up to 10 characters and update decayed popularity scores. Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["spark"],
+      "edgeIds": ["e6", "e7"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Read a prefix sorted set",
+      "steps": [
+        {
+          "title": "Search box → CDN → LB → Suggest Service → Prefix sorted sets",
+          "explanation": "Normalize the prefix key and return the top scored query members.",
+          "nodeIds": ["client", "cdn", "lb", "svc", "tries"],
+          "edgeIds": ["e1", "e2", "e3", "e4"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Refresh scores continuously",
+      "steps": [
+        {
+          "title": "Suggest Service → Query log → Prefix score updater",
+          "explanation": "Consume deduplicated query events and expand only bounded-length prefixes.",
+          "nodeIds": ["svc", "log", "spark"],
+          "edgeIds": ["e5", "e6"]
+        },
+        {
+          "title": "Prefix score updater → Prefix sorted sets",
+          "explanation": "Apply score decay/increments and prune stale or low-frequency memberships.",
+          "nodeIds": ["spark", "tries"],
+          "edgeIds": ["e7"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A ranking build fails or a stream updater falls behind",
+      "handling": "Keep serving the last complete version; publish builds with atomic version swaps. Monitor freshness, dedup replayed query events, and expire stale CDN results within the freshness budget.",
+      "nodeIds": ["tries"]
+    }
+  ],
+  "alternatives": "Use batch-built tries for very fast reads when daily staleness is acceptable. Use streaming prefix sorted sets for fresher trends, accepting higher update work, prefix cardinality and score-decay complexity.",
+  "sectionApplicability": {}
+}

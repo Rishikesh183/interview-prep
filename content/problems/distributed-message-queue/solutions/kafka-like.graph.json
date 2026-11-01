@@ -12,7 +12,7 @@
     {
       "i": "brokers",
       "t": "event_stream",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "Broker cluster",
       "c": {
@@ -23,7 +23,7 @@
     {
       "i": "controller",
       "t": "coordination",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Controller (KRaft)",
       "no": "Assigns partition leaders"
@@ -31,8 +31,8 @@
     {
       "i": "consumers",
       "t": "worker",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Consumer group",
       "no": "Commit offsets to an internal topic; rebalancing on join/leave"
     }
@@ -43,6 +43,7 @@
       "s": "producers",
       "d": "brokers",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -50,6 +51,7 @@
       "s": "brokers",
       "d": "consumers",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -58,9 +60,45 @@
       "d": "controller",
       "m": "a",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
-  "apis": [],
-  "entities": []
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "brokers",
+      "method": "RPC",
+      "path": "Broker.Produce",
+      "request": "{ \"topic\": \"events\", \"key\": \"user1\", \"producerId\": \"p1\", \"sequence\": 8, \"value\": \"...\", \"acks\": \"all\" }",
+      "response": "{ \"partition\": 3, \"offset\": 1008 }",
+      "statusCodes": "OK, NOT_LEADER, NOT_ENOUGH_REPLICAS",
+      "auth": true,
+      "note": "acks=all waits for the in-sync replica set subject to min ISR; it is not an end-to-end exactly-once guarantee."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "brokers",
+      "method": "RPC",
+      "path": "Broker.Fetch",
+      "request": "{ \"topic\": \"events\", \"partition\": 3, \"offset\": 1008, \"maxBytes\": 1048576 }",
+      "response": "{ \"records\": [], \"nextOffset\": 1010 }",
+      "statusCodes": "OK, OFFSET_OUT_OF_RANGE, NOT_LEADER",
+      "auth": true,
+      "idempotent": true,
+      "note": "Consumer groups own partition assignments; keep commit progress separate from fetch position."
+    }
+  ],
+  "entities": [
+    {
+      "name": "LogRecord",
+      "fields": "topic: string\npartition_id: int32\noffset: int64 PK within partition\nkey: bytes\npayload: bytes\nproducer_id: string\nsequence: int64",
+      "storeNodeId": "brokers"
+    },
+    {
+      "name": "ConsumerOffset",
+      "fields": "group_id: string\ntopic: string\npartition_id: int32\ncommitted_offset: int64",
+      "storeNodeId": "brokers"
+    }
+  ]
 }

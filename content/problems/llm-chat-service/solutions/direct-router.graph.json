@@ -1,0 +1,109 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Chat UI",
+      "no": "User-facing caller for llm chat service (chatgpt)."
+    },
+    {
+      "i": "gw",
+      "t": "api_gateway",
+      "x": 280,
+      "y": 0,
+      "no": "Token-based limits per user tier"
+    },
+    {
+      "i": "chat",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Connection-aware inference router",
+      "no": "Choose a healthy GPU replica with available token capacity. Proxy WebSocket/gRPC token streams directly; reject overload with 429 and Retry-After rather than queueing."
+    },
+    {
+      "i": "db",
+      "t": "nosql_document",
+      "x": 840,
+      "y": 0,
+      "l": "Conversations",
+      "c": {
+        "shardKey": "user_id"
+      },
+      "no": "Store documents and their versioned lifecycle for llm chat service (chatgpt)."
+    },
+    {
+      "i": "gpu",
+      "t": "worker",
+      "x": 1120,
+      "y": 0,
+      "l": "GPU inference replicas",
+      "c": {
+        "concurrency": 8
+      },
+      "no": "Continuous batching and KV-cache reuse within one replica; propagate cancellation from the router."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gw",
+      "l": "Authenticated request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gw",
+      "d": "chat",
+      "a": "a1",
+      "l": "Call Connection-aware inference router",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "chat",
+      "d": "db",
+      "o": "rw",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "chat",
+      "d": "gpu",
+      "l": "Direct inference token stream",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "chat",
+      "method": "POST",
+      "path": "/v1/conversations/{id}/messages",
+      "request": "{ \"requestId\": \"r1\", \"content\": \"Explain caching\", \"maxTokens\": 512 }",
+      "response": "200 text/event-stream: event=token data={\"text\":\"Cache\"}; event=done data={\"requestId\":\"r1\",\"usage\":512}",
+      "statusCodes": "200, 400, 429, 503",
+      "auth": true,
+      "idempotent": true,
+      "rateLimited": true,
+      "note": "Reserve token budget, propagate cancellation, and dedup requestId. SSE works over HTTP; direct-router mode may proxy the same token events over WebSockets."
+    }
+  ],
+  "entities": [
+    {
+      "name": "Conversation",
+      "fields": "conversation_id: string PK\nowner_id: string\nmessage_ids: string[]\ncreated_at: timestamp",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "Generation",
+      "fields": "request_id: string PK\nconversation_id: string\nstatus: QUEUED|RUNNING|DONE|CANCELLED\nlast_event_id: int64\nusage_tokens: int64",
+      "storeNodeId": "db"
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "api",
+      "t": "service",
+      "l": "Reservation Service",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "l": "Inventory source DB",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "cdc",
+      "t": "worker",
+      "l": "Snapshot + log connector",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "stream",
+      "t": "event_stream",
+      "l": "Versioned row changes",
+      "x": 840,
+      "y": 0
+    },
+    {
+      "i": "indexer",
+      "t": "worker",
+      "l": "Idempotent indexer",
+      "x": 840,
+      "y": 220
+    },
+    {
+      "i": "index",
+      "t": "search_index",
+      "l": "Derived listing search",
+      "x": 560,
+      "y": 220
+    },
+    {
+      "i": "search",
+      "t": "service",
+      "l": "Search API",
+      "x": 280,
+      "y": 220
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "api",
+      "d": "db",
+      "l": "Authoritative capacity decision",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "cdc",
+      "d": "db",
+      "l": "Snapshot and committed log",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "cdc",
+      "d": "stream",
+      "l": "Checkpointed change events",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e4",
+      "s": "stream",
+      "d": "indexer",
+      "l": "Replayable consumption",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e5",
+      "s": "indexer",
+      "d": "index",
+      "l": "Apply only newer versions",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "search",
+      "d": "index",
+      "l": "Provisional search availability",
+      "h": "r>l"
+    }
+  ]
+}

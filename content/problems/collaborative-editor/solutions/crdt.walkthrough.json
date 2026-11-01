@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "overview": "Clients apply CRDT ops locally (Yjs/Automerge) and send them through any WebSocket node; Redis pub/sub relays per doc; ops stored in a KV log; snapshots compacted periodically.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative collaboration budget: 50 editors/doc, 2 operations/s/editor.",
+      "calculation": "50 × 2 = 100 operations/s for a hot document.",
+      "result": "One document session must serialize or merge at least 100 operations/s.",
+      "implication": "Shard by document rather than splitting one OT document across uncoordinated leaders."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for google docs.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Routes by document id: all editors of a doc share one session server",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "collab",
+      "purpose": "Yjs-style CRDT operations use stable client IDs and logical clocks. Apply locally, persist before ack, relay across replicas; reconnect exchanges state vectors.",
+      "rationale": "Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances."
+    },
+    {
+      "nodeId": "ops",
+      "purpose": "Store partitioned point-lookup state for google docs.",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "snap",
+      "purpose": "Snapshot every 500 ops; load = snapshot + tail of the op log",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "docs",
+      "purpose": "Implement the owned APIs and coordinate state transitions for google docs.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "meta",
+      "purpose": "Store authoritative records with transactional constraints for google docs.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "ps",
+      "purpose": "Relay CRDT updates and ephemeral cursor presence; replay missed durable operations from the op log.",
+      "rationale": "Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Operation",
+      "purpose": "Replayable edit operations.",
+      "accessPatterns": [
+        "Append an acknowledged operation; load operations after a snapshot cursor."
+      ],
+      "constraints": [
+        "Dedup operation_id; OT uses a document leader revision, CRDT uses stable actor/logical IDs."
+      ],
+      "relationships": []
+    },
+    {
+      "entityName": "Document",
+      "purpose": "Document metadata and the latest snapshot checkpoint.",
+      "accessPatterns": ["Check access before joining; retrieve a checkpoint on open."],
+      "constraints": [
+        "Publish the snapshot and checkpoint together; retain operations newer than the checkpoint."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Join a document and exchange edits and ephemeral cursor presence.",
+      "rationale": "Persist edits before ack. OT transforms against the server revision; CRDT exchanges state vectors and missing updates."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Open a document from a snapshot and the operation tail.",
+      "rationale": "Authorize both snapshot access and log replay; a snapshot reduces startup replay work."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Editor",
+      "explanation": "In Design, add Web Client and name it “Editor”. Place it in the leftmost caller/background lane. User-facing caller for google docs. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Editor. Routes by document id: all editors of a doc share one session server Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CRDT sync servers",
+      "explanation": "In Design, add WebSocket Server and name it “CRDT sync servers”. Place it in column 3, row 1 of the HLD; its callers are LB, Document channels. Yjs-style CRDT operations use stable client IDs and logical clocks. Apply locally, persist before ack, relay across replicas; reconnect exchanges state vectors. Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["collab"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Op log",
+      "explanation": "In Design, add Key-Value Store and name it “Op log”. Place it in column 4, row 1 of the HLD; its callers are CRDT sync servers. Store partitioned point-lookup state for google docs. Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ops"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["Operation"]
+    },
+    {
+      "title": "Snapshots",
+      "explanation": "In Design, add Object Storage and name it “Snapshots”. Place it in column 4, row 2 of the HLD; its callers are CRDT sync servers, Docs API. Snapshot every 500 ops; load = snapshot + tail of the op log Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["snap"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Docs API",
+      "explanation": "In Design, add Service and name it “Docs API”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for google docs. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["docs"],
+      "edgeIds": ["e3", "e7"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Doc metadata",
+      "explanation": "In Design, add SQL Database and name it “Doc metadata”. Place it in column 4, row 3 of the HLD; its callers are Docs API. Store authoritative records with transactional constraints for google docs. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meta"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": ["Document"]
+    },
+    {
+      "title": "Document channels",
+      "explanation": "In Design, add Pub/Sub and name it “Document channels”. Place it in column 4, row 4 of the HLD; its callers are CRDT sync servers. Relay CRDT updates and ephemeral cursor presence; replay missed durable operations from the op log. Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ps"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Merge and relay a CRDT update",
+      "steps": [
+        {
+          "title": "Editor → LB → CRDT sync servers → Op log",
+          "explanation": "A client applies a local operation; the server dedups stable actor/operation IDs and durably appends it.",
+          "nodeIds": ["client", "lb", "collab", "ops"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "CRDT sync servers → Document channels → CRDT sync servers",
+          "explanation": "Broadcast to other gateway sessions; CRDT merge converges independently of transport order.",
+          "nodeIds": ["collab", "ps"],
+          "edgeIds": ["e8", "e9"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Reconnect with missing updates",
+      "steps": [
+        {
+          "title": "Editor → LB → Docs API → Doc metadata",
+          "explanation": "Authorize and obtain the snapshot checkpoint.",
+          "nodeIds": ["client", "lb", "docs", "meta"],
+          "edgeIds": ["e1", "e3", "e6"]
+        },
+        {
+          "title": "Docs API → Snapshots",
+          "explanation": "Load a compacted snapshot and exchange state vectors with the sync server to fetch missing durable operations.",
+          "nodeIds": ["docs", "snap"],
+          "edgeIds": ["e7"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Session server fails while editors are typing",
+      "handling": "Reconnect using the last durable revision/state vector and resend unacknowledged operation IDs. Rebuild from snapshot plus log; fence the old OT leader before admitting writes.",
+      "nodeIds": ["ops", "meta"]
+    }
+  ],
+  "alternatives": "Use a fenced OT document leader for a central revision order. Use CRDT updates for offline editing and multi-replica merging, budgeting identifier/tombstone overhead and safe compaction.",
+  "sectionApplicability": {}
+}

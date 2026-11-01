@@ -6,43 +6,48 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Browser"
+      "l": "Browser",
+      "no": "User-facing caller for online judge (leetcode)."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for online judge (leetcode)."
     },
     {
       "i": "api",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Submission API"
+      "l": "Submission API",
+      "no": "Implement the owned APIs and coordinate state transitions for online judge (leetcode)."
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Submissions",
       "c": {
         "replicas": 2
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for online judge (leetcode)."
     },
     {
       "i": "q",
       "t": "message_queue",
-      "x": 780,
-      "y": 130,
-      "l": "Judge queue"
+      "x": 840,
+      "y": 180,
+      "l": "Judge queue",
+      "no": "Buffer independently retryable asynchronous work for online judge (leetcode)."
     },
     {
       "i": "judge",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Judge workers",
       "c": {
@@ -53,9 +58,10 @@
     {
       "i": "s3",
       "t": "object_storage",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
-      "l": "Hidden test data"
+      "l": "Hidden test data",
+      "no": "Persist immutable large objects for online judge (leetcode)."
     }
   ],
   "e": [
@@ -63,12 +69,14 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "api",
+      "l": "Call Submission API",
       "h": "r>l"
     },
     {
@@ -76,6 +84,7 @@
       "s": "api",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -83,6 +92,7 @@
       "s": "api",
       "d": "q",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -90,6 +100,7 @@
       "s": "q",
       "d": "judge",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -97,6 +108,7 @@
       "s": "judge",
       "d": "s3",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -114,19 +126,37 @@
       "ownerNodeId": "api",
       "method": "POST",
       "path": "/v1/submissions",
+      "request": "{ \"requestId\": \"r1\", \"problemId\": \"p1\", \"language\": \"cpp\", \"source\": \"...\" }",
+      "response": "202 { \"submissionId\": \"s1\", \"status\": \"QUEUED\" }",
+      "statusCodes": "202, 400, 429",
       "auth": true,
       "idempotent": true,
-      "response": "{ submissionId }",
-      "statusCodes": "202"
+      "rateLimited": true,
+      "note": "Publish execution only after the submission record is durable; enforce user quotas."
     },
     {
       "id": "a2",
       "ownerNodeId": "api",
       "method": "GET",
       "path": "/v1/submissions/{id}",
+      "request": "No request body.",
+      "response": "200 { \"status\": \"FINISHED\", \"verdict\": \"ACCEPTED\", \"runtimeMs\": 42 }",
+      "statusCodes": "200, 403, 404",
       "auth": true,
-      "response": "{ status, verdict, runtimeMs }"
+      "idempotent": true,
+      "note": "Poll with backoff or use a notification hint; hidden test details must remain private."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "Submission",
+      "fields": "submission_id: string PK\nuser_id: string\nproblem_id: string\nlanguage: string\nsource_key: string\nstatus: QUEUED|RUNNING|FINISHED\nverdict: string?\ntest_version: string",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "TestBundle",
+      "fields": "problem_id: string\nversion: string\nobject_key: string\nchecksum: string",
+      "storeNodeId": "s3"
+    }
+  ]
 }

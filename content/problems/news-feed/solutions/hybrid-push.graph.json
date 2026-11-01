@@ -6,54 +6,59 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "App"
+      "l": "App",
+      "no": "Mobile caller with intermittent connectivity for news feed (twitter)."
     },
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "c": {
         "content": ["media"]
-      }
+      },
+      "no": "Serve cacheable media or static responses close to users for news feed (twitter)."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
-      "y": 130,
-      "l": "LB"
+      "x": 280,
+      "y": 180,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for news feed (twitter)."
     },
     {
       "i": "post",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Post Service"
+      "l": "Post Service",
+      "no": "Implement the owned APIs and coordinate state transitions for news feed (twitter)."
     },
     {
       "i": "tl",
       "t": "service",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Timeline Service",
       "no": "Reads Redis timeline; merges celebrity posts on read (hybrid)"
     },
     {
       "i": "posts",
       "t": "nosql_kv",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Posts",
       "c": {
         "partitionKey": "post_id"
-      }
+      },
+      "no": "Store partitioned point-lookup state for news feed (twitter)."
     },
     {
       "i": "graphdb",
       "t": "sql_db",
-      "x": 0,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Follow graph",
       "c": {
         "readReplicas": true
@@ -63,17 +68,18 @@
     {
       "i": "kafka",
       "t": "event_stream",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 360,
       "l": "Post events",
       "c": {
         "topic": "posts"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for news feed (twitter)."
     },
     {
       "i": "fanout",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Fan-out workers",
       "c": {
@@ -84,7 +90,7 @@
     {
       "i": "tcache",
       "t": "cache",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Timeline cache",
       "c": {
@@ -97,9 +103,10 @@
     {
       "i": "media",
       "t": "object_storage",
-      "x": 520,
-      "y": 260,
-      "l": "Media"
+      "x": 560,
+      "y": 360,
+      "l": "Media",
+      "no": "Persist immutable large objects for news feed (twitter)."
     }
   ],
   "e": [
@@ -108,30 +115,37 @@
       "s": "client",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "cdn",
       "d": "media",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "lb",
       "d": "post",
+      "a": "a1",
+      "l": "Call Post Service",
       "h": "r>l"
     },
     {
       "i": "e5",
       "s": "lb",
       "d": "tl",
+      "a": "a2",
+      "l": "Call Timeline Service",
       "h": "r>l"
     },
     {
@@ -139,6 +153,7 @@
       "s": "post",
       "d": "posts",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -146,6 +161,7 @@
       "s": "post",
       "d": "kafka",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -153,6 +169,7 @@
       "s": "kafka",
       "d": "fanout",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -160,6 +177,7 @@
       "s": "fanout",
       "d": "graphdb",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -167,6 +185,7 @@
       "s": "fanout",
       "d": "tcache",
       "o": "w",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -174,6 +193,7 @@
       "s": "tl",
       "d": "tcache",
       "o": "r",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -181,6 +201,14 @@
       "s": "tl",
       "d": "posts",
       "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e13",
+      "s": "tl",
+      "d": "graphdb",
+      "l": "Read celebrity followees and privacy policy",
       "h": "r>l"
     }
   ],
@@ -190,27 +218,37 @@
       "ownerNodeId": "post",
       "method": "POST",
       "path": "/v1/posts",
+      "request": "{ \"postId\": \"p1\", \"body\": \"hello\", \"mediaKeys\": [] }",
+      "response": "201 { \"postId\": \"p1\", \"createdAt\": \"...\" }",
+      "statusCodes": "201, 400, 409",
       "auth": true,
       "idempotent": true,
-      "statusCodes": "201, 400"
+      "note": "Use a transactional outbox or replayable event feed so a committed post is not lost from fan-out."
     },
     {
       "id": "a2",
       "ownerNodeId": "tl",
       "method": "GET",
       "path": "/v1/timeline/home",
+      "request": "No request body; ?cursor=42&limit=20",
+      "response": "200 { \"posts\": [], \"nextCursor\": \"43\" }",
+      "statusCodes": "200, 401",
       "auth": true,
-      "pagination": "cursor"
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "Cursor combines stable ordering keys. Hybrid mode merges celebrity posts at read time; pull mode merges every followed author."
     }
   ],
   "entities": [
     {
       "name": "Post",
-      "fields": "post_id, author_id, text, media_urls, created_at"
+      "fields": "post_id: string PK\nauthor_id: string partition key\nbody: string\nmedia_keys: string[]\ncreated_at: timestamp sort key",
+      "storeNodeId": "posts"
     },
     {
       "name": "Follow",
-      "fields": "follower_id, followee_id, created_at"
+      "fields": "follower_id: string\nfollowee_id: string\nPK(follower_id, followee_id)",
+      "storeNodeId": "graphdb"
     }
   ]
 }

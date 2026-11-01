@@ -6,22 +6,24 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "Clients"
+      "l": "Clients",
+      "no": "Mobile caller with intermittent connectivity for rate limiter."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "LB",
       "c": {
         "layer": "L4"
-      }
+      },
+      "no": "Distribute incoming connections across healthy instances for rate limiter."
     },
     {
       "i": "rl",
       "t": "rate_limiter",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "c": {
         "algorithm": "sliding-window",
@@ -32,7 +34,7 @@
     {
       "i": "redis",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Redis",
       "c": {
@@ -44,9 +46,10 @@
     {
       "i": "svc",
       "t": "service",
-      "x": 780,
-      "y": 130,
-      "l": "Services"
+      "x": 840,
+      "y": 180,
+      "l": "Services",
+      "no": "Implement the owned APIs and coordinate state transitions for rate limiter."
     }
   ],
   "e": [
@@ -54,12 +57,15 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "rl",
+      "a": "a1",
+      "l": "Call Rate Limiter",
       "h": "r>l"
     },
     {
@@ -67,16 +73,50 @@
       "s": "rl",
       "d": "redis",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "rl",
       "d": "svc",
+      "a": "a2",
+      "l": "Call Services",
       "no": "fail open if Redis times out (> 5 ms)",
       "h": "r>l"
     }
   ],
-  "apis": [],
-  "entities": []
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "rl",
+      "method": "RPC",
+      "path": "Limiter.CheckAndConsume",
+      "request": "{ \"subject\": \"api-key-42\", \"policy\": \"search\", \"cost\": 1, \"requestId\": \"r1\" }",
+      "response": "{ \"allowed\": false, \"remaining\": 0, \"retryAfterMs\": 250 }",
+      "statusCodes": "OK, UNAVAILABLE; protected HTTP response: 429 + Retry-After",
+      "auth": true,
+      "rateLimited": false,
+      "note": "Gateway middleware may invoke this internally; the separate limiter variant exposes the same internal contract. Define whether retries consume quota again."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/protected-resource",
+      "request": "No request body; API key or user identity header.",
+      "response": "200 { \"result\": \"...\" }; 429 Retry-After: 1",
+      "statusCodes": "200, 401, 429, 503",
+      "auth": true,
+      "idempotent": true,
+      "note": "The backend executes only after the admission decision; use a coarse emergency local cap during shared-store outages."
+    }
+  ],
+  "entities": [
+    {
+      "name": "LimitState",
+      "fields": "policy_id: string\nsubject_key: string\ntokens_or_counts: number\nlast_refill_or_window: timestamp\nexpires_at: timestamp",
+      "storeNodeId": "redis"
+    }
+  ]
 }

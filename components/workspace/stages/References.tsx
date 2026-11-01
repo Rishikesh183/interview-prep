@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ApproachWalkthrough } from "@/components/solutions/ApproachWalkthrough";
 import { ReferenceCompare } from "@/components/review/ReferenceCompare";
 import type { Problem } from "@/lib/schema";
 import { useAttemptStore } from "@/store/attempt";
@@ -72,6 +73,14 @@ export function References({ problem }: { problem: Problem }) {
           <article key={ref.id} className="space-y-2 rounded-lg border p-4">
             <h4 className="font-medium">{ref.name}</h4>
             <p className="text-sm leading-relaxed">{ref.summary}</p>
+            <details>
+              <summary className="text-primary cursor-pointer text-sm">
+                Read the guided walkthrough
+              </summary>
+              <div className="mt-4">
+                <ApproachWalkthrough problem={problem} approach={ref} />
+              </div>
+            </details>
             {ref.tradeoffs.length > 0 && (
               <ul className="text-muted-foreground list-disc space-y-0.5 pl-4 text-sm">
                 {ref.tradeoffs.map((t, i) => (

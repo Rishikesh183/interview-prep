@@ -4,6 +4,7 @@ import { CONCEPT_SLUGS } from "@/lib/content/concepts";
 import { assembleProblem, type RawProblemDir } from "@/lib/content/problemDir";
 import type { Check, Problem, TypeRefs } from "@/lib/schema";
 import { runTests } from "@/lib/tests/engine";
+import { validateWalkthrough } from "@/lib/solutions/walkthrough";
 
 export type ValidationResult = { problems: Problem[]; errors: string[] };
 
@@ -47,6 +48,7 @@ function crossChecks(p: Problem, dir: string): string[] {
   if (p.tests.filter((t) => t.kind === "core").length < 4) at("needs at least 4 core tests");
 
   for (const ref of p.references) {
+    for (const error of validateWalkthrough(ref)) at(`solution "${ref.id}": ${error}`);
     if (!ref.graph) continue;
     const nodeIds = new Set(ref.graph.nodes.map((n) => n.id));
     for (const n of ref.graph.nodes)
@@ -67,7 +69,10 @@ function crossChecks(p: Problem, dir: string): string[] {
 }
 
 /** Validates every problem folder: schemas, cross-references, and solutions against their tests. */
-export function validateContent(dirs: RawProblemDir[]): ValidationResult {
+export function validateContent(
+  dirs: RawProblemDir[],
+  { requireWalkthroughs = false }: { requireWalkthroughs?: boolean } = {},
+): ValidationResult {
   const problems: Problem[] = [];
   const errors: string[] = [];
   const seenIds = new Set<string>();
@@ -80,6 +85,12 @@ export function validateContent(dirs: RawProblemDir[]): ValidationResult {
       continue;
     }
     const p = assembled.value;
+    if (requireWalkthroughs) {
+      if (!p.references.length) errors.push(`${raw.dir}: needs a published reference solution`);
+      for (const ref of p.references)
+        if (!ref.walkthrough)
+          errors.push(`${raw.dir}: solution "${ref.id}" needs a guided walkthrough`);
+    }
     if (seenIds.has(p.id)) errors.push(`${raw.dir}: duplicate id "${p.id}"`);
     const clash = seenNumbers.get(p.number);
     if (clash) errors.push(`${raw.dir}: number ${p.number} is also used by ${clash}`);

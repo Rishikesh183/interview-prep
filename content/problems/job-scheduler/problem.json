@@ -36,6 +36,8 @@
   "prerequisites": [
     "distributed-locks-consensus",
     "message-queues-vs-streams",
-    "fault-tolerance-retries"
+    "fault-tolerance-retries",
+    "transactional-outbox",
+    "backpressure-load-shedding"
   ]
 }

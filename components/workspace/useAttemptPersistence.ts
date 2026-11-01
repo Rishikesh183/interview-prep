@@ -40,7 +40,7 @@ export function useAttemptPersistence(
   return usePersistence({
     key: `${problemId}:${requested ?? ""}`,
     load: async () => {
-      // Signed in on a fresh device: let the first pull land so we open the synced attempt.
+      // Wait briefly for best progress before evaluating solution-peek penalties. History stays local.
       await waitForInitialSync();
       const { attempt, fresh } = await resolveAttempt(problemId, requested);
       useAttemptStore.getState().load(attempt, { pristine: fresh, problem });

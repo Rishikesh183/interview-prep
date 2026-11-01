@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "overview": "Brokers keep only recent segments locally and offload to object storage; metadata in a consensus store; read-from-follower.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative ingest: 100K records/s at 1 KB each.",
+      "calculation": "100,000 × 1 KB ≈ 100 MB/s; at 10 MB/s per partition, ≥10 partitions before headroom.",
+      "result": "Three replica copies imply roughly 300 MB/s of storage writes before overhead.",
+      "implication": "Partition count must cover throughput and consumer parallelism; retention dominates disk sizing."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "producers",
+      "purpose": "acks=all waits for the in-sync replicas",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "brokers",
+      "purpose": "Hot segments on broker disks; old segments in object storage. Producer acks still depend on ISR replication, not asynchronous archival. Followers may serve committed reads.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "controller",
+      "purpose": "Assigns partition leaders",
+      "rationale": "Use a quorum and fencing; possession of an expired lease must never authorize a stale writer."
+    },
+    {
+      "nodeId": "consumers",
+      "purpose": "Commit offsets to an internal topic; rebalancing on join/leave",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "archive",
+      "purpose": "Immutable sealed segments with checksums; commit segment manifests before evicting local copies.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "LogRecord",
+      "purpose": "Durable ordered append-only records.",
+      "accessPatterns": ["Append by partition; read sequentially from an offset."],
+      "constraints": ["Offsets order only one partition; dedup producer sequence after retries."],
+      "relationships": []
+    },
+    {
+      "entityName": "ConsumerOffset",
+      "purpose": "Consumer-group progress for replay and recovery.",
+      "accessPatterns": ["Commit progress after processing; resume after rebalance."],
+      "constraints": [
+        "An ack before processing risks loss; processing before ack implies duplicates and requires idempotent sinks."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Append an ordered record to a partition leader.",
+      "rationale": "acks=all waits for the in-sync replica set subject to min ISR; it is not an end-to-end exactly-once guarantee."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Fetch a bounded sequence of committed records.",
+      "rationale": "Consumer groups own partition assignments; keep commit progress separate from fetch position."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Producer apps",
+      "explanation": "In Design, add External Service and name it “Producer apps”. Place it in the leftmost caller/background lane. acks=all waits for the in-sync replicas Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["producers"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Tiered brokers",
+      "explanation": "In Design, add Event Stream and name it “Tiered brokers”. Place it in column 2, row 1 of the HLD; its callers are Producer apps. Hot segments on broker disks; old segments in object storage. Producer acks still depend on ISR replication, not asynchronous archival. Followers may serve committed reads. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["brokers"],
+      "edgeIds": ["e1"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": ["LogRecord", "ConsumerOffset"]
+    },
+    {
+      "title": "Controller (KRaft)",
+      "explanation": "In Design, add Coordination and name it “Controller (KRaft)”. Place it in column 3, row 1 of the HLD; its callers are Tiered brokers. Assigns partition leaders Use a quorum and fencing; possession of an expired lease must never authorize a stale writer. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["controller"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Consumer group",
+      "explanation": "In Design, add Worker and name it “Consumer group”. Place it in column 3, row 2 of the HLD; its callers are Tiered brokers. Commit offsets to an internal topic; rebalancing on join/leave Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["consumers"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Archived log segments",
+      "explanation": "In Design, add Object Storage and name it “Archived log segments”. Place it in column 3, row 3 of the HLD; its callers are Tiered brokers. Immutable sealed segments with checksums; commit segment manifests before evicting local copies. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["archive"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Hot append and offload",
+      "steps": [
+        {
+          "title": "Producer apps → Tiered brokers",
+          "explanation": "Append and replicate hot segments before producer acknowledgement.",
+          "nodeIds": ["producers", "brokers"],
+          "edgeIds": ["e1"]
+        },
+        {
+          "title": "Tiered brokers → Archived log segments",
+          "explanation": "Seal immutable segments and publish checksummed manifests before deleting local copies.",
+          "nodeIds": ["brokers", "archive"],
+          "edgeIds": ["e4"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Replay an old offset",
+      "steps": [
+        {
+          "title": "Tiered brokers → Archived log segments",
+          "explanation": "Broker fetches the needed archived segment; expect greater latency than a local read.",
+          "nodeIds": ["brokers", "archive"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Tiered brokers → Consumer group",
+          "explanation": "Serve committed records and retain normal consumer offset semantics.",
+          "nodeIds": ["brokers", "consumers"],
+          "edgeIds": ["e2"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A broker crashes after append but before the producer receives an ack",
+      "handling": "The producer retries with the same identity and sequence. Elect only an eligible replica; consumers may reprocess records after a rebalance, so sinks must dedup.",
+      "nodeIds": ["consumers"]
+    }
+  ],
+  "alternatives": "Keep retained segments on broker disks for predictable local replay latency. Choose tiered storage for cheaper long retention, accepting object-store fetch latency and manifest coordination.",
+  "sectionApplicability": {}
+}

@@ -1,0 +1,84 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "api",
+      "t": "service",
+      "l": "Write router",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "a",
+      "t": "nosql_kv",
+      "l": "logical_key:bucket_0",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "b",
+      "t": "nosql_kv",
+      "l": "logical_key:bucket_1",
+      "x": 280,
+      "y": 180
+    },
+    {
+      "i": "c",
+      "t": "nosql_kv",
+      "l": "logical_key:bucket_N",
+      "x": 280,
+      "y": 360
+    },
+    {
+      "i": "merge",
+      "t": "service",
+      "l": "Read / aggregate merger",
+      "x": 560,
+      "y": 180
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "api",
+      "d": "a",
+      "l": "Route by chosen salt",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "api",
+      "d": "b",
+      "l": "Distribute splittable writes",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "api",
+      "d": "c",
+      "l": "Budget peak load per bucket",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "merge",
+      "d": "a",
+      "l": "Read bucket",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "merge",
+      "d": "b",
+      "l": "Read bucket",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "merge",
+      "d": "c",
+      "l": "Merge under explicit consistency",
+      "h": "r>l"
+    }
+  ]
+}

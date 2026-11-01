@@ -1,0 +1,91 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "user",
+      "t": "web_client",
+      "l": "Feed reader",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "feed",
+      "t": "service",
+      "l": "Feed Service / merger",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "graph",
+      "t": "graph_db",
+      "l": "Follow relationships",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "l": "Recent posts per author",
+      "x": 560,
+      "y": 180
+    },
+    {
+      "i": "db",
+      "t": "wide_column",
+      "l": "Durable author posts",
+      "x": 840,
+      "y": 180
+    },
+    {
+      "i": "write",
+      "t": "service",
+      "l": "Post Service",
+      "x": 560,
+      "y": 360
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "user",
+      "d": "feed",
+      "l": "Request a cursor page",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "feed",
+      "d": "graph",
+      "l": "1. Read followees",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "feed",
+      "d": "cache",
+      "l": "2. Fetch bounded author lists",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "feed",
+      "d": "db",
+      "l": "3. Hydrate visible posts",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "write",
+      "d": "db",
+      "l": "Store post once",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "write",
+      "d": "cache",
+      "l": "Update author list only",
+      "h": "r>l"
+    }
+  ]
+}

@@ -1,0 +1,283 @@
+{
+  "version": 1,
+  "overview": "Prometheus servers scrape targets discovered via service discovery, store locally, and ship blocks to object storage; Thanos queries across shards; Alertmanager handles alerts.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative fleet: 10K hosts × 1K series, scraped every 15 s.",
+      "calculation": "10,000 × 1,000 / 15 ≈ 666,667 samples/s.",
+      "result": "15 days at 16 raw bytes/sample ≈ 13.8 TB before compression/replication.",
+      "implication": "Control label cardinality; downsample historical blocks and separate ingestion from expensive queries."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "agents",
+      "purpose": "External system boundary for metrics & monitoring.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "users",
+      "purpose": "User-facing caller for metrics & monitoring.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for metrics & monitoring.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "collect",
+      "purpose": "Pull /metrics from discovered targets on a fixed interval. Shard targets by stable hash; two replicas scrape independently and query layer deduplicates replica labels.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "kafka",
+      "purpose": "The append-only WAL belongs to each scrape shard; it buffers local TSDB recovery, not a remote Kafka requirement.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "flink",
+      "purpose": "Compact immutable TSDB blocks, downsample older points and apply retention policies.",
+      "rationale": "Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation."
+    },
+    {
+      "nodeId": "writer",
+      "purpose": "Execute background work with bounded concurrency for metrics & monitoring.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "tsdb",
+      "purpose": "Store timestamped series with time-range indexes for metrics & monitoring.",
+      "rationale": "Bound cardinality and retention; prefer downsampled blocks for long-range queries."
+    },
+    {
+      "nodeId": "alerts",
+      "purpose": "Implement the owned APIs and coordinate state transitions for metrics & monitoring.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "notify",
+      "purpose": "Route delivery hints to the chosen channel for metrics & monitoring.",
+      "rationale": "A notification is not the authoritative business record; apply preference policy, retries and deduplication."
+    },
+    {
+      "nodeId": "pager",
+      "purpose": "External system boundary for metrics & monitoring.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "query",
+      "purpose": "Implement the owned APIs and coordinate state transitions for metrics & monitoring.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "discovery",
+      "purpose": "Discover live instances and their scrape labels.",
+      "rationale": "Refresh stale metadata and bound retries; avoid treating an old map as permanent ownership."
+    },
+    {
+      "nodeId": "blocks",
+      "purpose": "Persist immutable blocks and downsampled series for long retention.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Sample",
+      "purpose": "Timestamped values indexed by series and time.",
+      "accessPatterns": ["Append samples in batches; range-read matching series."],
+      "constraints": [
+        "Bound label cardinality, dedup HA replicas and define retention/downsampling tiers."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Read time-range series for a dashboard.",
+      "rationale": "Apply query cost limits; choose raw or rolled-up resolution based on requested time span."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Host agents",
+      "explanation": "In Design, add External Service and name it “Host agents”. Place it in the leftmost caller/background lane; its callers are Prometheus scrape shards. External system boundary for metrics & monitoring. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["agents"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Dashboards",
+      "explanation": "In Design, add Web Client and name it “Dashboards”. Place it in the leftmost caller/background lane. User-facing caller for metrics & monitoring. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["users"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Dashboards. Distribute incoming connections across healthy instances for metrics & monitoring. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Prometheus scrape shards",
+      "explanation": "In Design, add Service and name it “Prometheus scrape shards”. Place it in column 3, row 1 of the HLD; its callers are LB. Pull /metrics from discovered targets on a fixed interval. Shard targets by stable hash; two replicas scrape independently and query layer deduplicates replica labels. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["collect"],
+      "edgeIds": ["e3", "e14"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Local write-ahead log",
+      "explanation": "In Design, add Event Stream and name it “Local write-ahead log”. Place it in column 4, row 1 of the HLD; its callers are Prometheus scrape shards. The append-only WAL belongs to each scrape shard; it buffers local TSDB recovery, not a remote Kafka requirement. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["kafka"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Block compactor",
+      "explanation": "In Design, add Batch Processor and name it “Block compactor”. Place it in column 5, row 1 of the HLD; its callers are Local write-ahead log. Compact immutable TSDB blocks, downsample older points and apply retention policies. Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["flink"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "TSDB writers",
+      "explanation": "In Design, add Worker and name it “TSDB writers”. Place it in column 5, row 2 of the HLD; its callers are Local write-ahead log. Execute background work with bounded concurrency for metrics & monitoring. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["writer"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "TSDB",
+      "explanation": "In Design, add Time-Series DB and name it “TSDB”. Place it in column 6, row 1 of the HLD; its callers are TSDB writers, Block compactor, Query Service. Store timestamped series with time-range indexes for metrics & monitoring. Bound cardinality and retention; prefer downsampled blocks for long-range queries. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["tsdb"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": ["Sample"]
+    },
+    {
+      "title": "Alert evaluator",
+      "explanation": "In Design, add Service and name it “Alert evaluator”. Place it in column 6, row 2 of the HLD; its callers are Block compactor. Implement the owned APIs and coordinate state transitions for metrics & monitoring. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["alerts"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Notifier",
+      "explanation": "In Design, add Notification Service and name it “Notifier”. Place it in column 7, row 1 of the HLD; its callers are Alert evaluator. Route delivery hints to the chosen channel for metrics & monitoring. A notification is not the authoritative business record; apply preference policy, retries and deduplication. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["notify"],
+      "edgeIds": ["e11"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "PagerDuty",
+      "explanation": "In Design, add External Service and name it “PagerDuty”. Place it in column 8, row 1 of the HLD; its callers are Notifier. External system boundary for metrics & monitoring. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["pager"],
+      "edgeIds": ["e12"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Query Service",
+      "explanation": "In Design, add Service and name it “Query Service”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for metrics & monitoring. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["query"],
+      "edgeIds": ["e4", "e13"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Scrape targets",
+      "explanation": "In Design, add Service Discovery and name it “Scrape targets”. Place it in column 4, row 2 of the HLD; its callers are Prometheus scrape shards. Discover live instances and their scrape labels. Refresh stale metadata and bound retries; avoid treating an old map as permanent ownership. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["discovery"],
+      "edgeIds": ["e15"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Historical TSDB blocks",
+      "explanation": "In Design, add Object Storage and name it “Historical TSDB blocks”. Place it in column 6, row 3 of the HLD; its callers are Block compactor, Query Service. Persist immutable blocks and downsampled series for long retention. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["blocks"],
+      "edgeIds": ["e16", "e17"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Discover and scrape",
+      "steps": [
+        {
+          "title": "Prometheus scrape shards → Scrape targets",
+          "explanation": "Load scrape targets and stable shard assignments.",
+          "nodeIds": ["collect", "discovery"],
+          "edgeIds": ["e15"]
+        },
+        {
+          "title": "Prometheus scrape shards → Host agents",
+          "explanation": "Pull /metrics every 15 seconds; record scrape health separately from metric values.",
+          "nodeIds": ["collect", "agents"],
+          "edgeIds": ["e14"]
+        },
+        {
+          "title": "Prometheus scrape shards → Local write-ahead log → TSDB writers → TSDB",
+          "explanation": "Append to a local WAL and persist samples to the local TSDB.",
+          "nodeIds": ["collect", "kafka", "writer", "tsdb"],
+          "edgeIds": ["e5", "e6", "e8"]
+        }
+      ]
+    },
+    {
+      "id": "flow-2",
+      "title": "Compact, query and alert",
+      "steps": [
+        {
+          "title": "Local write-ahead log → Block compactor → Historical TSDB blocks",
+          "explanation": "Compact/downsample completed intervals and upload immutable historical blocks.",
+          "nodeIds": ["kafka", "flink", "blocks"],
+          "edgeIds": ["e7", "e16"]
+        },
+        {
+          "title": "Dashboards → LB → Query Service → TSDB",
+          "explanation": "Read recent raw series with HA replica deduplication.",
+          "nodeIds": ["users", "lb", "query", "tsdb"],
+          "edgeIds": ["e2", "e4", "e13"]
+        },
+        {
+          "title": "Query Service → Historical TSDB blocks",
+          "explanation": "Read older downsampled data for long-range queries.",
+          "nodeIds": ["query", "blocks"],
+          "edgeIds": ["e17"]
+        },
+        {
+          "title": "Block compactor → Alert evaluator → Notifier → PagerDuty",
+          "explanation": "Evaluate alert rules and route deduplicated notifications.",
+          "nodeIds": ["flink", "alerts", "notify", "pager"],
+          "edgeIds": ["e10", "e11", "e12"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A target disappears or ingestion backs up",
+      "handling": "Track scrape failures and missing series separately from zero values. Alert on collection health, cap buffers, and expose dropped-sample counters rather than hiding data gaps.",
+      "nodeIds": ["writer"]
+    }
+  ],
+  "alternatives": "Use push collectors and a replayable stream for high ingest rates and short-lived producers. Use pull scraping with local WAL/TSDB for discoverable long-lived targets, adding object blocks and HA query deduplication for global retention.",
+  "sectionApplicability": {}
+}

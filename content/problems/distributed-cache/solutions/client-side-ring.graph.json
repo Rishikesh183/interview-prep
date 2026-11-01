@@ -6,19 +6,21 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Users"
+      "l": "Users",
+      "no": "User-facing caller for distributed cache."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for distributed cache."
     },
     {
       "i": "app",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "App servers",
       "no": "Smart client library holds the consistent hashing ring (150 virtual nodes per server); local near cache for hot keys"
@@ -26,7 +28,7 @@
     {
       "i": "cache",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Cache cluster",
       "c": {
@@ -39,20 +41,21 @@
     {
       "i": "sd",
       "t": "service_discovery",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Membership",
       "no": "Gossip heartbeats; publishes the ring to clients"
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
-      "y": 260,
+      "x": 840,
+      "y": 360,
       "l": "Source of truth",
       "c": {
         "replicas": 2
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for distributed cache."
     }
   ],
   "e": [
@@ -60,12 +63,14 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "app",
+      "l": "Call App servers",
       "h": "r>l"
     },
     {
@@ -73,6 +78,7 @@
       "s": "app",
       "d": "cache",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -80,6 +86,7 @@
       "s": "app",
       "d": "sd",
       "o": "r",
+      "l": "Call Membership",
       "h": "r>l"
     },
     {
@@ -87,9 +94,41 @@
       "s": "app",
       "d": "db",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
-  "apis": [],
-  "entities": []
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "cache",
+      "method": "RPC",
+      "path": "Cache.Get",
+      "request": "{ \"key\": \"product:42\" }",
+      "response": "{ \"hit\": true, \"value\": \"...\", \"version\": 8 }",
+      "statusCodes": "OK, MISS, UNAVAILABLE",
+      "auth": true,
+      "idempotent": true,
+      "note": "Client-ring or proxy routing chooses the shard. A miss causes the application, not the cache, to fetch the source of truth."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "cache",
+      "method": "RPC",
+      "path": "Cache.Set",
+      "request": "{ \"key\": \"product:42\", \"value\": \"...\", \"ttlSeconds\": 600 }",
+      "response": "{ \"stored\": true }",
+      "statusCodes": "OK, INVALID_ARGUMENT, UNAVAILABLE",
+      "auth": true,
+      "idempotent": true,
+      "note": "Hash key routing must be consistent for GET and SET. Never treat replication of cached data as a durable write guarantee."
+    }
+  ],
+  "entities": [
+    {
+      "name": "CacheEntry",
+      "fields": "key: bytes PK\nvalue: bytes\nexpires_at: timestamp\nversion: int64",
+      "storeNodeId": "cache"
+    }
+  ]
 }

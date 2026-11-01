@@ -13,8 +13,8 @@ export default function LoginPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
           <p className="text-muted-foreground text-sm">
-            Sync your attempts across devices. Everything still works offline; it syncs when you are
-            back online.
+            Sign in to submit attempts and sync your best progress and saved solutions. Drafts and
+            attempt history stay in this browser.
           </p>
         </div>
         <Suspense>

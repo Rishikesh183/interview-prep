@@ -1,0 +1,68 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "l": "Producers",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "gate",
+      "t": "api_gateway",
+      "l": "Admission + deadlines",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "l": "Bounded work queue",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "w",
+      "t": "worker",
+      "l": "Limited worker slots",
+      "x": 840,
+      "y": 0
+    },
+    {
+      "i": "reject",
+      "t": "note",
+      "l": "Reject excess work",
+      "x": 280,
+      "y": 220,
+      "no": "Reject before the queue age exceeds its budget. Retry with jitter, deadlines and per-tenant fairness.",
+      "w": 320,
+      "h": 120
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "gate",
+      "l": "Submit bounded work",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "gate",
+      "d": "q",
+      "l": "Only admit within capacity budget",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e3",
+      "s": "q",
+      "d": "w",
+      "l": "Consume before deadline",
+      "h": "r>l",
+      "m": "a"
+    }
+  ]
+}

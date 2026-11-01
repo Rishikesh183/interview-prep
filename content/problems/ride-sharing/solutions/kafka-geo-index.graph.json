@@ -6,44 +6,49 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "Drivers"
+      "l": "Drivers",
+      "no": "Mobile caller with intermittent connectivity for uber / ola."
     },
     {
       "i": "rider",
       "t": "web_client",
       "x": 0,
-      "y": 130,
-      "l": "Riders"
+      "y": 180,
+      "l": "Riders",
+      "no": "User-facing caller for uber / ola."
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "Gateway"
+      "l": "Gateway",
+      "no": "Authenticate, apply admission limits and route requests for uber / ola."
     },
     {
       "i": "ingest",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Location ingest"
+      "l": "Location ingest",
+      "no": "Implement the owned APIs and coordinate state transitions for uber / ola."
     },
     {
       "i": "kafka",
       "t": "event_stream",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Locations",
       "c": {
         "partitions": 512,
         "partitionKey": "geohash prefix"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for uber / ola."
     },
     {
       "i": "indexer",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Geo indexers",
       "no": "Consume pings, update cells"
@@ -51,7 +56,7 @@
     {
       "i": "geo",
       "t": "geo_index",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Geo index shards",
       "c": {
@@ -62,34 +67,37 @@
     {
       "i": "dispatch",
       "t": "service",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Dispatch Service",
       "no": "Conditional write on driver state: claim exactly one"
     },
     {
       "i": "state",
       "t": "nosql_kv",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Driver state",
       "c": {
         "consistency": "strong"
-      }
+      },
+      "no": "Store partitioned point-lookup state for uber / ola."
     },
     {
       "i": "trips",
       "t": "sql_db",
-      "x": 780,
-      "y": 260,
-      "l": "Trips"
+      "x": 840,
+      "y": 360,
+      "l": "Trips",
+      "no": "Store authoritative records with transactional constraints for uber / ola."
     },
     {
       "i": "psp",
       "t": "external_service",
-      "x": 780,
-      "y": 390,
-      "l": "PSP"
+      "x": 840,
+      "y": 540,
+      "l": "PSP",
+      "no": "External system boundary for uber / ola."
     }
   ],
   "e": [
@@ -97,24 +105,30 @@
       "i": "e1",
       "s": "driver",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "rider",
       "d": "gw",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "gw",
       "d": "ingest",
+      "a": "a2",
+      "l": "Call Location ingest",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "gw",
       "d": "dispatch",
+      "a": "a1",
+      "l": "Call Dispatch Service",
       "h": "r>l"
     },
     {
@@ -122,6 +136,7 @@
       "s": "ingest",
       "d": "kafka",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -129,6 +144,7 @@
       "s": "kafka",
       "d": "indexer",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -136,6 +152,7 @@
       "s": "indexer",
       "d": "geo",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -143,6 +160,7 @@
       "s": "dispatch",
       "d": "geo",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -150,6 +168,7 @@
       "s": "dispatch",
       "d": "state",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -157,12 +176,14 @@
       "s": "dispatch",
       "d": "trips",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e11",
       "s": "dispatch",
       "d": "psp",
+      "l": "Call PSP",
       "h": "r>l"
     }
   ],
@@ -171,15 +192,49 @@
       "id": "a1",
       "ownerNodeId": "dispatch",
       "method": "POST",
-      "path": "/v1/trips",
+      "path": "/v1/rides",
+      "request": "{ \"requestId\": \"r1\", \"pickup\": {\"lat\":12.97,\"lng\":77.59}, \"destination\": {\"lat\":13.0,\"lng\":77.6} }",
+      "response": "202 { \"tripId\": \"t1\", \"status\": \"SEARCHING\" }",
+      "statusCodes": "202, 409, 429",
       "auth": true,
-      "idempotent": true
+      "idempotent": true,
+      "note": "A geo candidate is not an assignment; conditionally claim before notifying the driver."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "ingest",
+      "method": "POST",
+      "path": "/v1/driver/location",
+      "request": "{ \"driverId\": \"d1\", \"lat\": 12.97, \"lng\": 77.59, \"sequence\": 8, \"sentAt\": 1 }",
+      "response": "202 { \"acceptedSequence\": 8 }",
+      "statusCodes": "202, 400, 401",
+      "auth": true,
+      "idempotent": true,
+      "note": "Kafka mode can use HTTP batch ingestion for the same message shape; ordering is per driver, not global."
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "dispatch",
+      "method": "POST",
+      "path": "/v1/trips/{id}/accept",
+      "request": "{ \"offerId\": \"o1\", \"offerVersion\": 8, \"requestId\": \"r1\" }",
+      "response": "200 { \"tripId\": \"t1\", \"status\": \"ASSIGNED\" }",
+      "statusCodes": "200, 403, 409, 410",
+      "auth": true,
+      "idempotent": true,
+      "note": "Accept only the current unexpired driver offer; reject stale versions and repeated claims from another driver."
     }
   ],
   "entities": [
     {
       "name": "Trip",
-      "fields": "trip_id, rider, driver, state"
+      "fields": "trip_id: string PK\nrider_id: string\ndriver_id: string?\nstatus: REQUESTED|ASSIGNED|ACTIVE|COMPLETED\nversion: int64",
+      "storeNodeId": "trips"
+    },
+    {
+      "name": "DriverLocation",
+      "fields": "driver_id: string member\ncity_or_cell: string\nlatitude: float64\nlongitude: float64\nupdated_at: timestamp\navailable: boolean",
+      "storeNodeId": "geo"
     }
   ]
 }

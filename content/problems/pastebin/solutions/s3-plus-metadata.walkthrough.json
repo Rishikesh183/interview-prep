@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "overview": "Service writes the body to S3 under a random key and a metadata row (key, size, language, expires_at) to SQL. Reads go CDN → service → S3. A scheduler deletes expired rows; S3 lifecycle rules delete the blobs.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative workload: 1M pastes/day at 10 KB.",
+      "calculation": "1,000,000 × 10 KB ≈ 10 GB/day; 30-day raw retention ≈ 300 GB.",
+      "result": "Read-heavy traffic benefits from cache/CDN independently of durable storage.",
+      "implication": "Inline small values only within store limits; use object storage for large bodies."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for pastebin.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Caches popular pastes at the edge",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for pastebin.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Random 8-char base62 keys; bodies to S3, metadata to SQL",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "Hot paste bodies < 64 KB",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "meta",
+      "purpose": "Store authoritative records with transactional constraints for pastebin.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Persist immutable large objects for pastebin.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "sweeper",
+      "purpose": "Expired rows + S3 lifecycle rules (TTL)",
+      "rationale": "Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Paste",
+      "purpose": "Paste metadata and either an inline body or object-store pointer.",
+      "accessPatterns": ["Create a random paste key; point-read metadata and body."],
+      "constraints": [
+        "Check expires_at at read time; random IDs are not a substitute for access control when privacy is required."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Create an immutable paste with optional expiry.",
+      "rationale": "Validate size and atomically publish metadata after body storage; clean up orphaned objects."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Retrieve a paste before expiry.",
+      "rationale": "Cache TTL and CDN behavior must respect expires_at; physical deletion may run later."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Browser",
+      "explanation": "In Design, add Web Client and name it “Browser”. Place it in the leftmost caller/background lane. User-facing caller for pastebin. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 1 of the HLD; its callers are Browser. Caches popular pastes at the edge Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 3, row 1 of the HLD; its callers are CDN, Browser. Distribute incoming connections across healthy instances for pastebin. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e2", "e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Paste Service",
+      "explanation": "In Design, add Service and name it “Paste Service”. Place it in column 4, row 1 of the HLD; its callers are LB. Random 8-char base62 keys; bodies to S3, metadata to SQL Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e4"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Redis",
+      "explanation": "In Design, add Cache and name it “Redis”. Place it in column 5, row 1 of the HLD; its callers are Paste Service. Hot paste bodies < 64 KB Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cache"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Metadata DB",
+      "explanation": "In Design, add SQL Database and name it “Metadata DB”. Place it in column 5, row 2 of the HLD; its callers are Paste Service, Expiry sweeper. Store authoritative records with transactional constraints for pastebin. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meta"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": ["Paste"]
+    },
+    {
+      "title": "Paste bodies",
+      "explanation": "In Design, add Object Storage and name it “Paste bodies”. Place it in column 5, row 3 of the HLD; its callers are Paste Service, Expiry sweeper. Persist immutable large objects for pastebin. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Expiry sweeper",
+      "explanation": "In Design, add Scheduler and name it “Expiry sweeper”. Place it in the leftmost caller/background lane. Expired rows + S3 lifecycle rules (TTL) Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sweeper"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Create body and metadata",
+      "steps": [
+        {
+          "title": "Browser → LB → Paste Service → Paste bodies",
+          "explanation": "Validate size, generate a random key and write the immutable paste body.",
+          "nodeIds": ["client", "lb", "svc", "s3"],
+          "edgeIds": ["e3", "e4", "e7"]
+        },
+        {
+          "title": "Paste Service → Metadata DB",
+          "explanation": "Commit metadata pointing to the object; clean up an abandoned object if commit fails.",
+          "nodeIds": ["svc", "meta"],
+          "edgeIds": ["e6"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Read or expire",
+      "steps": [
+        {
+          "title": "Browser → CDN → LB → Paste Service → Redis",
+          "explanation": "Return a cached paste only while its expires_at remains valid.",
+          "nodeIds": ["client", "cdn", "lb", "svc", "cache"],
+          "edgeIds": ["e1", "e2", "e4", "e5"]
+        },
+        {
+          "title": "Paste Service → Metadata DB",
+          "explanation": "On miss, verify metadata/expiry.",
+          "nodeIds": ["svc", "meta"],
+          "edgeIds": ["e6"]
+        },
+        {
+          "title": "Paste Service → Paste bodies",
+          "explanation": "Fetch the body and refill cache with an expiry-bounded TTL.",
+          "nodeIds": ["svc", "s3"],
+          "edgeIds": ["e7"]
+        },
+        {
+          "title": "Expiry sweeper → Metadata DB",
+          "explanation": "Expire metadata idempotently; object cleanup runs independently.",
+          "nodeIds": ["sweeper", "meta"],
+          "edgeIds": ["e8"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Body upload succeeds but metadata insert fails",
+      "handling": "Garbage-collect unreferenced objects after a grace period; retries create or reuse a clearly identified paste. Always check expiry even if the object still exists.",
+      "nodeIds": ["cache", "meta"]
+    }
+  ],
+  "alternatives": "Use object bodies plus metadata for large pastes and cheap retention. Use inline KV items for small pastes with a spill path above item limits. Both enforce expiry on reads before background deletion.",
+  "sectionApplicability": {}
+}

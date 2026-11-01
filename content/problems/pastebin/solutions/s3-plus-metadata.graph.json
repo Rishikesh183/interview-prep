@@ -6,12 +6,13 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Browser"
+      "l": "Browser",
+      "no": "User-facing caller for pastebin."
     },
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "c": {
         "content": ["static", "api"],
@@ -22,14 +23,15 @@
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for pastebin."
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Paste Service",
       "no": "Random 8-char base62 keys; bodies to S3, metadata to SQL"
@@ -37,7 +39,7 @@
     {
       "i": "cache",
       "t": "cache",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Redis",
       "c": {
@@ -49,29 +51,31 @@
     {
       "i": "meta",
       "t": "sql_db",
-      "x": 1040,
-      "y": 130,
+      "x": 1120,
+      "y": 180,
       "l": "Metadata DB",
       "c": {
         "replicas": 2,
         "readReplicas": true
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for pastebin."
     },
     {
       "i": "s3",
       "t": "object_storage",
-      "x": 1040,
-      "y": 260,
+      "x": 1120,
+      "y": 360,
       "l": "Paste bodies",
       "c": {
         "lifecycle": "Delete objects past expires_at"
-      }
+      },
+      "no": "Persist immutable large objects for pastebin."
     },
     {
       "i": "sweeper",
       "t": "scheduler",
       "x": 0,
-      "y": 130,
+      "y": 180,
       "l": "Expiry sweeper",
       "c": {
         "cron": "*/10 * * * *",
@@ -86,24 +90,28 @@
       "s": "client",
       "d": "cdn",
       "o": "r",
+      "l": "Call CDN",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "cdn",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e4",
       "s": "lb",
       "d": "svc",
+      "l": "Call Paste Service",
       "h": "r>l"
     },
     {
@@ -111,6 +119,7 @@
       "s": "svc",
       "d": "cache",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -118,6 +127,7 @@
       "s": "svc",
       "d": "meta",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -125,6 +135,7 @@
       "s": "svc",
       "d": "s3",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -132,6 +143,7 @@
       "s": "sweeper",
       "d": "meta",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -139,6 +151,7 @@
       "s": "sweeper",
       "d": "s3",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -148,24 +161,30 @@
       "ownerNodeId": "svc",
       "method": "POST",
       "path": "/v1/pastes",
-      "auth": true,
-      "request": "{ content, language?, expiresIn? }",
-      "response": "{ key, url }",
-      "statusCodes": "201, 400, 413"
+      "request": "{ \"body\": \"hello\", \"expiresInSeconds\": 3600 }",
+      "response": "201 { \"pasteId\": \"abc123\", \"url\": \"https://paste/abc123\" }",
+      "statusCodes": "201, 400, 413",
+      "auth": false,
+      "note": "Validate size and atomically publish metadata after body storage; clean up orphaned objects."
     },
     {
       "id": "a2",
       "ownerNodeId": "svc",
       "method": "GET",
       "path": "/v1/pastes/{key}",
+      "request": "No request body.",
+      "response": "200 text/plain: hello",
+      "statusCodes": "200, 404, 410",
       "auth": false,
-      "statusCodes": "200, 404, 410"
+      "idempotent": true,
+      "note": "Cache TTL and CDN behavior must respect expires_at; physical deletion may run later."
     }
   ],
   "entities": [
     {
       "name": "Paste",
-      "fields": "key PK, s3_key, size, language, created_at, expires_at"
+      "fields": "paste_id: string PK\nobject_key: string?\ninline_body: string?\ncreated_at: timestamp\nexpires_at: timestamp?\nsize_bytes: int64",
+      "storeNodeId": "meta"
     }
   ]
 }

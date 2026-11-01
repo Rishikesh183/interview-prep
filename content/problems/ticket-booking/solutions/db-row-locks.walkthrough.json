@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "overview": "Seats are rows with status. Holding runs SELECT ... FOR UPDATE then sets status=HELD with held_until. A sweeper job releases expired holds. For hot shows a virtual waiting room (queue) admits users in batches so the DB isn't overwhelmed.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative opening: 100K clients competing for 1K seats.",
+      "calculation": "100,000 / 1,000 = 100 contenders per seat on average, with skew.",
+      "result": "Popular seats create contention even when total database throughput looks sufficient.",
+      "implication": "Use admission/waiting rooms, short hold TTLs and authoritative uniqueness constraints."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for ticket booking (bookmyshow).",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Authenticate, apply admission limits and route requests for ticket booking (bookmyshow).",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "wr",
+      "purpose": "Virtual queue admits users in batches",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "SELECT ... FOR UPDATE; status=HELD, held_until=now+10m",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for ticket booking (bookmyshow).",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "sweeper",
+      "purpose": "Release expired holds",
+      "rationale": "Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch."
+    },
+    {
+      "nodeId": "pay",
+      "purpose": "External system boundary for ticket booking (bookmyshow).",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Seat",
+      "purpose": "Authoritative seat ownership for a show.",
+      "accessPatterns": ["Check availability; hold and confirm selected seats."],
+      "constraints": [
+        "A serializable transaction/row lock and unique seat booking are the final guard against double booking."
+      ],
+      "relationships": [
+        "SeatHold covers show_id/seat_id rows; SQL retains authoritative confirmed ownership."
+      ]
+    },
+    {
+      "entityName": "SeatHold",
+      "purpose": "Temporary exclusive seat selection.",
+      "accessPatterns": ["Claim all requested seats; renew, redeem or release by owner/version."],
+      "constraints": [
+        "Redis NX is per key: multi-seat holds need one atomic same-shard operation or rollback. Expiry does not authorize a late payment to steal a newly held seat."
+      ],
+      "relationships": [
+        "show_id and seat_ids reference Seat; owner, version and expiry must still match at confirmation."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Hold all selected seats for a bounded time.",
+      "rationale": "The hold must be all-or-nothing and tied to the authenticated owner."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Confirm a valid hold and payment.",
+      "rationale": "Use provider idempotency and a durable booking state machine; compensate an authorization if the hold expired before confirmation."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Web",
+      "explanation": "In Design, add Web Client and name it “Web”. Place it in the leftmost caller/background lane. User-facing caller for ticket booking (bookmyshow). Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Gateway",
+      "explanation": "In Design, add API Gateway and name it “Gateway”. Place it in column 2, row 1 of the HLD; its callers are Web. Authenticate, apply admission limits and route requests for ticket booking (bookmyshow). Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Waiting room queue",
+      "explanation": "In Design, add Message Queue and name it “Waiting room queue”. Place it in column 3, row 1 of the HLD; its callers are Gateway. Virtual queue admits users in batches Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["wr"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Booking Service",
+      "explanation": "In Design, add Service and name it “Booking Service”. Place it in column 4, row 1 of the HLD; its callers are Waiting room queue, Gateway. SELECT ... FOR UPDATE; status=HELD, held_until=now+10m Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e3", "e4"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Seats DB",
+      "explanation": "In Design, add SQL Database and name it “Seats DB”. Place it in column 5, row 1 of the HLD; its callers are Booking Service, Hold sweeper. Store authoritative records with transactional constraints for ticket booking (bookmyshow). Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["Seat", "SeatHold"]
+    },
+    {
+      "title": "Hold sweeper",
+      "explanation": "In Design, add Scheduler and name it “Hold sweeper”. Place it in the leftmost caller/background lane. Release expired holds Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sweeper"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "PSP",
+      "explanation": "In Design, add External Service and name it “PSP”. Place it in column 5, row 2 of the HLD; its callers are Booking Service. External system boundary for ticket booking (bookmyshow). Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["pay"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Admit and hold seats",
+      "steps": [
+        {
+          "title": "Web → Gateway → Waiting room queue → Booking Service → Seats DB",
+          "explanation": "Waiting-room admission bounds DB contention. Lock the requested seat rows, recheck state and commit one hold with held_until.",
+          "nodeIds": ["client", "gw", "wr", "svc", "db"],
+          "edgeIds": ["e1", "e2", "e3", "e5"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Confirm or release a hold",
+      "steps": [
+        {
+          "title": "Web → Gateway → Booking Service → PSP",
+          "explanation": "Authorize the valid hold with a stable payment reference.",
+          "nodeIds": ["client", "gw", "svc", "pay"],
+          "edgeIds": ["e1", "e4", "e7"]
+        },
+        {
+          "title": "Booking Service → Seats DB",
+          "explanation": "Recheck hold ownership/expiry and transactionally mark seats BOOKED.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "Hold sweeper → Seats DB",
+          "explanation": "Release only still-HELD expired rows; do not overwrite concurrent confirmations.",
+          "nodeIds": ["sweeper", "db"],
+          "edgeIds": ["e6"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Payment completes after the hold expires",
+      "handling": "Recheck ownership and expiry transactionally before confirmation. If another user owns the seat, void/refund the first payment idempotently instead of double booking.",
+      "nodeIds": ["db"]
+    }
+  ],
+  "alternatives": "Use SQL row locks when one authoritative seat-state transaction handles contention. Use Redis holds plus SQL uniqueness for heavier admission, accepting a fenced cross-store booking/payment state machine.",
+  "sectionApplicability": {}
+}

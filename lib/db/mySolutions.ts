@@ -1,5 +1,6 @@
 import { MySolutionSchema, type Attempt, type MySolution } from "@/lib/schema";
 import { db } from "./dexie";
+import { hasSubmittedProblem } from "./attempts";
 
 function parse(row: unknown): MySolution | null {
   const res = MySolutionSchema.safeParse(row);
@@ -78,6 +79,5 @@ export async function solutionsPeeked(problemId: string): Promise<boolean> {
 export async function forfeitsPoints(attempt: Attempt): Promise<boolean> {
   if (attempt.solutionViewedBeforeSubmit) return true;
   if (!(await solutionsPeeked(attempt.problemId))) return false;
-  const others = await db().attempts.where("problemId").equals(attempt.problemId).toArray();
-  return !others.some((a) => a.id !== attempt.id && a.status !== "in_progress");
+  return !(await hasSubmittedProblem(attempt.problemId));
 }

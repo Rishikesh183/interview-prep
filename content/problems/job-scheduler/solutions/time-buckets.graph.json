@@ -6,26 +6,29 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Job owners"
+      "l": "Job owners",
+      "no": "User-facing caller for distributed job scheduler."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for distributed job scheduler."
     },
     {
       "i": "api",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Job API"
+      "l": "Job API",
+      "no": "Implement the owned APIs and coordinate state transitions for distributed job scheduler."
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Jobs",
       "c": {
@@ -39,17 +42,18 @@
       "i": "sched",
       "t": "scheduler",
       "x": 0,
-      "y": 130,
+      "y": 180,
       "l": "Scheduler shards",
       "c": {
         "purpose": "Poll due jobs per owned partition"
-      }
+      },
+      "no": "Identify due work and dispatch bounded batches for distributed job scheduler."
     },
     {
       "i": "etcd",
       "t": "coordination",
-      "x": 260,
-      "y": 130,
+      "x": 280,
+      "y": 180,
       "l": "etcd",
       "c": {
         "purpose": "locks"
@@ -59,15 +63,16 @@
     {
       "i": "q",
       "t": "message_queue",
-      "x": 260,
-      "y": 260,
-      "l": "Dispatch queue"
+      "x": 280,
+      "y": 360,
+      "l": "Dispatch queue",
+      "no": "Buffer independently retryable asynchronous work for distributed job scheduler."
     },
     {
       "i": "workers",
       "t": "worker",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Workers",
       "no": "At-least-once; handlers must be idempotent; retry with backoff; visibility timeout covers crashes"
     }
@@ -77,12 +82,14 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "api",
+      "l": "Call Job API",
       "h": "r>l"
     },
     {
@@ -90,6 +97,7 @@
       "s": "api",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -97,6 +105,7 @@
       "s": "sched",
       "d": "etcd",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -104,6 +113,7 @@
       "s": "sched",
       "d": "db",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -111,6 +121,7 @@
       "s": "sched",
       "d": "q",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -118,6 +129,7 @@
       "s": "q",
       "d": "workers",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -135,10 +147,37 @@
       "ownerNodeId": "api",
       "method": "POST",
       "path": "/v1/jobs",
+      "request": "{ \"schedule\": \"0 * * * *\", \"timezone\": \"UTC\", \"payload\": {}, \"requestId\": \"r1\" }",
+      "response": "201 { \"jobId\": \"j1\", \"nextRunAt\": \"...\" }",
+      "statusCodes": "201, 400, 409",
       "auth": true,
       "idempotent": true,
-      "request": "{ cron | runAt, payload, retries }"
+      "note": "Validate timezone and missed-run policy; execution identity is job_id plus scheduled_at."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "api",
+      "method": "GET",
+      "path": "/v1/jobs/{id}/executions",
+      "request": "No request body; ?cursor=42",
+      "response": "200 { \"executions\": [], \"nextCursor\": \"43\" }",
+      "statusCodes": "200, 404",
+      "auth": true,
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "Separate the schedule from actual attempts so retries are observable."
     }
   ],
-  "entities": []
+  "entities": [
+    {
+      "name": "Job",
+      "fields": "job_id: string PK\nschedule: string\nnext_run_at: timestamp INDEX\npartition_id: int32\npayload: bytes\nversion: int64",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "Execution",
+      "fields": "execution_id: string PK\njob_id: string\nscheduled_at: timestamp\nstatus: QUEUED|RUNNING|SUCCEEDED|FAILED\nattempt: int32",
+      "storeNodeId": "db"
+    }
+  ]
 }

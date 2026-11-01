@@ -44,6 +44,10 @@
   "prerequisites": [
     "caching-strategies",
     "message-queues-vs-streams",
-    "database-choice-sql-vs-nosql"
+    "database-choice-sql-vs-nosql",
+    "fan-out-on-write",
+    "fan-out-on-read",
+    "hybrid-fan-out",
+    "transactional-outbox"
   ]
 }

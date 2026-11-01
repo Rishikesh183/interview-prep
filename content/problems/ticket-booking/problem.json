@@ -43,5 +43,11 @@
     "Hold expiry",
     "Payment idempotency"
   ],
-  "prerequisites": ["distributed-locks-consensus", "idempotency", "consistency-models"]
+  "prerequisites": [
+    "distributed-locks-consensus",
+    "idempotency",
+    "consistency-models",
+    "sagas-distributed-transactions",
+    "backpressure-load-shedding"
+  ]
 }

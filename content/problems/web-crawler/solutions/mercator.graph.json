@@ -9,12 +9,13 @@
       "l": "Re-crawl scheduler",
       "c": {
         "purpose": "Re-enqueue stale URLs by priority"
-      }
+      },
+      "no": "Identify due work and dispatch bounded batches for web crawler."
     },
     {
       "i": "frontier",
       "t": "message_queue",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "URL frontier",
       "no": "Front queues by priority, back queues per host (politeness, robots.txt, crawl delay)"
@@ -22,25 +23,27 @@
     {
       "i": "fetch",
       "t": "worker",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Fetchers",
       "c": {
         "instances": 50
-      }
+      },
+      "no": "Execute background work with bounded concurrency for web crawler."
     },
     {
       "i": "dns",
       "t": "dns",
-      "x": 780,
+      "x": 840,
       "y": 0,
-      "l": "DNS cache"
+      "l": "DNS cache",
+      "no": "Resolve a name or select a nearby regional entry for web crawler."
     },
     {
       "i": "seen",
       "t": "nosql_kv",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Seen URLs",
       "c": {
         "partitionKey": "url_hash"
@@ -50,9 +53,10 @@
     {
       "i": "s3",
       "t": "object_storage",
-      "x": 780,
-      "y": 260,
-      "l": "Raw pages"
+      "x": 840,
+      "y": 360,
+      "l": "Raw pages",
+      "no": "Persist immutable large objects for web crawler."
     }
   ],
   "e": [
@@ -61,6 +65,7 @@
       "s": "sched",
       "d": "frontier",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -68,6 +73,8 @@
       "s": "frontier",
       "d": "fetch",
       "m": "a",
+      "a": "a2",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -75,6 +82,7 @@
       "s": "fetch",
       "d": "dns",
       "o": "r",
+      "l": "Call DNS cache",
       "h": "r>l"
     },
     {
@@ -82,6 +90,7 @@
       "s": "fetch",
       "d": "seen",
       "o": "rw",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -89,6 +98,7 @@
       "s": "fetch",
       "d": "s3",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -100,6 +110,42 @@
       "h": "r>l"
     }
   ],
-  "apis": [],
-  "entities": []
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "sched",
+      "method": "RPC",
+      "path": "Crawler.EnqueueSeed",
+      "request": "{ \"url\": \"https://example.com\", \"priority\": 1 }",
+      "response": "{ \"accepted\": true, \"urlHash\": \"...\" }",
+      "statusCodes": "OK, INVALID_URL, DUPLICATE",
+      "auth": true,
+      "idempotent": true,
+      "note": "This system does not require a public consumer REST API. Normalize/dedup URLs and enforce per-host politeness before dispatch."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "fetch",
+      "method": "RPC",
+      "path": "Crawler.FetchTask",
+      "request": "{ \"urlHash\": \"...\", \"url\": \"https://example.com\", \"lease\": \"fenced-task-id\" }",
+      "response": "{ \"status\": \"FETCHED\", \"contentKey\": \"pages/...\", \"discoveredLinks\": 12 }",
+      "statusCodes": "OK, RETRYABLE_ERROR, ROBOTS_DENIED",
+      "auth": true,
+      "idempotent": true,
+      "note": "Acknowledge only after content and URL state commit; retry with the same task identity."
+    }
+  ],
+  "entities": [
+    {
+      "name": "UrlState",
+      "fields": "url_hash: string PK\nnormalized_url: string\nhost: string\nlast_fetch_at: timestamp\nnext_fetch_at: timestamp\ncontent_hash: string\nstatus: string",
+      "storeNodeId": "seen"
+    },
+    {
+      "name": "FetchedPage",
+      "fields": "object_key: string PK\nurl_hash: string\nfetched_at: timestamp\ncontent_hash: string\ncontent_type: string",
+      "storeNodeId": "s3"
+    }
+  ]
 }

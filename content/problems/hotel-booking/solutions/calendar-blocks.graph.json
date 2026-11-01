@@ -1,0 +1,198 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Guests",
+      "no": "User-facing caller for hotel booking (airbnb)."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for hotel booking (airbnb)."
+    },
+    {
+      "i": "search",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Search Service",
+      "no": "Implement the owned APIs and coordinate state transitions for hotel booking (airbnb)."
+    },
+    {
+      "i": "book",
+      "t": "service",
+      "x": 560,
+      "y": 180,
+      "l": "Reservation Service",
+      "no": "Conditional UPDATE ... SET reserved = reserved + 1 WHERE reserved < total AND version = ? (no overbooking)"
+    },
+    {
+      "i": "es",
+      "t": "search_index",
+      "x": 840,
+      "y": 0,
+      "l": "Listings index",
+      "no": "Search derived data with query-oriented indexes for hotel booking (airbnb)."
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 840,
+      "y": 180,
+      "l": "Booking calendar DB",
+      "c": {
+        "replicas": 3,
+        "isolation": "repeatable-read"
+      },
+      "no": "Single-unit listings use PostgreSQL exclusion constraints on (listing_id, half-open stay range), excluding overlaps for active holds and confirmed bookings. Multi-room hotels require per-room allocation or inventory rows."
+    },
+    {
+      "i": "cdc",
+      "t": "event_stream",
+      "x": 1120,
+      "y": 0,
+      "l": "CDC stream",
+      "c": {
+        "topic": "inventory-changes"
+      },
+      "no": "Change data capture (Debezium)"
+    },
+    {
+      "i": "indexer",
+      "t": "worker",
+      "x": 1400,
+      "y": 0,
+      "l": "Index updater",
+      "no": "Execute background work with bounded concurrency for hotel booking (airbnb)."
+    },
+    {
+      "i": "psp",
+      "t": "external_service",
+      "x": 840,
+      "y": 360,
+      "l": "Payments",
+      "c": {
+        "provider": "Stripe"
+      },
+      "no": "External system boundary for hotel booking (airbnb)."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "search",
+      "a": "a1",
+      "l": "Call Search Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "book",
+      "a": "a2",
+      "l": "Call Reservation Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "search",
+      "d": "es",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "book",
+      "d": "db",
+      "o": "rw",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "book",
+      "d": "psp",
+      "l": "Call Payments",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "db",
+      "d": "cdc",
+      "m": "a",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "cdc",
+      "d": "indexer",
+      "m": "a",
+      "l": "Consume work",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "indexer",
+      "d": "es",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "search",
+      "method": "GET",
+      "path": "/v1/search",
+      "request": "No request body; ?location=blr&checkIn=2027-01-01&checkOut=2027-01-03",
+      "response": "200 { \"listings\": [], \"nextCursor\": \"...\" }",
+      "statusCodes": "200, 400",
+      "auth": false,
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "Search availability is a hint; authoritative availability is checked again at reservation time."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "book",
+      "method": "POST",
+      "path": "/v1/reservations",
+      "request": "{ \"listingId\": \"l1\", \"checkIn\": \"2027-01-01\", \"checkOut\": \"2027-01-03\", \"requestId\": \"r1\" }",
+      "response": "201 { \"reservationId\": \"b1\", \"status\": \"HELD\", \"expiresAt\": \"...\" }",
+      "statusCodes": "201, 409, 402",
+      "auth": true,
+      "idempotent": true,
+      "note": "A payment callback confirms an existing hold with idempotency; never trust a stale search result."
+    }
+  ],
+  "entities": [
+    {
+      "name": "CalendarBlock",
+      "fields": "listing_id: string\nstay: daterange [check_in, check_out)\nreservation_id: string\nstatus: HELD|CONFIRMED\nexpires_at: timestamp",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "Reservation",
+      "fields": "reservation_id: string PK\nlisting_id: string\ncheck_in: date\ncheck_out: date\nstatus: HELD|CONFIRMED|EXPIRED\nexpires_at: timestamp",
+      "storeNodeId": "db"
+    }
+  ]
+}

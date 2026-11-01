@@ -44,7 +44,13 @@ export function ReferenceCompare({ problem }: { problem: Problem }) {
           <GraphViewer graph={mine} />
         </Pane>
         <Pane title={`Reference: ${ref.name}`}>
-          <GraphViewer key={ref.id} graph={ref.graph} />
+          <GraphViewer
+            key={ref.id}
+            graph={ref.graph}
+            apis={ref.apis}
+            entities={ref.entities}
+            walkthrough={ref.walkthrough}
+          />
         </Pane>
       </div>
     </section>

@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "overview": "Gateway authenticates and applies token-based limits per tier; chat service stores the message and enqueues an inference request on a priority queue; GPU workers do continuous batching and stream tokens back through the chat service to the browser via SSE.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative service budget: 100 concurrent outputs at 30 tokens/s.",
+      "calculation": "100 × 30 = 3,000 output tokens/s, excluding prefill.",
+      "result": "GPU sizing depends on model, sequence length, batching and measured token throughput.",
+      "implication": "Admission control must consider tokens and KV-cache memory, not request count alone."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for llm chat service (chatgpt).",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Token-based limits per user tier",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "chat",
+      "purpose": "Streams tokens to the browser over SSE",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store documents and their versioned lifecycle for llm chat service (chatgpt).",
+      "rationale": "Index the access keys and use conditional updates for state changes; avoid unbounded embedded histories."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Priority by tier; fair share under load",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "gpu",
+      "purpose": "Continuous batching; KV cache / prompt caching",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "tokens",
+      "purpose": "Per-request channel back to the chat node",
+      "rationale": "Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Conversation",
+      "purpose": "Conversation ownership and durable message history.",
+      "accessPatterns": ["Load an authorized prompt history; append user and assistant messages."],
+      "constraints": ["Bound context length and isolate user data."],
+      "relationships": [
+        "Message records are partitioned by conversation_id; membership authorizes send and history access."
+      ]
+    },
+    {
+      "entityName": "Generation",
+      "purpose": "Generation lifecycle and usage accounting.",
+      "accessPatterns": ["Dedup request retries; finalize usage and cancellation."],
+      "constraints": [
+        "Token chunks are transient unless explicitly persisted; never promise resumability from a missing chunk log."
+      ],
+      "relationships": [
+        "conversation_id references the authorized Conversation; request_id distinguishes retries from new prompts."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Submit a prompt and stream generated tokens.",
+      "rationale": "Reserve token budget, propagate cancellation, and dedup requestId. SSE works over HTTP; direct-router mode may proxy the same token events over WebSockets."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Chat UI",
+      "explanation": "In Design, add Web Client and name it “Chat UI”. Place it in the leftmost caller/background lane. User-facing caller for llm chat service (chatgpt). Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "API Gateway",
+      "explanation": "In Design, add API Gateway and name it “API Gateway”. Place it in column 2, row 1 of the HLD; its callers are Chat UI. Token-based limits per user tier Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Chat Service",
+      "explanation": "In Design, add Service and name it “Chat Service”. Place it in column 3, row 1 of the HLD; its callers are API Gateway, Token stream. Streams tokens to the browser over SSE Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["chat"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Conversations",
+      "explanation": "In Design, add Document DB and name it “Conversations”. Place it in column 4, row 1 of the HLD; its callers are Chat Service. Store documents and their versioned lifecycle for llm chat service (chatgpt). Index the access keys and use conditional updates for state changes; avoid unbounded embedded histories. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["Conversation", "Generation"]
+    },
+    {
+      "title": "Inference queue",
+      "explanation": "In Design, add Message Queue and name it “Inference queue”. Place it in column 4, row 2 of the HLD; its callers are Chat Service. Priority by tier; fair share under load Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "GPU workers",
+      "explanation": "In Design, add Worker and name it “GPU workers”. Place it in column 5, row 1 of the HLD; its callers are Inference queue. Continuous batching; KV cache / prompt caching Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gpu"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Token stream",
+      "explanation": "In Design, add Pub/Sub and name it “Token stream”. Place it in column 6, row 1 of the HLD; its callers are GPU workers. Per-request channel back to the chat node Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["tokens"],
+      "edgeIds": ["e6", "e7"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Queue and stream a generation",
+      "steps": [
+        {
+          "title": "Chat UI → API Gateway → Chat Service → Conversations",
+          "explanation": "Authorize the conversation, reserve token budget and persist request identity.",
+          "nodeIds": ["client", "gw", "chat", "db"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Chat Service → Inference queue → GPU workers",
+          "explanation": "Queue bounded work; GPU batches compatible requests.",
+          "nodeIds": ["chat", "q", "gpu"],
+          "edgeIds": ["e4", "e5"]
+        },
+        {
+          "title": "GPU workers → Token stream → Chat Service",
+          "explanation": "Relay token events to the waiting SSE connection; persist final completion and usage.",
+          "nodeIds": ["gpu", "tokens", "chat"],
+          "edgeIds": ["e6", "e7"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Overload or disconnect",
+      "steps": [
+        {
+          "title": "Chat UI → API Gateway → Chat Service",
+          "explanation": "Reject excessive queue age with 429; propagate cancellation when the client disconnects.",
+          "nodeIds": ["client", "gw", "chat"],
+          "edgeIds": ["e1", "e2"]
+        },
+        {
+          "title": "Chat Service → Conversations",
+          "explanation": "Record cancellation or interruption; resumability requires a real durable token-event log.",
+          "nodeIds": ["chat", "db"],
+          "edgeIds": ["e3"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "GPU dies after streaming part of an answer",
+      "handling": "Mark the generation interrupted and settle measured usage. Retry creates a clearly identified new attempt; do not silently splice unrelated completions into the old stream.",
+      "nodeIds": ["gpu"]
+    }
+  ],
+  "alternatives": "Use a bounded queue for short bursts and tier scheduling. Route directly for lower latency when callers tolerate immediate 429 rejection. Neither creates capacity during sustained overload.",
+  "sectionApplicability": {}
+}

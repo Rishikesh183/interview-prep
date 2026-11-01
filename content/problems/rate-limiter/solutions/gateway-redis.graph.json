@@ -6,26 +6,28 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "API clients"
+      "l": "API clients",
+      "no": "User-facing caller for rate limiter."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for rate limiter."
     },
     {
       "i": "gw",
       "t": "api_gateway",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "no": "Token bucket per API key via Lua script; 429 + Retry-After; fail open on Redis errors"
     },
     {
       "i": "redis",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Redis cluster",
       "c": {
@@ -39,17 +41,18 @@
     {
       "i": "rules",
       "t": "sql_db",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Rules DB",
       "no": "Per-tier limits, cached in gateway memory"
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 780,
-      "y": 260,
-      "l": "Backend API"
+      "x": 840,
+      "y": 360,
+      "l": "Backend API",
+      "no": "Implement the owned APIs and coordinate state transitions for rate limiter."
     }
   ],
   "e": [
@@ -57,12 +60,15 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "gw",
+      "a": "a1",
+      "l": "Authenticated request",
       "h": "r>l"
     },
     {
@@ -78,15 +84,49 @@
       "s": "gw",
       "d": "rules",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
       "i": "e5",
       "s": "gw",
       "d": "svc",
+      "a": "a2",
+      "l": "Call Backend API",
       "h": "r>l"
     }
   ],
-  "apis": [],
-  "entities": []
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "gw",
+      "method": "RPC",
+      "path": "Limiter.CheckAndConsume",
+      "request": "{ \"subject\": \"api-key-42\", \"policy\": \"search\", \"cost\": 1, \"requestId\": \"r1\" }",
+      "response": "{ \"allowed\": false, \"remaining\": 0, \"retryAfterMs\": 250 }",
+      "statusCodes": "OK, UNAVAILABLE; protected HTTP response: 429 + Retry-After",
+      "auth": true,
+      "rateLimited": false,
+      "note": "Gateway middleware may invoke this internally; the separate limiter variant exposes the same internal contract. Define whether retries consume quota again."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/protected-resource",
+      "request": "No request body; API key or user identity header.",
+      "response": "200 { \"result\": \"...\" }; 429 Retry-After: 1",
+      "statusCodes": "200, 401, 429, 503",
+      "auth": true,
+      "idempotent": true,
+      "note": "The backend executes only after the admission decision; use a coarse emergency local cap during shared-store outages."
+    }
+  ],
+  "entities": [
+    {
+      "name": "LimitState",
+      "fields": "policy_id: string\nsubject_key: string\ntokens_or_counts: number\nlast_refill_or_window: timestamp\nexpires_at: timestamp",
+      "storeNodeId": "redis"
+    }
+  ]
 }

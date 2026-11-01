@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "overview": "The notification service validates the request, checks preferences (cached), dedups on an idempotency key, renders the template and enqueues to the channel's SQS queue. Channel workers call the provider with exponential backoff; after 5 attempts messages go to the DLQ.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative campaign: 10M recipients over 10 minutes.",
+      "calculation": "10,000,000 / 600 ≈ 16,667 deliveries/s before retries and multiple channels.",
+      "result": "Provider quotas may be lower than application enqueue throughput.",
+      "implication": "Separate channel queues/consumer groups and enforce provider-specific rate limits."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "caller",
+      "purpose": "External system boundary for notification system.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Authenticate, apply admission limits and route requests for notification system.",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Validates, checks preferences, dedups on idempotency key, renders template",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "prefs",
+      "purpose": "Serve derived or transient hot state for notification system.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "preferences, templates, delivery log",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "qpush",
+      "purpose": "Buffer independently retryable asynchronous work for notification system.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "qemail",
+      "purpose": "Buffer independently retryable asynchronous work for notification system.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "qsms",
+      "purpose": "Buffer independently retryable asynchronous work for notification system.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "wpush",
+      "purpose": "Exponential backoff, 5 retries then DLQ",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "wemail",
+      "purpose": "Execute background work with bounded concurrency for notification system.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "wsms",
+      "purpose": "Execute background work with bounded concurrency for notification system.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "apns",
+      "purpose": "External system boundary for notification system.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "ses",
+      "purpose": "External system boundary for notification system.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "twilio",
+      "purpose": "External system boundary for notification system.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "UserPreference",
+      "purpose": "User consent and delivery-channel policy.",
+      "accessPatterns": ["Read preferences before enqueue; invalidate cached preference changes."],
+      "constraints": [
+        "Policy storage is authoritative; a preferences cache must have bounded staleness."
+      ],
+      "relationships": [
+        "NotificationLog checks consent and the applicable preference version before delivery."
+      ]
+    },
+    {
+      "entityName": "NotificationLog",
+      "purpose": "Durable delivery attempt and dedup state.",
+      "accessPatterns": ["Claim a delivery, persist provider IDs and inspect failures."],
+      "constraints": [
+        "Dedup logical notification/channel; provider timeouts may still leave an ambiguous send outcome."
+      ],
+      "relationships": [
+        "user_id links delivery policy to UserPreference; deduplication is per logical notification/channel."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Accept an authorized logical notification for asynchronous delivery.",
+      "rationale": "Check preferences, dedup the idempotency key and publish durably before acknowledging."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Internal services",
+      "explanation": "In Design, add External Service and name it “Internal services”. Place it in the leftmost caller/background lane. External system boundary for notification system. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["caller"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Gateway",
+      "explanation": "In Design, add API Gateway and name it “Gateway”. Place it in column 2, row 1 of the HLD; its callers are Internal services. Authenticate, apply admission limits and route requests for notification system. Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Notification Service",
+      "explanation": "In Design, add Service and name it “Notification Service”. Place it in column 3, row 1 of the HLD; its callers are Gateway. Validates, checks preferences, dedups on idempotency key, renders template Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Preferences cache",
+      "explanation": "In Design, add Cache and name it “Preferences cache”. Place it in column 4, row 1 of the HLD; its callers are Notification Service. Serve derived or transient hot state for notification system. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["prefs"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Notifications DB",
+      "explanation": "In Design, add SQL Database and name it “Notifications DB”. Place it in column 4, row 2 of the HLD; its callers are Notification Service. preferences, templates, delivery log Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["UserPreference", "NotificationLog"]
+    },
+    {
+      "title": "Push queue",
+      "explanation": "In Design, add Message Queue and name it “Push queue”. Place it in column 4, row 3 of the HLD; its callers are Notification Service. Buffer independently retryable asynchronous work for notification system. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["qpush"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Email queue",
+      "explanation": "In Design, add Message Queue and name it “Email queue”. Place it in column 4, row 4 of the HLD; its callers are Notification Service. Buffer independently retryable asynchronous work for notification system. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["qemail"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "SMS queue",
+      "explanation": "In Design, add Message Queue and name it “SMS queue”. Place it in column 4, row 5 of the HLD; its callers are Notification Service. Buffer independently retryable asynchronous work for notification system. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["qsms"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Push workers",
+      "explanation": "In Design, add Worker and name it “Push workers”. Place it in column 5, row 1 of the HLD; its callers are Push queue. Exponential backoff, 5 retries then DLQ Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["wpush"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Email workers",
+      "explanation": "In Design, add Worker and name it “Email workers”. Place it in column 5, row 2 of the HLD; its callers are Email queue. Execute background work with bounded concurrency for notification system. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["wemail"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "SMS workers",
+      "explanation": "In Design, add Worker and name it “SMS workers”. Place it in column 5, row 3 of the HLD; its callers are SMS queue. Execute background work with bounded concurrency for notification system. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["wsms"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "APNs/FCM",
+      "explanation": "In Design, add External Service and name it “APNs/FCM”. Place it in column 6, row 1 of the HLD; its callers are Push workers. External system boundary for notification system. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["apns"],
+      "edgeIds": ["e11"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "SES",
+      "explanation": "In Design, add External Service and name it “SES”. Place it in column 6, row 2 of the HLD; its callers are Email workers. External system boundary for notification system. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ses"],
+      "edgeIds": ["e12"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Twilio",
+      "explanation": "In Design, add External Service and name it “Twilio”. Place it in column 6, row 3 of the HLD; its callers are SMS workers. External system boundary for notification system. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["twilio"],
+      "edgeIds": ["e13"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Validate and fan out by channel",
+      "steps": [
+        {
+          "title": "Internal services → Gateway → Notification Service → Preferences cache",
+          "explanation": "Authorize caller and evaluate channel consent/quiet hours.",
+          "nodeIds": ["caller", "gw", "svc", "prefs"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Notification Service → Notifications DB",
+          "explanation": "Record logical notification and outbox with a unique idempotency key.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Notification Service → Email queue → Email workers → SES",
+          "explanation": "Deliver an email with provider-specific rate limits; other channel workers operate independently.",
+          "nodeIds": ["svc", "qemail", "wemail", "ses"],
+          "edgeIds": ["e6", "e9", "e12"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Retry a failed delivery",
+      "steps": [
+        {
+          "title": "Push queue → Push workers → APNs/FCM",
+          "explanation": "On retryable failure use exponential backoff; persist attempt identity and eventually move to a DLQ. Do not retry permanent opt-out/address failures.",
+          "nodeIds": ["qpush", "wpush", "apns"],
+          "edgeIds": ["e8", "e11"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Provider times out after accepting a message",
+      "handling": "Retry using provider idempotency where supported; retain the ambiguous attempt and provider request ID. Bound retries with backoff and a DLQ; do not promise universal exactly-once delivery.",
+      "nodeIds": ["prefs", "db", "wpush", "wemail", "wsms"]
+    }
+  ],
+  "alternatives": "Use channel queues for operational simplicity and failure isolation. Use Kafka topics for replay, ordered partitions and independent consumers, accepting lag management and retry-topic complexity.",
+  "sectionApplicability": {}
+}

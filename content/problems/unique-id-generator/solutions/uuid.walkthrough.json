@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "overview": "Each service generates 128-bit UUIDv7 locally (timestamp + randomness). No coordination at all.",
+  "limitations": [
+    "UUIDv7 is 128-bit with probabilistic uniqueness. It does not satisfy the prompt’s strict 64-bit globally unique numeric-ID contract. This is a comparison alternative only when those constraints are relaxed."
+  ],
+  "estimation": [
+    {
+      "assumption": "UUIDv7 uses a 128-bit identifier rather than the required 64-bit integer.",
+      "calculation": "128 / 8 = 16 bytes per raw UUID, versus 8 bytes for a 64-bit ID.",
+      "result": "No namespace coordinator is required, but collision probability is nonzero.",
+      "implication": "Use only if the width and strict uniqueness requirements can be relaxed; never truncate a UUID to 64 bits."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for unique id generator.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for unique id generator.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Asks for IDs in batches",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "idgen",
+      "purpose": "Each node generates a 128-bit UUIDv7 with a millisecond timestamp and cryptographic randomness. Optional monotonic sequence handles same-ms bursts and clock regressions locally. No worker ID assignment: uniqueness is probabilistic, not guaranteed. This alternative violates the strict 64-bit requirement.",
+      "rationale": "Document bit width, time ordering, clock behavior, sequence limits and namespace reuse."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "LocalUuidState",
+      "purpose": "Ephemeral local UUIDv7 generator state, not a durable database entity.",
+      "accessPatterns": ["Generate a UUID using time and cryptographic randomness."],
+      "constraints": [
+        "128-bit output and probabilistic uniqueness; never truncate to claim compliance with a strict 64-bit contract."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Generate a bounded batch of unique IDs.",
+      "rationale": "Serialize 64-bit integers as strings in JSON. Library mode calls this locally; UUIDv7 returns 128-bit values and requires a relaxed ID-width requirement."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Callers",
+      "explanation": "In Design, add Web Client and name it “Callers”. Place it in the leftmost caller/background lane. User-facing caller for unique id generator. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Callers. Distribute incoming connections across healthy instances for unique id generator. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Order Service",
+      "explanation": "In Design, add Service and name it “Order Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Asks for IDs in batches Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Local UUIDv7 generators",
+      "explanation": "In Design, add ID Generator and name it “Local UUIDv7 generators”. Place it in column 4, row 1 of the HLD; its callers are Order Service. Each node generates a 128-bit UUIDv7 with a millisecond timestamp and cryptographic randomness. Optional monotonic sequence handles same-ms bursts and clock regressions locally. No worker ID assignment: uniqueness is probabilistic, not guaranteed. This alternative violates the strict 64-bit requirement. Document bit width, time ordering, clock behavior, sequence limits and namespace reuse. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["idgen"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1"],
+      "entityNames": ["LocalUuidState"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Generate locally with UUIDv7",
+      "steps": [
+        {
+          "title": "Callers → LB → Order Service → Local UUIDv7 generators",
+          "explanation": "The diagram represents a local library boundary: combine timestamp and cryptographic randomness, optionally a monotonic same-ms sequence. There is no coordinator call.",
+          "nodeIds": ["client", "lb", "svc", "idgen"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Check requirement compatibility",
+      "steps": [
+        {
+          "title": "Order Service → Local UUIDv7 generators",
+          "explanation": "UUIDv7 produces 128-bit identifiers and probabilistic uniqueness. Choose this only after relaxing the strict 64-bit numeric-ID requirement; truncation breaks its guarantees.",
+          "nodeIds": ["svc", "idgen"],
+          "edgeIds": ["e3"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Clock moves backward or a worker lease is reassigned",
+      "handling": "A Snowflake generator stops/waits rather than emitting overlapping timestamps; fence obsolete leases and delay namespace reuse. Ticket ranges avoid clock dependence but lose global time order.",
+      "nodeIds": ["idgen"]
+    }
+  ],
+  "alternatives": "Use Snowflake for strict 64-bit roughly time-ordered IDs with disciplined leases and clocks. Use ticket ranges if creation-time order can be relaxed. Use UUIDv7 only if 128-bit width and probabilistic uniqueness are acceptable.",
+  "sectionApplicability": {}
+}

@@ -1,8 +1,15 @@
 import { AttemptSchema, type Attempt } from "@/lib/schema";
 import { db } from "./dexie";
+import { getProgress } from "./progress";
+
+/** A compact synced progress row proves a submission even when this device has no history. */
+export async function hasSubmittedProblem(problemId: string): Promise<boolean> {
+  if (await getProgress(problemId)) return true;
+  return (await listAttempts(problemId)).some((a) => a.status !== "in_progress");
+}
 
 export function newAttempt(problemId: string, now = Date.now()): Attempt {
-  // UUIDs because attempts sync to Supabase (uuid primary key).
+  // Stable local IDs keep history links valid; full attempts never leave IndexedDB.
   return AttemptSchema.parse({
     id: crypto.randomUUID(),
     problemId,
@@ -46,7 +53,7 @@ export async function deleteAttempt(id: string): Promise<void> {
   await d.transaction("rw", d.attempts, d.tombstones, d.syncState, async () => {
     await d.attempts.delete(id);
     await d.syncState.delete(id);
-    // Remembered so the sync worker can delete it on the server too.
-    await d.tombstones.put({ id, deletedAt: Date.now() });
+    // Remove legacy sync bookkeeping; deleting local history never touches the cloud.
+    await d.tombstones.delete(id);
   });
 }

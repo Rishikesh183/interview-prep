@@ -13,7 +13,7 @@ import {
 const iso = (ms: number) => new Date(ms).toISOString();
 const ms = (s: string) => new Date(s).getTime();
 
-/** Local attempt → Supabase row (compact graph + hash). `updated_at` carries the local edit time (LWW). */
+/** Legacy codec retained for old data compatibility. Active sync never uploads full attempts. */
 export async function attemptToRow(a: Attempt, userId: string): Promise<AttemptRow> {
   const results = a.testRun?.results ?? [];
   return {

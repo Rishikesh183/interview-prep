@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "overview": "S3 upload events go to a queue that triggers serverless functions: one splits the file, a fan-out of functions encodes chunks, a final step stitches manifests. Metadata lives in DynamoDB. Delivery via CDN with signed URLs.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative playback: 1M simultaneous viewers at 3 Mbps.",
+      "calculation": "1,000,000 × 3 Mbps = 3 Tbps delivery bandwidth.",
+      "result": "Playback traffic greatly exceeds small metadata/API responses.",
+      "implication": "CDN absorbs segment traffic; scale transcoders by queue age and processing time, not viewer count."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "app",
+      "purpose": "Resumable multipart uploads; DASH player with adaptive bitrate",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Authenticate, apply admission limits and route requests for youtube / netflix.",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "api",
+      "purpose": "Implement the owned APIs and coordinate state transitions for youtube / netflix.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "s3in",
+      "purpose": "Persist immutable large objects for youtube / netflix.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "events",
+      "purpose": "Buffer independently retryable asynchronous work for youtube / netflix.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "fn",
+      "purpose": "Split + encode chunks into DASH renditions",
+      "rationale": "Treat duplicate triggers and timeouts as expected; split workloads within runtime/resource limits."
+    },
+    {
+      "nodeId": "s3out",
+      "purpose": "Persist immutable large objects for youtube / netflix.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "meta",
+      "purpose": "Store partitioned point-lookup state for youtube / netflix.",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Serve cacheable media or static responses close to users for youtube / netflix.",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Video",
+      "purpose": "Video processing state and published rendition manifest.",
+      "accessPatterns": [
+        "Create upload; mark one processing version ready; read metadata for playback."
+      ],
+      "constraints": ["Publish READY only after all required segments and manifests exist."],
+      "relationships": [
+        "MediaObject.video_id/processing_version identify objects referenced by the published manifest."
+      ]
+    },
+    {
+      "entityName": "MediaObject",
+      "purpose": "Immutable original bytes and generated media artifacts.",
+      "accessPatterns": [
+        "Multipart upload raw bytes; workers read originals; CDN reads published segments."
+      ],
+      "constraints": [
+        "Pin a processing version so an old retry cannot overwrite a newer manifest."
+      ],
+      "relationships": [
+        "Video metadata selects a complete processing version; unreferenced outputs can be collected."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Start a resumable multipart upload.",
+      "rationale": "API returns signed upload parts; the creator sends media bytes to raw object storage."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Finalize the upload and schedule transcoding.",
+      "rationale": "Use an outbox/object-store event and dedup processing version; duplicate completion must not publish incomplete media."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Retrieve playback metadata for a ready video.",
+      "rationale": "The player fetches HLS/DASH segments from CDN and switches bitrate adaptively."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Clients",
+      "explanation": "In Design, add Web Client and name it “Clients”. Place it in the leftmost caller/background lane. Resumable multipart uploads; DASH player with adaptive bitrate Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["app"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "API Gateway",
+      "explanation": "In Design, add API Gateway and name it “API Gateway”. Place it in column 2, row 1 of the HLD; its callers are Clients. Authenticate, apply admission limits and route requests for youtube / netflix. Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Video Service",
+      "explanation": "In Design, add Service and name it “Video Service”. Place it in column 3, row 1 of the HLD; its callers are API Gateway. Implement the owned APIs and coordinate state transitions for youtube / netflix. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["api"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2", "a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Uploads bucket",
+      "explanation": "In Design, add Object Storage and name it “Uploads bucket”. Place it in column 2, row 2 of the HLD; its callers are Clients. Persist immutable large objects for youtube / netflix. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3in"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["MediaObject"]
+    },
+    {
+      "title": "Upload events",
+      "explanation": "In Design, add Message Queue and name it “Upload events”. Place it in column 3, row 2 of the HLD; its callers are Uploads bucket. Buffer independently retryable asynchronous work for youtube / netflix. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["events"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Encode functions",
+      "explanation": "In Design, add Serverless Function and name it “Encode functions”. Place it in column 4, row 1 of the HLD; its callers are Upload events. Split + encode chunks into DASH renditions Treat duplicate triggers and timeouts as expected; split workloads within runtime/resource limits. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["fn"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Encoded bucket",
+      "explanation": "In Design, add Object Storage and name it “Encoded bucket”. Place it in column 5, row 1 of the HLD; its callers are Encode functions, CDN. Persist immutable large objects for youtube / netflix. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3out"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Video metadata",
+      "explanation": "In Design, add Key-Value Store and name it “Video metadata”. Place it in column 5, row 2 of the HLD; its callers are Video Service, Encode functions. Store partitioned point-lookup state for youtube / netflix. Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meta"],
+      "edgeIds": ["e3", "e8"],
+      "apiIds": [],
+      "entityNames": ["Video"]
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 3 of the HLD; its callers are Clients. Serve cacheable media or static responses close to users for youtube / netflix. Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e9", "e10"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Upload and trigger encoding",
+      "steps": [
+        {
+          "title": "Clients → API Gateway → Video Service → Video metadata",
+          "explanation": "Create resumable upload metadata and signed part URLs.",
+          "nodeIds": ["app", "gw", "api", "meta"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Clients → Uploads bucket",
+          "explanation": "Complete the multipart upload directly.",
+          "nodeIds": ["app", "s3in"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Uploads bucket → Upload events → Encode functions → Encoded bucket",
+          "explanation": "Object events trigger idempotent chunk encoders; a completion barrier publishes the final manifest.",
+          "nodeIds": ["s3in", "events", "fn", "s3out"],
+          "edgeIds": ["e5", "e6", "e7"]
+        },
+        {
+          "title": "Encode functions → Video metadata",
+          "explanation": "Conditionally mark the processing version READY.",
+          "nodeIds": ["fn", "meta"],
+          "edgeIds": ["e8"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Play a ready version",
+      "steps": [
+        {
+          "title": "Clients → API Gateway → Video Service → Video metadata",
+          "explanation": "Read the latest complete manifest metadata.",
+          "nodeIds": ["app", "gw", "api", "meta"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Clients → CDN → Encoded bucket",
+          "explanation": "Fetch DASH/HLS media segments via CDN; partial new outputs remain unpublished.",
+          "nodeIds": ["app", "cdn", "s3out"],
+          "edgeIds": ["e9", "e10"]
+        }
+      ],
+      "apiId": "a3"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A transcoder fails after writing some renditions",
+      "handling": "Retry deterministic versioned segment jobs, validate outputs and publish the manifest atomically when complete. Garbage-collect abandoned versions; the old READY version remains playable.",
+      "nodeIds": ["fn", "meta"]
+    }
+  ],
+  "alternatives": "Use worker transcoders for long jobs and GPU/codec control. Use event-triggered functions for bounded chunk jobs that fit runtime constraints, with an explicit completion barrier before publication.",
+  "sectionApplicability": {}
+}

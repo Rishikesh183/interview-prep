@@ -1,15 +1,31 @@
 [
   {
     "id": "partitioning",
-    "title": "Keys are partitioned with consistent hashing",
+    "title": "Keys have a defined hash or range ownership scheme",
     "kind": "core",
     "weight": 1,
     "check": {
-      "textMentions": {
-        "pattern": "consistent.?hash|hash.?ring|virtual.?node|vnode"
-      }
+      "anyOf": [
+        {
+          "textMentions": {
+            "pattern": "consistent.?hash|hash.?ring|virtual.?node|vnode"
+          }
+        },
+        {
+          "allOf": [
+            {
+              "hasNode": "coordination"
+            },
+            {
+              "textMentions": {
+                "pattern": "key range|range leader|range boundar"
+              }
+            }
+          ]
+        }
+      ]
     },
-    "failHint": "Which node owns a key, and what moves when a node joins?"
+    "failHint": "Which node owns a key, and how does routing change after a split or membership change?"
   },
   {
     "id": "replication",

@@ -1,11 +1,18 @@
 import "fake-indexeddb/auto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { User } from "@supabase/supabase-js";
+import { useAuth } from "@/components/auth/useAuth";
+import * as solutionDb from "@/lib/db/mySolutions";
 import { getProgress } from "@/lib/db/progress";
 import { db } from "@/lib/db/dexie";
 import { getProblem } from "@/lib/problems/load";
 import { AttemptSchema, type Graph } from "@/lib/schema";
 import { useAttemptStore } from "@/store/attempt";
 import { submitAttempt } from "./actions";
+
+const { getUser } = vi.hoisted(() => ({ getUser: vi.fn() }));
+vi.mock("@/lib/supabase/browser", () => ({ supabaseBrowser: () => ({ auth: { getUser } }) }));
+const user = { id: "11111111-1111-4111-8111-111111111111" } as User;
 
 const problem = getProblem("url-shortener")!; // easy: 10 base points
 const reference = problem.references.find((r) => r.graph)!;
@@ -40,7 +47,61 @@ const weak = () => ({
 });
 
 beforeEach(async () => {
-  await db().progress.clear();
+  await Promise.all([db().progress.clear(), db().attempts.clear(), db().meta.clear()]);
+  useAuth.setState({ status: "signed-in", user });
+  getUser.mockReset().mockResolvedValue({ data: { user }, error: null });
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("submission authentication", () => {
+  it.each(["signed-out", "loading", "disabled"] as const)(
+    "blocks %s users without locking or scoring",
+    async (status) => {
+      startAttempt(full());
+      useAuth.setState({ status, user: null });
+      await expect(submitAttempt(problem)).rejects.toThrow(/Sign in to submit/);
+      expect(useAttemptStore.getState().meta?.status).toBe("in_progress");
+      expect(useAttemptStore.getState().meta?.testRun).toBeUndefined();
+      expect(await getProgress(problem.id)).toBeUndefined();
+      expect(getUser).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a missing server-verified session even if the UI looks signed in", async () => {
+    startAttempt(full());
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    await expect(submitAttempt(problem)).rejects.toThrow(/Sign in/);
+    expect(useAttemptStore.getState().meta?.status).toBe("in_progress");
+  });
+
+  it("retains an editable draft when auth cannot be reached", async () => {
+    startAttempt(full());
+    getUser.mockRejectedValue(new Error("offline"));
+    await expect(submitAttempt(problem)).rejects.toThrow(/Check your connection/);
+    expect(useAttemptStore.getState().meta?.status).toBe("in_progress");
+    expect(await getProgress(problem.id)).toBeUndefined();
+  });
+
+  it("blocks sign-out during an asynchronous submission check", async () => {
+    startAttempt(full());
+    vi.spyOn(solutionDb, "forfeitsPoints").mockImplementation(async () => {
+      useAuth.setState({ status: "signed-out", user: null });
+      return false;
+    });
+    await expect(submitAttempt(problem)).rejects.toThrow(/Sign in/);
+    expect(useAttemptStore.getState().meta?.status).toBe("in_progress");
+    expect(await getProgress(problem.id)).toBeUndefined();
+  });
+
+  it("does not submit a different attempt opened while session verification was pending", async () => {
+    startAttempt(full());
+    getUser.mockImplementation(async () => {
+      startAttempt(weak());
+      return { data: { user }, error: null };
+    });
+    expect(await submitAttempt(problem)).toBeNull();
+    expect(useAttemptStore.getState().meta?.status).toBe("in_progress");
+  });
 });
 
 describe("points & gating (step 2.5 acceptance)", () => {

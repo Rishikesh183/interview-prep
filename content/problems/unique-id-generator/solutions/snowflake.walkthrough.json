@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "overview": "41-bit ms timestamp, 5-bit datacenter, 5-bit worker, 12-bit sequence. Worker IDs leased from ZooKeeper at startup. Generators are stateless otherwise and run in every region.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Snowflake layout: 41 timestamp + 10 worker + 12 sequence bits.",
+      "calculation": "2^12 = 4,096 IDs/ms/worker; 2^41 ms ≈ 69.7 years.",
+      "result": "The theoretical ceiling is 4.096M IDs/s/worker, before implementation limits.",
+      "implication": "Choose an epoch and worker lease policy; wait or fail when the sequence is exhausted or the clock regresses."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for unique id generator.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for unique id generator.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Asks for IDs in batches",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "idgen",
+      "purpose": "41-bit timestamp + 5-bit datacenter + 5-bit worker id + 12-bit sequence; refuses to issue IDs if the clock moves backwards (NTP skew)",
+      "rationale": "Document bit width, time ordering, clock behavior, sequence limits and namespace reuse."
+    },
+    {
+      "nodeId": "zk",
+      "purpose": "Leases a unique worker id to each generator at startup",
+      "rationale": "Use a quorum and fencing; possession of an expired lease must never authorize a stale writer."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "GeneratorState",
+      "purpose": "Local state and assigned namespace used to issue IDs.",
+      "accessPatterns": ["Advance a local sequence; acquire a fenced namespace before generation."],
+      "constraints": [
+        "Never reuse a worker namespace during clock overlap; ranges/UUID variants have different state and guarantees."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Generate a bounded batch of unique IDs.",
+      "rationale": "Serialize 64-bit integers as strings in JSON. Library mode calls this locally; UUIDv7 returns 128-bit values and requires a relaxed ID-width requirement."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Callers",
+      "explanation": "In Design, add Web Client and name it “Callers”. Place it in the leftmost caller/background lane. User-facing caller for unique id generator. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Callers. Distribute incoming connections across healthy instances for unique id generator. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Order Service",
+      "explanation": "In Design, add Service and name it “Order Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Asks for IDs in batches Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Snowflake generators",
+      "explanation": "In Design, add ID Generator and name it “Snowflake generators”. Place it in column 4, row 1 of the HLD; its callers are Order Service. 41-bit timestamp + 5-bit datacenter + 5-bit worker id + 12-bit sequence; refuses to issue IDs if the clock moves backwards (NTP skew) Document bit width, time ordering, clock behavior, sequence limits and namespace reuse. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["idgen"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1"],
+      "entityNames": ["GeneratorState"]
+    },
+    {
+      "title": "ZooKeeper",
+      "explanation": "In Design, add Coordination and name it “ZooKeeper”. Place it in column 5, row 1 of the HLD; its callers are Snowflake generators. Leases a unique worker id to each generator at startup Use a quorum and fencing; possession of an expired lease must never authorize a stale writer. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["zk"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Acquire a worker namespace",
+      "steps": [
+        {
+          "title": "Snowflake generators → ZooKeeper",
+          "explanation": "Lease a unique datacenter/worker ID and fence overlapping ownership before issuing IDs.",
+          "nodeIds": ["idgen", "zk"],
+          "edgeIds": ["e4"]
+        }
+      ]
+    },
+    {
+      "id": "flow-2",
+      "title": "Generate a batch locally",
+      "steps": [
+        {
+          "title": "Callers → LB → Order Service → Snowflake generators",
+          "explanation": "Combine epoch timestamp, assigned worker bits and per-ms sequence. Block/fail on clock regression or sequence exhaustion; return decimal strings for JSON safety.",
+          "nodeIds": ["client", "lb", "svc", "idgen"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Clock moves backward or a worker lease is reassigned",
+      "handling": "A Snowflake generator stops/waits rather than emitting overlapping timestamps; fence obsolete leases and delay namespace reuse. Ticket ranges avoid clock dependence but lose global time order.",
+      "nodeIds": ["idgen"]
+    }
+  ],
+  "alternatives": "Use Snowflake for strict 64-bit roughly time-ordered IDs with disciplined leases and clocks. Use ticket ranges if creation-time order can be relaxed. Use UUIDv7 only if 128-bit width and probabilistic uniqueness are acceptable.",
+  "sectionApplicability": {}
+}

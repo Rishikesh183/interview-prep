@@ -17,9 +17,9 @@ export type SandboxContent = z.infer<typeof SandboxContentSchema>;
 /** A free-practice canvas not tied to a problem. `id` is "default" for now. */
 type SandboxRow = SandboxContent & { id: string; updatedAt: number };
 
-/** Last `updatedAt` known to match the server, per attempt id. */
+/** Legacy attempt-sync metadata retained for compatibility; history is now local-only. */
 export type SyncStateRow = { id: string; syncedUpdatedAt: number };
-/** A local delete waiting to be pushed. */
+/** Legacy attempt tombstones; new local history deletions never enqueue remote work. */
 export type TombstoneRow = { id: string; deletedAt: number };
 export type MetaRow = { key: string; value: string };
 

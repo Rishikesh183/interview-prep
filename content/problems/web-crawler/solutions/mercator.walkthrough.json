@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "overview": "Front queues by priority, back queues one per host with a min delay; fetcher workers pull from back queues, resolve via a DNS cache, store pages in S3, extract links, check a Bloom filter + URL DB, and enqueue new ones.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative crawl: 1B pages/day, 100 KB compressed/page.",
+      "calculation": "1,000,000,000 / 86,400 ≈ 11,574 fetches/s; storage ≈ 100 TB/day.",
+      "result": "Network, object storage and host politeness dominate the design.",
+      "implication": "Shard frontier ownership by host; global worker parallelism must never violate a single host's delay budget."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "sched",
+      "purpose": "Identify due work and dispatch bounded batches for web crawler.",
+      "rationale": "Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch."
+    },
+    {
+      "nodeId": "frontier",
+      "purpose": "Front queues by priority, back queues per host (politeness, robots.txt, crawl delay)",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "fetch",
+      "purpose": "Execute background work with bounded concurrency for web crawler.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "dns",
+      "purpose": "Resolve a name or select a nearby regional entry for web crawler.",
+      "rationale": "DNS caching and TTL affect failover speed; do not rely on instant propagation."
+    },
+    {
+      "nodeId": "seen",
+      "purpose": "Bloom filter in front + content fingerprint dedup",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Persist immutable large objects for web crawler.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "UrlState",
+      "purpose": "Durable deduplication and recrawl state.",
+      "accessPatterns": ["Check/claim a URL; update status and content fingerprint after fetch."],
+      "constraints": [
+        "A Bloom filter is only a probabilistic accelerator; confirm positives when false-positive omissions are unacceptable."
+      ],
+      "relationships": []
+    },
+    {
+      "entityName": "FetchedPage",
+      "purpose": "Immutable fetched content for parsing/indexing.",
+      "accessPatterns": ["Write compressed content; downstream processors read by object key."],
+      "constraints": [
+        "Enforce size limits, supported schemes, robots policy and safe redirect handling before fetching."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Internal administrative contract for seeding or scheduling a crawl.",
+      "rationale": "This system does not require a public consumer REST API. Normalize/dedup URLs and enforce per-host politeness before dispatch."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Worker task contract for one bounded fetch.",
+      "rationale": "Acknowledge only after content and URL state commit; retry with the same task identity."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Re-crawl scheduler",
+      "explanation": "In Design, add Scheduler and name it “Re-crawl scheduler”. Place it in the leftmost caller/background lane. Identify due work and dispatch bounded batches for web crawler. Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sched"],
+      "edgeIds": [],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "URL frontier",
+      "explanation": "In Design, add Message Queue and name it “URL frontier”. Place it in column 2, row 1 of the HLD; its callers are Re-crawl scheduler, Fetchers. Front queues by priority, back queues per host (politeness, robots.txt, crawl delay) Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["frontier"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Fetchers",
+      "explanation": "In Design, add Worker and name it “Fetchers”. Place it in column 3, row 1 of the HLD; its callers are URL frontier. Execute background work with bounded concurrency for web crawler. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["fetch"],
+      "edgeIds": ["e2", "e6"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "DNS cache",
+      "explanation": "In Design, add DNS and name it “DNS cache”. Place it in column 4, row 1 of the HLD; its callers are Fetchers. Resolve a name or select a nearby regional entry for web crawler. DNS caching and TTL affect failover speed; do not rely on instant propagation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["dns"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Seen URLs",
+      "explanation": "In Design, add Key-Value Store and name it “Seen URLs”. Place it in column 4, row 2 of the HLD; its callers are Fetchers. Bloom filter in front + content fingerprint dedup Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["seen"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["UrlState"]
+    },
+    {
+      "title": "Raw pages",
+      "explanation": "In Design, add Object Storage and name it “Raw pages”. Place it in column 4, row 3 of the HLD; its callers are Fetchers. Persist immutable large objects for web crawler. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["FetchedPage"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Schedule a polite fetch",
+      "steps": [
+        {
+          "title": "Re-crawl scheduler → URL frontier → Fetchers",
+          "explanation": "Normalize/dedup URLs, choose priority then a per-host queue, honor robots.txt and the persisted next-allowed-fetch time.",
+          "nodeIds": ["sched", "frontier", "fetch"],
+          "edgeIds": ["e1", "e2"]
+        },
+        {
+          "title": "Fetchers → DNS cache",
+          "explanation": "Resolve the host with DNS caching and safe address/redirect rules.",
+          "nodeIds": ["fetch", "dns"],
+          "edgeIds": ["e3"]
+        },
+        {
+          "title": "Fetchers → Seen URLs",
+          "explanation": "Claim URL state and check the content fingerprint.",
+          "nodeIds": ["fetch", "seen"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Fetchers → Raw pages",
+          "explanation": "Write bounded compressed content before acknowledging the fetch.",
+          "nodeIds": ["fetch", "s3"],
+          "edgeIds": ["e5"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Discover and recrawl",
+      "steps": [
+        {
+          "title": "Fetchers → URL frontier",
+          "explanation": "Normalize and dedup extracted links; schedule by host and priority.",
+          "nodeIds": ["fetch", "frontier"],
+          "edgeIds": ["e6"]
+        },
+        {
+          "title": "Re-crawl scheduler → URL frontier",
+          "explanation": "Re-enqueue stale URLs without violating host pacing.",
+          "nodeIds": ["sched", "frontier"],
+          "edgeIds": ["e1"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A fetcher dies after downloading but before acknowledging",
+      "handling": "Redeliver the leased task; dedup by normalized URL/content hash. Preserve per-host next-allowed-fetch time across ownership changes and back off repeatedly failing hosts.",
+      "nodeIds": ["fetch", "seen"]
+    }
+  ],
+  "alternatives": "Use priority/front/back host queues for fine scheduling and fairness. Use a host-partitioned log for replayable ownership, handling hot hosts, partition pauses and pacing state across rebalances.",
+  "sectionApplicability": {}
+}

@@ -4,22 +4,16 @@ import { DoorOpen, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNodeOptions } from "@/components/canvas/useNodeOptions";
-import { findFreePosition, SLOT } from "@/lib/graph/placement";
+import { addStageNode } from "../addStageNode";
+import { highlightLater } from "@/components/canvas/useFocusOnCanvas";
+import { useAttemptStore } from "@/store/attempt";
 import { API_OWNER_TYPES } from "@/lib/workspace/stages";
 import { useWorkspaceStore } from "@/store/workspace";
 import { ApiList } from "../ApiList";
 import { StageIntro } from "./StageIntro";
 
 /** Adds an owner node to the canvas without needing the canvas to be mounted. */
-function addOwner(type: string) {
-  const { nodes, addNode } = useWorkspaceStore.getState();
-  const occupied = nodes.map((n) => ({
-    ...n.position,
-    width: n.measured?.width ?? n.width ?? SLOT.width,
-    height: n.measured?.height ?? n.height ?? SLOT.height,
-  }));
-  addNode(type, findFreePosition({ x: 0, y: 0 }, occupied));
-}
+const addOwner = addStageNode;
 
 export function Apis() {
   const owners = useNodeOptions(API_OWNER_TYPES);
@@ -72,6 +66,16 @@ function OwnerCard({ nodeId }: { nodeId: string }) {
         </span>
       </div>
       <ApiList ownerNodeId={nodeId} />
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          highlightLater({ nodeIds: [nodeId], edgeIds: [] });
+          useAttemptStore.getState().setStage("design");
+        }}
+      >
+        Show owner on canvas →
+      </Button>
     </section>
   );
 }

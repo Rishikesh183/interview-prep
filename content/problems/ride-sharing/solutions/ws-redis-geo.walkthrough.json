@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "overview": "Driver apps maintain WebSockets to a location gateway. The gateway updates city-sharded Redis GEO sets and a separate per-driver heartbeat-expiry index, since GEO members do not have individual key TTLs. Matching queries fresh candidates and claims a driver with a fenced conditional state transition. Trips persist in SQL; payments use an external provider.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative active fleet: 1M drivers pinging every 5 seconds.",
+      "calculation": "1,000,000 / 5 = 200K location updates/s.",
+      "result": "Location writes dominate trip creation and have short useful lifetimes.",
+      "implication": "Shard geo state by region/city; persist trip assignments separately from ephemeral location data."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "driver",
+      "purpose": "Mobile caller with intermittent connectivity for uber / ola.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "rider",
+      "purpose": "Mobile caller with intermittent connectivity for uber / ola.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for uber / ola.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "loc",
+      "purpose": "Maintain long-lived sessions and deliver realtime events for uber / ola.",
+      "rationale": "Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances."
+    },
+    {
+      "nodeId": "geo",
+      "purpose": "GEOADD / GEOSEARCH, sharded by city",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "match",
+      "purpose": "Atomic Lua: available → assigned (exactly one rider)",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "trip",
+      "purpose": "Implement the owned APIs and coordinate state transitions for uber / ola.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for uber / ola.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "pay",
+      "purpose": "External system boundary for uber / ola.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "notif",
+      "purpose": "Route delivery hints to the chosen channel for uber / ola.",
+      "rationale": "A notification is not the authoritative business record; apply preference policy, retries and deduplication."
+    },
+    {
+      "nodeId": "trips",
+      "purpose": "Live driver location fanned out to the rider's gateway node",
+      "rationale": "Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Trip",
+      "purpose": "Authoritative trip state and driver assignment.",
+      "accessPatterns": ["Create a trip; conditionally claim one driver; advance the trip state."],
+      "constraints": [
+        "A conditional write/fenced lease prevents two trips from claiming the same driver."
+      ],
+      "relationships": [
+        "driver_id links the durable assignment to a fresh DriverLocation candidate; the geo lookup alone does not claim ownership."
+      ]
+    },
+    {
+      "entityName": "DriverLocation",
+      "purpose": "Recent location and availability used for matching.",
+      "accessPatterns": ["Update location from pings; query nearby available drivers."],
+      "constraints": [
+        "Reject stale timestamps and expire drivers from search after missed heartbeats; Redis GEO members require explicit per-member expiry logic."
+      ],
+      "relationships": [
+        "Trip records the accepted assignment separately from ephemeral location membership."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Start a trip request and asynchronous matching.",
+      "rationale": "A geo candidate is not an assignment; conditionally claim before notifying the driver."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Report driver location with a bounded update rate.",
+      "rationale": "Kafka mode can use HTTP batch ingestion for the same message shape; ordering is per driver, not global."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Accept a current trip offer without racing an expired or reassigned lease.",
+      "rationale": "Accept only the current unexpired driver offer; reject stale versions and repeated claims from another driver."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Driver app",
+      "explanation": "In Design, add Mobile Client and name it “Driver app”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for uber / ola. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["driver"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Rider app",
+      "explanation": "In Design, add Mobile Client and name it “Rider app”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for uber / ola. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["rider"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Driver app, Rider app. Distribute incoming connections across healthy instances for uber / ola. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1", "e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Location gateway",
+      "explanation": "In Design, add WebSocket Server and name it “Location gateway”. Place it in column 3, row 1 of the HLD; its callers are LB, Trip channels. Maintain long-lived sessions and deliver realtime events for uber / ola. Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["loc"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Redis GEO (per city)",
+      "explanation": "In Design, add Cache and name it “Redis GEO (per city)”. Place it in column 4, row 1 of the HLD; its callers are Location gateway, Matching Service. GEOADD / GEOSEARCH, sharded by city Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["geo"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": ["DriverLocation"]
+    },
+    {
+      "title": "Matching Service",
+      "explanation": "In Design, add Service and name it “Matching Service”. Place it in column 3, row 2 of the HLD; its callers are LB. Atomic Lua: available → assigned (exactly one rider) Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["match"],
+      "edgeIds": ["e4", "e7"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Trip Service",
+      "explanation": "In Design, add Service and name it “Trip Service”. Place it in column 4, row 2 of the HLD; its callers are LB, Matching Service. Implement the owned APIs and coordinate state transitions for uber / ola. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["trip"],
+      "edgeIds": ["e5", "e8"],
+      "apiIds": ["a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Trips DB",
+      "explanation": "In Design, add SQL Database and name it “Trips DB”. Place it in column 5, row 1 of the HLD; its callers are Trip Service. Store authoritative records with transactional constraints for uber / ola. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": ["Trip"]
+    },
+    {
+      "title": "Payments",
+      "explanation": "In Design, add External Service and name it “Payments”. Place it in column 5, row 2 of the HLD; its callers are Trip Service. External system boundary for uber / ola. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["pay"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Push",
+      "explanation": "In Design, add Notification Service and name it “Push”. Place it in column 4, row 3 of the HLD; its callers are Matching Service. Route delivery hints to the chosen channel for uber / ola. A notification is not the authoritative business record; apply preference policy, retries and deduplication. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["notif"],
+      "edgeIds": ["e11"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Trip channels",
+      "explanation": "In Design, add Pub/Sub and name it “Trip channels”. Place it in column 4, row 4 of the HLD; its callers are Location gateway. Live driver location fanned out to the rider's gateway node Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["trips"],
+      "edgeIds": ["e12", "e13"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Update location and match a rider",
+      "steps": [
+        {
+          "title": "Driver app → LB → Location gateway → Redis GEO (per city)",
+          "explanation": "Validate location sequence, update GEO membership and track per-driver heartbeat expiry.",
+          "nodeIds": ["driver", "lb", "loc", "geo"],
+          "edgeIds": ["e1", "e3", "e6"]
+        },
+        {
+          "title": "Rider app → LB → Matching Service → Redis GEO (per city)",
+          "explanation": "Search fresh available drivers and atomically claim one under a fenced offer.",
+          "nodeIds": ["rider", "lb", "match", "geo"],
+          "edgeIds": ["e2", "e4", "e7"]
+        },
+        {
+          "title": "Matching Service → Trip Service → Trips DB",
+          "explanation": "Create the authoritative assigned trip; compensate a failed claim/commit boundary.",
+          "nodeIds": ["match", "trip", "db"],
+          "edgeIds": ["e8", "e9"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Driver accepts or offer expires",
+      "steps": [
+        {
+          "title": "Matching Service → Push",
+          "explanation": "Notify the selected driver with the offer version.",
+          "nodeIds": ["match", "notif"],
+          "edgeIds": ["e11"]
+        },
+        {
+          "title": "Location gateway → Trip channels → Location gateway",
+          "explanation": "Relay trip events across socket gateways.",
+          "nodeIds": ["loc", "trips"],
+          "edgeIds": ["e12", "e13"]
+        },
+        {
+          "title": "Trip Service → Trips DB",
+          "explanation": "Accept only the current valid assignment; release expired offers conditionally.",
+          "nodeIds": ["trip", "db"],
+          "edgeIds": ["e9"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Two matchers select the same nearby driver",
+      "handling": "Only one conditional availability claim succeeds; retry the losing matcher with another candidate. Expire stale location membership and fence late acceptance of an expired offer.",
+      "nodeIds": ["geo", "db"]
+    }
+  ],
+  "alternatives": "Use WebSockets and city Redis GEO for low-latency disposable location state. Use a replayable location stream and region indexers for rebuilds and analytics, while monitoring location lag. Both need exclusive driver claims.",
+  "sectionApplicability": {}
+}

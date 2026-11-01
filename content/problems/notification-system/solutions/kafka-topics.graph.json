@@ -6,19 +6,21 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Producers"
+      "l": "Producers",
+      "no": "User-facing caller for notification system."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for notification system."
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Notify API",
       "no": "Dedup via idempotency key in Redis (SETNX, 24h)"
@@ -26,46 +28,52 @@
     {
       "i": "dedup",
       "t": "cache",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Dedup Redis",
       "c": {
         "strategy": "write-through",
         "ttl": "24h"
-      }
+      },
+      "no": "Serve derived or transient hot state for notification system."
     },
     {
       "i": "prefs",
       "t": "nosql_kv",
-      "x": 780,
-      "y": 130,
-      "l": "User preferences",
-      "no": "opt-out per channel"
+      "x": 840,
+      "y": 180,
+      "l": "Preferences + delivery records",
+      "c": {
+        "partitionKey": "user_id"
+      },
+      "no": "Durable versioned user preferences, notification identity and outbox/delivery state; Redis only accelerates dedup."
     },
     {
       "i": "push",
       "t": "event_stream",
-      "x": 780,
-      "y": 260,
+      "x": 840,
+      "y": 360,
       "l": "push topic",
       "c": {
         "topic": "notify.push"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for notification system."
     },
     {
       "i": "email",
       "t": "event_stream",
-      "x": 780,
-      "y": 390,
+      "x": 840,
+      "y": 540,
       "l": "email topic",
       "c": {
         "topic": "notify.email"
-      }
+      },
+      "no": "Retain ordered events for replayable consumers for notification system."
     },
     {
       "i": "cw",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Channel consumers",
       "no": "Retry topic with backoff, then dead-letter topic"
@@ -73,12 +81,13 @@
     {
       "i": "prov",
       "t": "external_service",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Providers",
       "c": {
         "provider": "FCM, SendGrid"
-      }
+      },
+      "no": "External system boundary for notification system."
     }
   ],
   "e": [
@@ -86,12 +95,15 @@
       "i": "e1",
       "s": "caller",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "svc",
+      "a": "a1",
+      "l": "Call Notify API",
       "h": "r>l"
     },
     {
@@ -99,6 +111,7 @@
       "s": "svc",
       "d": "dedup",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -106,6 +119,7 @@
       "s": "svc",
       "d": "prefs",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -113,6 +127,7 @@
       "s": "svc",
       "d": "push",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -120,6 +135,7 @@
       "s": "svc",
       "d": "email",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -127,6 +143,7 @@
       "s": "push",
       "d": "cw",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -134,12 +151,14 @@
       "s": "email",
       "d": "cw",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
       "i": "e9",
       "s": "cw",
       "d": "prov",
+      "l": "Call Providers",
       "h": "r>l"
     }
   ],
@@ -148,15 +167,26 @@
       "id": "a1",
       "ownerNodeId": "svc",
       "method": "POST",
-      "path": "/v1/send",
+      "path": "/v1/notifications",
+      "request": "{ \"idempotencyKey\": \"order-42-receipt\", \"userId\": \"u1\", \"channels\": [\"email\"], \"template\": \"receipt\", \"data\": {} }",
+      "response": "202 { \"notificationId\": \"n1\", \"status\": \"PENDING\" }",
+      "statusCodes": "202, 400, 409, 429",
       "auth": true,
-      "idempotent": true
+      "idempotent": true,
+      "rateLimited": true,
+      "note": "Check preferences, dedup the idempotency key and publish durably before acknowledging."
     }
   ],
   "entities": [
     {
       "name": "UserPreference",
-      "fields": "user_id, channel, opted_out"
+      "fields": "user_id: string PK\nchannel: string\nenabled: boolean\nquiet_hours: interval\nversion: int64",
+      "storeNodeId": "prefs"
+    },
+    {
+      "name": "NotificationLog",
+      "fields": "notification_id: string PK\nidempotency_key: string UNIQUE\nuser_id: string\nchannel: string\nstatus: PENDING|SENT|FAILED\nattempt: int32",
+      "storeNodeId": "prefs"
     }
   ]
 }

@@ -16,7 +16,7 @@
         {
           "pathExists": {
             "from": "@queue",
-            "to": "worker"
+            "to": ["worker", "serverless_fn"]
           }
         }
       ]

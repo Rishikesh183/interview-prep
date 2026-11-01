@@ -1,0 +1,161 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Browser",
+      "no": "User-facing caller for pastebin."
+    },
+    {
+      "i": "cdn",
+      "t": "cdn",
+      "x": 280,
+      "y": 0,
+      "c": {
+        "content": ["static", "api"],
+        "ttl": "5m"
+      },
+      "no": "Caches popular pastes at the edge"
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 560,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for pastebin."
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 840,
+      "y": 0,
+      "l": "Paste Service",
+      "no": "Random 8-char base62 keys; bodies to S3, metadata to SQL"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 1120,
+      "y": 0,
+      "l": "Redis",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "1h"
+      },
+      "no": "Hot paste bodies < 64 KB"
+    },
+    {
+      "i": "meta",
+      "t": "nosql_kv",
+      "x": 1120,
+      "y": 180,
+      "l": "Paste KV store",
+      "c": {
+        "partitionKey": "paste_id"
+      },
+      "no": "Inline bodies below 64 KB; larger bodies point to object storage. TTL deletion is asynchronous: reject expires_at on every read, including cached reads."
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 1120,
+      "y": 360,
+      "l": "Paste bodies",
+      "c": {
+        "lifecycle": "Delete objects past expires_at"
+      },
+      "no": "Persist immutable large objects for pastebin."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "cdn",
+      "o": "r",
+      "l": "Call CDN",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "cdn",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "svc",
+      "l": "Call Paste Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "cache",
+      "o": "rw",
+      "l": "Lookup / update hot state",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "svc",
+      "d": "meta",
+      "o": "rw",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "svc",
+      "d": "s3",
+      "o": "rw",
+      "l": "Read / write state",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/pastes",
+      "request": "{ \"body\": \"hello\", \"expiresInSeconds\": 3600 }",
+      "response": "201 { \"pasteId\": \"abc123\", \"url\": \"https://paste/abc123\" }",
+      "statusCodes": "201, 400, 413",
+      "auth": false,
+      "note": "Validate size and atomically publish metadata after body storage; clean up orphaned objects."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/pastes/{key}",
+      "request": "No request body.",
+      "response": "200 text/plain: hello",
+      "statusCodes": "200, 404, 410",
+      "auth": false,
+      "idempotent": true,
+      "note": "Cache TTL and CDN behavior must respect expires_at; physical deletion may run later."
+    }
+  ],
+  "entities": [
+    {
+      "name": "Paste",
+      "fields": "paste_id: string PK\nobject_key: string?\ninline_body: string?\ncreated_at: timestamp\nexpires_at: timestamp?\nsize_bytes: int64",
+      "storeNodeId": "meta"
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "overview": "Sale page is static on the CDN. Gateway rate-limits per user. Buy requests DECR a Redis stock counter (Lua: only if > 0); winners get a token and an order message goes to a queue; workers create orders in SQL. Unpaid after 10 min → INCR stock back.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative burst: 1M requests in 10 seconds for 10K units.",
+      "calculation": "1,000,000 / 10 = 100K requests/s; only 10K requests can win stock.",
+      "result": "Reject or queue excess demand before durable order creation.",
+      "implication": "Serve the sale page through CDN; use atomic admission and bounded queue consumers rather than a DB write for every click."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for e-commerce flash sale.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Sale page is static",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    },
+    {
+      "nodeId": "gw",
+      "purpose": "Per-user rate limit rejects excess early",
+      "rationale": "Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work."
+    },
+    {
+      "nodeId": "sale",
+      "purpose": "Lua: DECR stock only if > 0, so we never oversell",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "redis",
+      "purpose": "Serve derived or transient hot state for e-commerce flash sale.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for e-commerce flash sale.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "orders",
+      "purpose": "Execute background work with bounded concurrency for e-commerce flash sale.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for e-commerce flash sale.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "sweeper",
+      "purpose": "Release stock (INCR) after a 10 min payment timeout",
+      "rationale": "Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "PurchaseReservation",
+      "purpose": "Exclusive admission to one unit of stock.",
+      "accessPatterns": [
+        "Atomically claim an available unit; redeem or release by owner and lease version."
+      ],
+      "constraints": [
+        "Check availability and decrement in one Lua operation; a release is idempotent and cannot resurrect sold stock."
+      ],
+      "relationships": []
+    },
+    {
+      "entityName": "Order",
+      "purpose": "Durable order and payment state.",
+      "accessPatterns": ["Create by reservation token; transition once to paid or expired."],
+      "constraints": [
+        "UNIQUE(token_id) dedups queue deliveries; stock compensation follows an atomic order-state transition."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Reserve one unit and start asynchronous checkout.",
+      "rationale": "Dedup requestId, enforce one purchase per policy, and return sold-out/admission responses explicitly."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Shoppers",
+      "explanation": "In Design, add Mobile Client and name it “Shoppers”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for e-commerce flash sale. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 1 of the HLD; its callers are Shoppers. Sale page is static Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Gateway",
+      "explanation": "In Design, add API Gateway and name it “Gateway”. Place it in column 2, row 2 of the HLD; its callers are Shoppers. Per-user rate limit rejects excess early Keep business invariants in the owning service; reject malformed or excessive traffic before expensive work. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["gw"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Sale Service",
+      "explanation": "In Design, add Service and name it “Sale Service”. Place it in column 3, row 1 of the HLD; its callers are Gateway. Lua: DECR stock only if > 0, so we never oversell Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sale"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Stock counter",
+      "explanation": "In Design, add Cache and name it “Stock counter”. Place it in column 4, row 1 of the HLD; its callers are Sale Service, Unpaid sweeper. Serve derived or transient hot state for e-commerce flash sale. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["redis"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["PurchaseReservation"]
+    },
+    {
+      "title": "Orders",
+      "explanation": "In Design, add Message Queue and name it “Orders”. Place it in column 4, row 2 of the HLD; its callers are Sale Service. Buffer independently retryable asynchronous work for e-commerce flash sale. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Order workers",
+      "explanation": "In Design, add Worker and name it “Order workers”. Place it in column 5, row 1 of the HLD; its callers are Orders. Execute background work with bounded concurrency for e-commerce flash sale. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["orders"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Orders DB",
+      "explanation": "In Design, add SQL Database and name it “Orders DB”. Place it in column 6, row 1 of the HLD; its callers are Order workers, Unpaid sweeper. Store authoritative records with transactional constraints for e-commerce flash sale. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": ["Order"]
+    },
+    {
+      "title": "Unpaid sweeper",
+      "explanation": "In Design, add Scheduler and name it “Unpaid sweeper”. Place it in the leftmost caller/background lane. Release stock (INCR) after a 10 min payment timeout Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sweeper"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Reserve stock and create an order",
+      "steps": [
+        {
+          "title": "Shoppers → Gateway → Sale Service → Stock counter",
+          "explanation": "Dedup the request and atomically check/decrement positive stock with a fenced reservation token.",
+          "nodeIds": ["client", "gw", "sale", "redis"],
+          "edgeIds": ["e2", "e3", "e4"]
+        },
+        {
+          "title": "Sale Service → Orders → Order workers → Orders DB",
+          "explanation": "Publish durably or reconcile accepted reservations, then create an order once per token.",
+          "nodeIds": ["sale", "q", "orders", "db"],
+          "edgeIds": ["e5", "e6", "e7"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Release unpaid reservations",
+      "steps": [
+        {
+          "title": "Unpaid sweeper → Orders DB",
+          "explanation": "Conditionally transition only an unpaid expired order to EXPIRED.",
+          "nodeIds": ["sweeper", "db"],
+          "edgeIds": ["e8"]
+        },
+        {
+          "title": "Unpaid sweeper → Stock counter",
+          "explanation": "Release the matching reservation version exactly once; never increment stock for a paid order.",
+          "nodeIds": ["sweeper", "redis"],
+          "edgeIds": ["e9"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Reservation succeeds but enqueue or order creation fails",
+      "handling": "Record an outbox or durable reservation reconciliation marker; retry with the same token. Release an expired unpaid token only after a fenced, idempotent order transition.",
+      "nodeIds": ["redis", "orders", "db"]
+    }
+  ],
+  "alternatives": "Use an atomic stock counter for fast admission with robust reservation reconciliation. Use preallocated purchase tokens and a waiting room for bounded inventory and fair admission, accepting queued responses.",
+  "sectionApplicability": {}
+}

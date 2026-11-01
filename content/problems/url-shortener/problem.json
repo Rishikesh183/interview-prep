@@ -37,5 +37,5 @@
     "Read path optimized with caching",
     "Choice of datastore justified by access pattern (key lookups)"
   ],
-  "prerequisites": ["id-generation", "caching-strategies", "load-balancing"]
+  "prerequisites": ["id-generation", "caching-strategies", "load-balancing", "cache-stampede"]
 }

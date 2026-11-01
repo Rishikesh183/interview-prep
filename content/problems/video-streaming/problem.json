@@ -46,5 +46,11 @@
     "Adaptive streaming",
     "Storage layout"
   ],
-  "prerequisites": ["object-storage-blobs", "cdn", "message-queues-vs-streams"]
+  "prerequisites": [
+    "object-storage-blobs",
+    "cdn",
+    "message-queues-vs-streams",
+    "backpressure-load-shedding",
+    "transactional-outbox"
+  ]
 }

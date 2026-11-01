@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "overview": "Selecting seats does SET seat:{show}:{seat} user NX EX 600 in Redis (atomic, auto-expiring hold). Checkout calls the payment provider with an idempotency key; on success a SQL transaction inserts bookings with UNIQUE(show_id, seat_id) as the final guard against double booking.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative opening: 100K clients competing for 1K seats.",
+      "calculation": "100,000 / 1,000 = 100 contenders per seat on average, with skew.",
+      "result": "Popular seats create contention even when total database throughput looks sufficient.",
+      "implication": "Use admission/waiting rooms, short hold TTLs and authoritative uniqueness constraints."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for ticket booking (bookmyshow).",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Seat maps cached briefly",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for ticket booking (bookmyshow).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "rl",
+      "purpose": "Make the admission decision before protected work for ticket booking (bookmyshow).",
+      "rationale": "Share per-subject state and update atomically; define 429/retry responses and outage behavior."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Holds via SETNX with TTL 600s; releases on expiry",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "redis",
+      "purpose": "SET NX EX — atomic lock per seat",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "UNIQUE(show_id, seat_id) prevents double booking",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "pay",
+      "purpose": "External system boundary for ticket booking (bookmyshow).",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for ticket booking (bookmyshow).",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "mail",
+      "purpose": "Execute background work with bounded concurrency for ticket booking (bookmyshow).",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Seat",
+      "purpose": "Authoritative seat ownership for a show.",
+      "accessPatterns": ["Check availability; hold and confirm selected seats."],
+      "constraints": [
+        "A serializable transaction/row lock and unique seat booking are the final guard against double booking."
+      ],
+      "relationships": [
+        "SeatHold covers show_id/seat_id rows; SQL retains authoritative confirmed ownership."
+      ]
+    },
+    {
+      "entityName": "SeatHold",
+      "purpose": "Temporary exclusive seat selection.",
+      "accessPatterns": ["Claim all requested seats; renew, redeem or release by owner/version."],
+      "constraints": [
+        "Redis NX is per key: multi-seat holds need one atomic same-shard operation or rollback. Expiry does not authorize a late payment to steal a newly held seat."
+      ],
+      "relationships": [
+        "show_id and seat_ids reference Seat; owner, version and expiry must still match at confirmation."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Hold all selected seats for a bounded time.",
+      "rationale": "The hold must be all-or-nothing and tied to the authenticated owner."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Confirm a valid hold and payment.",
+      "rationale": "Use provider idempotency and a durable booking state machine; compensate an authorization if the hold expired before confirmation."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "App",
+      "explanation": "In Design, add Mobile Client and name it “App”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for ticket booking (bookmyshow). Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 1 of the HLD; its callers are App. Seat maps cached briefly Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 2 of the HLD; its callers are App. Distribute incoming connections across healthy instances for ticket booking (bookmyshow). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Rate limiter",
+      "explanation": "In Design, add Rate Limiter and name it “Rate limiter”. Place it in column 3, row 1 of the HLD; its callers are LB. Make the admission decision before protected work for ticket booking (bookmyshow). Share per-subject state and update atomically; define 429/retry responses and outage behavior. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["rl"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Booking Service",
+      "explanation": "In Design, add Service and name it “Booking Service”. Place it in column 4, row 1 of the HLD; its callers are Rate limiter. Holds via SETNX with TTL 600s; releases on expiry Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e4"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Seat holds (Redis)",
+      "explanation": "In Design, add Cache and name it “Seat holds (Redis)”. Place it in column 5, row 1 of the HLD; its callers are Booking Service. SET NX EX — atomic lock per seat Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["redis"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["SeatHold"]
+    },
+    {
+      "title": "Bookings DB",
+      "explanation": "In Design, add SQL Database and name it “Bookings DB”. Place it in column 5, row 2 of the HLD; its callers are Booking Service. UNIQUE(show_id, seat_id) prevents double booking Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": ["Seat"]
+    },
+    {
+      "title": "Payment gateway",
+      "explanation": "In Design, add External Service and name it “Payment gateway”. Place it in column 5, row 3 of the HLD; its callers are Booking Service. External system boundary for ticket booking (bookmyshow). Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["pay"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Booking events",
+      "explanation": "In Design, add Message Queue and name it “Booking events”. Place it in column 5, row 4 of the HLD; its callers are Booking Service. Buffer independently retryable asynchronous work for ticket booking (bookmyshow). Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Confirmation sender",
+      "explanation": "In Design, add Worker and name it “Confirmation sender”. Place it in column 6, row 1 of the HLD; its callers are Booking events. Execute background work with bounded concurrency for ticket booking (bookmyshow). Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["mail"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Hold selected seats",
+      "steps": [
+        {
+          "title": "App → LB → Rate limiter → Booking Service → Seat holds (Redis)",
+          "explanation": "Rate-limit demand and atomically acquire all selected seats for the owner and hold version.",
+          "nodeIds": ["client", "lb", "rl", "svc", "redis"],
+          "edgeIds": ["e2", "e3", "e4", "e5"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Pay and confirm",
+      "steps": [
+        {
+          "title": "Booking Service → Seat holds (Redis)",
+          "explanation": "Recheck current hold ownership and expiry.",
+          "nodeIds": ["svc", "redis"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "Booking Service → Payment gateway",
+          "explanation": "Authorize payment with a stable checkout idempotency key.",
+          "nodeIds": ["svc", "pay"],
+          "edgeIds": ["e7"]
+        },
+        {
+          "title": "Booking Service → Bookings DB",
+          "explanation": "Confirm under seat uniqueness constraints; void/refund if the hold became invalid.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e6"]
+        },
+        {
+          "title": "Booking Service → Booking events → Confirmation sender",
+          "explanation": "Send confirmation only after committed booking state.",
+          "nodeIds": ["svc", "q", "mail"],
+          "edgeIds": ["e8", "e9"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Payment completes after the hold expires",
+      "handling": "Recheck ownership and expiry transactionally before confirmation. If another user owns the seat, void/refund the first payment idempotently instead of double booking.",
+      "nodeIds": ["redis", "db", "mail"]
+    }
+  ],
+  "alternatives": "Use SQL row locks when one authoritative seat-state transaction handles contention. Use Redis holds plus SQL uniqueness for heavier admission, accepting a fenced cross-store booking/payment state machine.",
+  "sectionApplicability": {}
+}

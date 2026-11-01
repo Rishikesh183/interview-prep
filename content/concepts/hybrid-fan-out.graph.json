@@ -1,0 +1,93 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "post",
+      "t": "service",
+      "l": "Post Service + policy",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "events",
+      "t": "event_stream",
+      "l": "Durable publication log",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "worker",
+      "t": "worker",
+      "l": "Normal-author fan-out",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "timeline",
+      "t": "cache",
+      "l": "Pushed timeline IDs",
+      "x": 840,
+      "y": 0
+    },
+    {
+      "i": "authors",
+      "t": "nosql_kv",
+      "l": "Author post index",
+      "x": 280,
+      "y": 220
+    },
+    {
+      "i": "feed",
+      "t": "service",
+      "l": "Feed Service / merge",
+      "x": 560,
+      "y": 220
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "post",
+      "d": "events",
+      "l": "Commit publication intent",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e2",
+      "s": "events",
+      "d": "worker",
+      "l": "Push eligible normal authors",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e3",
+      "s": "worker",
+      "d": "timeline",
+      "l": "Materialize follower entries",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "post",
+      "d": "authors",
+      "l": "Store all authoritative posts",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "feed",
+      "d": "timeline",
+      "l": "Read pushed page",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "feed",
+      "d": "authors",
+      "l": "Merge pull-mode followees",
+      "h": "r>l"
+    }
+  ]
+}

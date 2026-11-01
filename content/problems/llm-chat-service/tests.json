@@ -20,16 +20,42 @@
   },
   {
     "id": "gpu-queue",
-    "title": "Inference requests are queued for GPU workers",
+    "title": "GPU work is buffered or bounded by explicit admission control",
     "kind": "core",
     "weight": 1,
     "check": {
-      "pathExists": {
-        "from": "@queue",
-        "to": ["worker", "service"]
-      }
+      "anyOf": [
+        {
+          "pathExists": {
+            "from": "@queue",
+            "to": ["worker", "service"]
+          }
+        },
+        {
+          "allOf": [
+            {
+              "pathExists": {
+                "from": "service",
+                "to": "worker"
+              }
+            },
+            {
+              "textMentions": {
+                "pattern": "reject.*overload|overload.*429"
+              }
+            },
+            {
+              "apiMatch": {
+                "path": "message|chat|completion",
+                "method": "POST",
+                "rateLimited": true
+              }
+            }
+          ]
+        }
+      ]
     },
-    "failHint": "Requests arrive faster than GPUs can serve them. What holds them?"
+    "failHint": "When inference capacity is full, what queues work or rejects it with a bounded retry response?"
   },
   {
     "id": "gpu",

@@ -6,34 +6,36 @@
       "t": "web_client",
       "x": 0,
       "y": 0,
-      "l": "Browser"
+      "l": "Browser",
+      "no": "User-facing caller for url shortener."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "l": "LB",
       "c": {
         "algorithm": "least-conn"
-      }
+      },
+      "no": "Distribute incoming connections across healthy instances for url shortener."
     },
     {
       "i": "svc",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "URL Service",
       "c": {
         "instancesMin": 3,
         "instancesMax": 20
       },
-      "no": "Base62-encodes IDs; returns 302 so we can add analytics later"
+      "no": "Base62 range-counter allocation; return 302. Codes are only fixed to seven characters within the chosen namespace capacity; use a defined permutation/randomization policy when guessability matters."
     },
     {
       "i": "idgen",
       "t": "id_generator",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "c": {
         "strategy": "base62-counter"
@@ -43,8 +45,8 @@
     {
       "i": "cache",
       "t": "cache",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Redis",
       "c": {
         "strategy": "cache-aside",
@@ -56,12 +58,14 @@
     {
       "i": "db",
       "t": "nosql_kv",
-      "x": 780,
-      "y": 260,
+      "x": 840,
+      "y": 360,
       "l": "URL Store",
       "c": {
-        "partitionKey": "code"
-      }
+        "partitionKey": "code",
+        "consistency": "strong"
+      },
+      "no": "Store partitioned point-lookup state for url shortener."
     }
   ],
   "e": [
@@ -69,12 +73,14 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "svc",
+      "l": "Call URL Service",
       "h": "r>l"
     },
     {
@@ -90,6 +96,7 @@
       "s": "svc",
       "d": "cache",
       "o": "rw",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -107,27 +114,32 @@
       "ownerNodeId": "svc",
       "method": "POST",
       "path": "/v1/urls",
-      "auth": true,
-      "request": "{ longUrl, alias?, expiresAt? }",
-      "response": "{ code, shortUrl }",
+      "request": "{ \"longUrl\": \"https://example.com/article\", \"alias\": \"article\", \"expiresAt\": \"2027-01-01T00:00:00Z\" }",
+      "response": "201 { \"code\": \"article\", \"shortUrl\": \"https://sho.rt/article\" }",
       "statusCodes": "201, 400, 409",
+      "auth": false,
       "idempotent": false,
-      "rateLimited": true
+      "rateLimited": true,
+      "note": "Validate the URL scheme; reserve the code atomically. A duplicate alias is a conflict, not an overwrite."
     },
     {
       "id": "a2",
       "ownerNodeId": "svc",
       "method": "GET",
       "path": "/{code}",
+      "request": "No request body; code is a path parameter.",
+      "response": "302 Location: https://example.com/article",
+      "statusCodes": "302, 404, 410",
       "auth": false,
-      "response": "302 Location: longUrl",
-      "statusCodes": "302, 404, 410"
+      "idempotent": true,
+      "note": "Cache-aside lookup; 302 keeps expiry policy under server control. Bound cache TTL by expires_at."
     }
   ],
   "entities": [
     {
       "name": "UrlMapping",
-      "fields": "code (PK), long_url, created_at, expires_at, owner_id"
+      "fields": "code: string PK\nlong_url: string\ncreated_at: timestamp\nexpires_at: timestamp?",
+      "storeNodeId": "db"
     }
   ]
 }

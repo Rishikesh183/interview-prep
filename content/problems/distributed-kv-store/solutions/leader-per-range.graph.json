@@ -1,0 +1,123 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Clients",
+      "no": "User-facing caller for distributed kv store."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for distributed kv store."
+    },
+    {
+      "i": "coord",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Range routers",
+      "no": "Route ordered key ranges to their Raft leader. Writes commit after a majority quorum; reads use leader leases or ReadIndex. Split hot ranges and retry stale routing metadata."
+    },
+    {
+      "i": "store",
+      "t": "nosql_kv",
+      "x": 840,
+      "y": 0,
+      "l": "Raft range replicas",
+      "c": {
+        "partitionKey": "range_id",
+        "consistency": "strong"
+      },
+      "no": "Each range has three replicas and versioned committed log entries. A new leader repairs followers by log replication and snapshots."
+    },
+    {
+      "i": "raft",
+      "t": "coordination",
+      "x": 840,
+      "y": 180,
+      "l": "Range directory",
+      "c": {
+        "purpose": "config"
+      },
+      "no": "Maintain range boundaries, leader epochs and replica membership; fence obsolete leaders."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "coord",
+      "l": "Call Range routers",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "coord",
+      "d": "store",
+      "o": "rw",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "coord",
+      "d": "raft",
+      "l": "Resolve range leader",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "store",
+      "d": "raft",
+      "l": "Membership and leader epochs",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "coord",
+      "method": "GET",
+      "path": "/v1/kv/{key}",
+      "request": "No request body; optional consistency and version context.",
+      "response": "200 { \"versions\": [{ \"value\": \"...\", \"context\": \"v8\" }] }",
+      "statusCodes": "200, 404, 503",
+      "auth": true,
+      "idempotent": true,
+      "note": "Return causal context for Dynamo reconciliation, or a committed leader-read version for range consensus."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "coord",
+      "method": "PUT",
+      "path": "/v1/kv/{key}",
+      "request": "{ \"value\": \"...\", \"context\": \"v8\" }",
+      "response": "200 { \"context\": \"v9\" }",
+      "statusCodes": "200, 409, 503",
+      "auth": true,
+      "idempotent": true,
+      "note": "Acknowledge only after the required replica quorum; retry using the same operation ID or version precondition."
+    }
+  ],
+  "entities": [
+    {
+      "name": "KeyVersion",
+      "fields": "key: bytes partition key\nvalue: bytes\nversion: vector_clock_or_log_index\ntombstone: boolean",
+      "storeNodeId": "store"
+    }
+  ]
+}

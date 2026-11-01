@@ -3,6 +3,7 @@ import { ApiEndpointSchema, HttpMethodSchema, PaginationSchema } from "./api";
 import { EstimationInputSchema, EstimationOutputSchema } from "./estimation";
 import { EdgeModeSchema, GraphSchema } from "./graph";
 import { StoredGraphSchema } from "./stored";
+import { WalkthroughSchema } from "./walkthrough";
 
 export const DifficultySchema = z.enum(["easy", "medium", "hard"]);
 export type Difficulty = z.infer<typeof DifficultySchema>;
@@ -192,6 +193,7 @@ export const ReferenceApproachSchema = z.object({
   graph: GraphSchema.optional(),
   apis: z.array(ApiEndpointSchema).default([]),
   entities: z.array(EntitySchema).default([]),
+  walkthrough: WalkthroughSchema.optional(),
 });
 export type ReferenceApproach = z.infer<typeof ReferenceApproachSchema>;
 

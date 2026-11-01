@@ -29,5 +29,11 @@
     "Eviction policies"
   ],
   "rubricFocus": ["Partitioning scheme", "Membership & failure detection", "Eviction policy"],
-  "prerequisites": ["consistent-hashing", "caching-strategies", "replication"]
+  "prerequisites": [
+    "consistent-hashing",
+    "caching-strategies",
+    "replication",
+    "cache-stampede",
+    "hot-partitions"
+  ]
 }

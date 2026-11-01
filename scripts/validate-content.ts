@@ -3,7 +3,7 @@ import { validateConcepts } from "@/lib/content/conceptCards";
 import { readProblemDirs } from "@/lib/problems/load";
 import { validateContent } from "@/lib/problems/validate";
 
-const { problems, errors } = validateContent(readProblemDirs());
+const { problems, errors } = validateContent(readProblemDirs(), { requireWalkthroughs: true });
 const cards = validateConcepts(readConceptFiles());
 errors.push(...cards.errors);
 
@@ -19,7 +19,7 @@ const solutions = problems.flatMap((p) => p.references);
 const diagrams = solutions.filter((s) => s.graph).length;
 console.log(
   `✓ ${problems.length} problems, ${tests.length} tests (${core} core), ` +
-    `${solutions.length} solutions (${diagrams} with diagrams) — every diagram passes its core tests.`,
+    `${solutions.length} solutions (${diagrams} with diagrams, ${solutions.filter((s) => s.walkthrough).length} guided walkthroughs) — every diagram passes its core tests.`,
 );
 console.log(
   `✓ ${cards.concepts.length} concept cards (${cards.concepts.filter((c) => c.graph).length} with diagrams) cover every catalog component.`,

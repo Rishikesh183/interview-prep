@@ -40,5 +40,12 @@
     "Preferences and rate limiting per user"
   ],
   "rubricFocus": ["Channel isolation", "Retry/DLQ strategy", "Deduplication"],
-  "prerequisites": ["message-queues-vs-streams", "idempotency", "fault-tolerance-retries"]
+  "prerequisites": [
+    "message-queues-vs-streams",
+    "idempotency",
+    "fault-tolerance-retries",
+    "fan-out-on-write",
+    "transactional-outbox",
+    "backpressure-load-shedding"
+  ]
 }

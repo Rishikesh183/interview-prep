@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "overview": "One leader (elected via ZooKeeper) scans a min-heap/ordered index of next_run and dispatches; standby takes over on failure.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative due load: 1M jobs over one minute.",
+      "calculation": "1,000,000 / 60 ≈ 16,667 dispatches/s.",
+      "result": "A one-minute bucket may need multiple leased partitions and many workers.",
+      "implication": "Measure due-job skew; bounded queue dispatch protects workers when many jobs share the same boundary."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for distributed job scheduler.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for distributed job scheduler.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "api",
+      "purpose": "Implement the owned APIs and coordinate state transitions for distributed job scheduler.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Indexed by (partition, next_run minute bucket)",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "sched",
+      "purpose": "One fenced leader scans next_run using a min-heap backed by an ordered database index. A standby resumes from durable dispatch markers after leader failure.",
+      "rationale": "Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch."
+    },
+    {
+      "nodeId": "etcd",
+      "purpose": "Elect one scheduler; every dispatch carries a fencing epoch to reject an obsolete leader.",
+      "rationale": "Use a quorum and fencing; possession of an expired lease must never authorize a stale writer."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for distributed job scheduler.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "workers",
+      "purpose": "At-least-once; handlers must be idempotent; retry with backoff; visibility timeout covers crashes",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Job",
+      "purpose": "Durable schedule definition and next due time.",
+      "accessPatterns": [
+        "Create/update a schedule; scan due jobs by time bucket or ordered index."
+      ],
+      "constraints": ["Lease scheduler partitions or elect one leader; fence stale owners."],
+      "relationships": [
+        "One Job produces many Execution records; edits do not rewrite completed executions."
+      ]
+    },
+    {
+      "entityName": "Execution",
+      "purpose": "One scheduled invocation and its retry state.",
+      "accessPatterns": ["Claim a queued execution; persist completion; retry by execution_id."],
+      "constraints": [
+        "UNIQUE(job_id, scheduled_at) prevents duplicate dispatch records; side effects still need idempotency."
+      ],
+      "relationships": [
+        "job_id references Job; (job_id, scheduled_at) identifies one invocation across retries."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Register a durable scheduled job.",
+      "rationale": "Validate timezone and missed-run policy; execution identity is job_id plus scheduled_at."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Inspect execution history.",
+      "rationale": "Separate the schedule from actual attempts so retries are observable."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Job owners",
+      "explanation": "In Design, add Web Client and name it “Job owners”. Place it in the leftmost caller/background lane. User-facing caller for distributed job scheduler. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Job owners. Distribute incoming connections across healthy instances for distributed job scheduler. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Job API",
+      "explanation": "In Design, add Service and name it “Job API”. Place it in column 3, row 1 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for distributed job scheduler. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["api"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Jobs",
+      "explanation": "In Design, add SQL Database and name it “Jobs”. Place it in column 4, row 1 of the HLD; its callers are Job API, Leader scheduler + standby, Workers. Indexed by (partition, next_run minute bucket) Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["Job", "Execution"]
+    },
+    {
+      "title": "Leader scheduler + standby",
+      "explanation": "In Design, add Scheduler and name it “Leader scheduler + standby”. Place it in the leftmost caller/background lane. One fenced leader scans next_run using a min-heap backed by an ordered database index. A standby resumes from durable dispatch markers after leader failure. Persist schedule/progress and fence partition or leader ownership so failover does not create uncontrolled duplicate dispatch. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sched"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Leader lease",
+      "explanation": "In Design, add Coordination and name it “Leader lease”. Place it in column 2, row 2 of the HLD; its callers are Leader scheduler + standby. Elect one scheduler; every dispatch carries a fencing epoch to reject an obsolete leader. Use a quorum and fencing; possession of an expired lease must never authorize a stale writer. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["etcd"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Dispatch queue",
+      "explanation": "In Design, add Message Queue and name it “Dispatch queue”. Place it in column 2, row 3 of the HLD; its callers are Leader scheduler + standby. Buffer independently retryable asynchronous work for distributed job scheduler. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Workers",
+      "explanation": "In Design, add Worker and name it “Workers”. Place it in column 3, row 2 of the HLD; its callers are Dispatch queue. At-least-once; handlers must be idempotent; retry with backoff; visibility timeout covers crashes Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["workers"],
+      "edgeIds": ["e7", "e8"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Leader scans and dispatches",
+      "steps": [
+        {
+          "title": "Job owners → LB → Job API → Jobs",
+          "explanation": "Persist the schedule before it can become due.",
+          "nodeIds": ["client", "lb", "api", "db"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Leader scheduler + standby → Leader lease",
+          "explanation": "Acquire the single leader lease with a fencing epoch.",
+          "nodeIds": ["sched", "etcd"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Leader scheduler + standby → Jobs",
+          "explanation": "Read next_run_at in index order and persist dispatch markers.",
+          "nodeIds": ["sched", "db"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "Leader scheduler + standby → Dispatch queue → Workers → Jobs",
+          "explanation": "Dispatch bounded batches; record execution results idempotently.",
+          "nodeIds": ["sched", "q", "workers", "db"],
+          "edgeIds": ["e6", "e7", "e8"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Standby takes over",
+      "steps": [
+        {
+          "title": "Leader scheduler + standby → Leader lease",
+          "explanation": "A standby acquires a new epoch only after the old lease expires.",
+          "nodeIds": ["sched", "etcd"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Leader scheduler + standby → Jobs",
+          "explanation": "Rebuild the min-heap from durable due jobs; dedup (job_id, scheduled_at) dispatches.",
+          "nodeIds": ["sched", "db"],
+          "edgeIds": ["e5"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A worker crashes after performing the external side effect",
+      "handling": "The visibility timeout redelivers the same execution_id. The target must accept an idempotency key; the scheduler cannot promise exactly-once arbitrary side effects.",
+      "nodeIds": ["db", "workers"]
+    }
+  ],
+  "alternatives": "Use one fenced leader for modest due-job throughput and simpler recovery. Use leased time-bucket partitions for heavier bursts, accepting partition rebalancing and lease complexity.",
+  "sectionApplicability": {}
+}

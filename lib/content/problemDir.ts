@@ -7,6 +7,7 @@ import {
   SolutionFrontmatterSchema,
   SolutionGraphFileSchema,
   TestsFileSchema,
+  WalkthroughSchema,
   type Problem,
   type ReferenceApproach,
 } from "@/lib/schema";
@@ -81,6 +82,16 @@ function parseSolutions(raw: RawProblemDir): Parsed<ReferenceApproach[]> {
       const { apis, entities, ...stored } = g.value;
       diagram = { graph: fromStored(stored), apis, entities };
     }
+    const walkthroughFile = `solutions/${slug}.walkthrough.json`;
+    let walkthrough: ReferenceApproach["walkthrough"];
+    if (walkthroughFile in raw.files) {
+      const result = parseJson(raw, walkthroughFile, WalkthroughSchema);
+      if (!result.ok) {
+        errors.push(...result.errors);
+        continue;
+      }
+      walkthrough = result.value;
+    }
     out.push({
       id: slug,
       name: fm.data.title,
@@ -89,6 +100,7 @@ function parseSolutions(raw: RawProblemDir): Parsed<ReferenceApproach[]> {
       body: content.trim(),
       order: fm.data.order,
       ...diagram,
+      walkthrough,
     });
   }
 
@@ -96,6 +108,10 @@ function parseSolutions(raw: RawProblemDir): Parsed<ReferenceApproach[]> {
     (f) => f.endsWith(".graph.json") && !(f.replace(/\.graph\.json$/, ".md") in raw.files),
   );
   errors.push(...orphans.map((f) => `${raw.dir}/${f}: graph without a matching .md`));
+  for (const file of Object.keys(raw.files).filter((f) => f.endsWith(".walkthrough.json"))) {
+    if (!(file.replace(/\.walkthrough\.json$/, ".md") in raw.files))
+      errors.push(`${raw.dir}/${file}: walkthrough without a matching .md`);
+  }
   if (errors.length) return { ok: false, errors };
   return {
     ok: true,

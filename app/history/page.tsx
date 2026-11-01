@@ -13,7 +13,8 @@ export default function HistoryPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">History</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Every attempt is saved in this browser. Open one to continue or review it.
+            Attempt history stays on this device and is never synced to the cloud. Open an attempt
+            to continue or review it. Clearing this browser&apos;s site data removes this history.
           </p>
         </div>
         <HistoryTable problems={problemSummaries()} />

@@ -2,7 +2,7 @@
 
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAttempts } from "@/components/problems/useAttempts";
+import { useHasSubmittedProblem } from "@/components/problems/useAttempts";
 import type { Problem } from "@/lib/schema";
 import { useAttemptStore } from "@/store/attempt";
 
@@ -13,11 +13,10 @@ import { useAttemptStore } from "@/store/attempt";
 /** `undefined` while the attempt history is still loading (so the gate doesn't flash "locked"). */
 export function useSolutionsUnlocked(problemId: string): boolean | undefined {
   const meta = useAttemptStore((s) => s.meta);
-  const attempts = useAttempts();
+  const submittedBefore = useHasSubmittedProblem(problemId);
   if (!meta) return false;
   if (meta.status !== "in_progress" || meta.solutionViewedBeforeSubmit) return true;
-  if (attempts === undefined) return undefined;
-  return attempts.some((a) => a.problemId === problemId && a.status !== "in_progress");
+  return submittedBefore;
 }
 
 export function SolutionsGate({

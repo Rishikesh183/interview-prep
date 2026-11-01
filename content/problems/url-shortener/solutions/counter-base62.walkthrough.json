@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "overview": "Allocate disjoint numeric ID ranges to URL servers and base62-encode IDs into short codes. A seven-character namespace holds 62^7 codes; arbitrary 64-bit values need up to eleven characters. Store mappings durably by code. Redirects check Redis first, then fall back to the mapping store, with expiry checked on both paths.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "100M new mappings/month; 100 reads per write; 500 B/mapping.",
+      "calculation": "100,000,000 / (30 × 86,400) ≈ 39 writes/s; reads ≈ 3,900/s; 3× peak ≈ 11,700 reads/s.",
+      "result": "Five-year raw mapping storage ≈ 3 TB, before replication and indexes.",
+      "implication": "Optimize redirects with a shared cache; scale stateless services and replicate durable mappings."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for url shortener.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for url shortener.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Base62 range-counter allocation; return 302. Codes are only fixed to seven characters within the chosen namespace capacity; use a defined permutation/randomization policy when guessability matters.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "idgen",
+      "purpose": "Hands out ID ranges of 1000 per server",
+      "rationale": "Document bit width, time ordering, clock behavior, sequence limits and namespace reuse."
+    },
+    {
+      "nodeId": "cache",
+      "purpose": "Hot mappings, ~20% of daily reads",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store partitioned point-lookup state for url shortener.",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "UrlMapping",
+      "purpose": "Durable mapping from a short code to its destination.",
+      "accessPatterns": ["Insert a unique code; point-read by code on redirect."],
+      "constraints": [
+        "Use a conditional insert or UNIQUE(code); check expiry before returning or caching a destination."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Create a short link, with optional alias and expiry.",
+      "rationale": "Validate the URL scheme; reserve the code atomically. A duplicate alias is a conflict, not an overwrite."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Resolve a short link to a destination.",
+      "rationale": "Cache-aside lookup; 302 keeps expiry policy under server control. Bound cache TTL by expires_at."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Browser",
+      "explanation": "In Design, add Web Client and name it “Browser”. Place it in the leftmost caller/background lane. User-facing caller for url shortener. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Browser. Distribute incoming connections across healthy instances for url shortener. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "URL Service",
+      "explanation": "In Design, add Service and name it “URL Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Base62 range-counter allocation; return 302. Codes are only fixed to seven characters within the chosen namespace capacity; use a defined permutation/randomization policy when guessability matters. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "ID Generator",
+      "explanation": "In Design, add ID Generator and name it “ID Generator”. Place it in column 4, row 1 of the HLD; its callers are URL Service. Hands out ID ranges of 1000 per server Document bit width, time ordering, clock behavior, sequence limits and namespace reuse. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["idgen"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Redis",
+      "explanation": "In Design, add Cache and name it “Redis”. Place it in column 4, row 2 of the HLD; its callers are URL Service. Hot mappings, ~20% of daily reads Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cache"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "URL Store",
+      "explanation": "In Design, add Key-Value Store and name it “URL Store”. Place it in column 4, row 3 of the HLD; its callers are URL Service. Store partitioned point-lookup state for url shortener. Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["UrlMapping"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Create a short link",
+      "steps": [
+        {
+          "title": "Browser → LB → URL Service",
+          "explanation": "Validate the long URL and optional alias/expiry.",
+          "nodeIds": ["client", "lb", "svc"],
+          "edgeIds": ["e1", "e2"]
+        },
+        {
+          "title": "URL Service → ID Generator",
+          "explanation": "Allocate a disjoint numeric range; use a defined permutation/randomization policy if codes must resist guessing.",
+          "nodeIds": ["svc", "idgen"],
+          "edgeIds": ["e3"]
+        },
+        {
+          "title": "URL Service → URL Store",
+          "explanation": "Conditionally insert the mapping before returning 201.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e5"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Redirect: cache hit or miss",
+      "steps": [
+        {
+          "title": "Browser → LB → URL Service → Redis",
+          "explanation": "Look up the code and reject an expired cached mapping. Hit: return 302 immediately.",
+          "nodeIds": ["client", "lb", "svc", "cache"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "URL Service → URL Store",
+          "explanation": "Miss: read the durable mapping; return 404 if absent or 410 if expired.",
+          "nodeIds": ["svc", "db"],
+          "edgeIds": ["e5"]
+        },
+        {
+          "title": "URL Service → Redis",
+          "explanation": "Fill Redis with TTL=min(policy TTL, remaining lifetime), then return the 302 redirect.",
+          "nodeIds": ["svc", "cache"],
+          "edgeIds": ["e4"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Cache is unavailable or a link has expired",
+      "handling": "Read the durable store with a bounded timeout and protect it from a cache-miss stampede. Reject expired mappings even before TTL cleanup runs.",
+      "nodeIds": ["idgen", "cache", "db"]
+    }
+  ],
+  "alternatives": "Use counter ranges when collision-free allocation justifies operating a namespace allocator. Use salted hashing to avoid that allocator, accepting conditional-insert retries and a separate policy for destination deduplication.",
+  "sectionApplicability": {}
+}

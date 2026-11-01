@@ -1,0 +1,276 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "agents",
+      "t": "external_service",
+      "x": 0,
+      "y": 0,
+      "l": "Host agents",
+      "c": {
+        "provider": "push agent on every host"
+      },
+      "no": "External system boundary for metrics & monitoring."
+    },
+    {
+      "i": "users",
+      "t": "web_client",
+      "x": 0,
+      "y": 180,
+      "l": "Dashboards",
+      "no": "User-facing caller for metrics & monitoring."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for metrics & monitoring."
+    },
+    {
+      "i": "collect",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Prometheus scrape shards",
+      "no": "Pull /metrics from discovered targets on a fixed interval. Shard targets by stable hash; two replicas scrape independently and query layer deduplicates replica labels."
+    },
+    {
+      "i": "kafka",
+      "t": "event_stream",
+      "x": 840,
+      "y": 0,
+      "l": "Local write-ahead log",
+      "c": {
+        "topic": "local-wal",
+        "partitionKey": "series_id"
+      },
+      "no": "The append-only WAL belongs to each scrape shard; it buffers local TSDB recovery, not a remote Kafka requirement."
+    },
+    {
+      "i": "flink",
+      "t": "batch_processor",
+      "x": 1120,
+      "y": 0,
+      "l": "Block compactor",
+      "c": {
+        "schedule": "hourly"
+      },
+      "no": "Compact immutable TSDB blocks, downsample older points and apply retention policies."
+    },
+    {
+      "i": "writer",
+      "t": "worker",
+      "x": 1120,
+      "y": 180,
+      "l": "TSDB writers",
+      "no": "Execute background work with bounded concurrency for metrics & monitoring."
+    },
+    {
+      "i": "tsdb",
+      "t": "time_series_db",
+      "x": 1400,
+      "y": 0,
+      "l": "TSDB",
+      "c": {
+        "retention": "15d raw, 1y rolled up"
+      },
+      "no": "Store timestamped series with time-range indexes for metrics & monitoring."
+    },
+    {
+      "i": "alerts",
+      "t": "service",
+      "x": 1400,
+      "y": 180,
+      "l": "Alert evaluator",
+      "no": "Implement the owned APIs and coordinate state transitions for metrics & monitoring."
+    },
+    {
+      "i": "notify",
+      "t": "notification_service",
+      "x": 1680,
+      "y": 0,
+      "l": "Notifier",
+      "c": {
+        "channels": ["email", "sms"]
+      },
+      "no": "Route delivery hints to the chosen channel for metrics & monitoring."
+    },
+    {
+      "i": "pager",
+      "t": "external_service",
+      "x": 1960,
+      "y": 0,
+      "l": "PagerDuty",
+      "no": "External system boundary for metrics & monitoring."
+    },
+    {
+      "i": "query",
+      "t": "service",
+      "x": 560,
+      "y": 180,
+      "l": "Query Service",
+      "no": "Implement the owned APIs and coordinate state transitions for metrics & monitoring."
+    },
+    {
+      "i": "discovery",
+      "t": "service_discovery",
+      "x": 840,
+      "y": 180,
+      "l": "Scrape targets",
+      "no": "Discover live instances and their scrape labels."
+    },
+    {
+      "i": "blocks",
+      "t": "object_storage",
+      "x": 1400,
+      "y": 360,
+      "l": "Historical TSDB blocks",
+      "no": "Persist immutable blocks and downsampled series for long retention."
+    }
+  ],
+  "e": [
+    {
+      "i": "e2",
+      "s": "users",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "collect",
+      "l": "Call Prometheus scrape shards",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "lb",
+      "d": "query",
+      "a": "a1",
+      "l": "Call Query Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "collect",
+      "d": "kafka",
+      "m": "a",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "kafka",
+      "d": "writer",
+      "m": "a",
+      "l": "Consume work",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "kafka",
+      "d": "flink",
+      "m": "a",
+      "l": "Call Block compactor",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "writer",
+      "d": "tsdb",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "flink",
+      "d": "tsdb",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e10",
+      "s": "flink",
+      "d": "alerts",
+      "p": "gRPC",
+      "l": "Call Alert evaluator",
+      "h": "r>l"
+    },
+    {
+      "i": "e11",
+      "s": "alerts",
+      "d": "notify",
+      "l": "Call Notifier",
+      "h": "r>l"
+    },
+    {
+      "i": "e12",
+      "s": "notify",
+      "d": "pager",
+      "l": "Call PagerDuty",
+      "h": "r>l"
+    },
+    {
+      "i": "e13",
+      "s": "query",
+      "d": "tsdb",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e14",
+      "s": "collect",
+      "d": "agents",
+      "l": "Pull /metrics every 15 seconds",
+      "h": "r>l"
+    },
+    {
+      "i": "e15",
+      "s": "collect",
+      "d": "discovery",
+      "l": "Refresh scrape assignments",
+      "h": "r>l"
+    },
+    {
+      "i": "e16",
+      "s": "flink",
+      "d": "blocks",
+      "l": "Publish compacted blocks",
+      "h": "r>l"
+    },
+    {
+      "i": "e17",
+      "s": "query",
+      "d": "blocks",
+      "l": "Query historical blocks",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "query",
+      "method": "GET",
+      "path": "/v1/query",
+      "request": "No request body; ?expr=cpu_usage&start=0&end=60&step=15",
+      "response": "200 { \"series\": [{ \"labels\": {\"host\":\"a\"}, \"points\": [[0,0.5]] }] }",
+      "statusCodes": "200, 400, 429",
+      "auth": true,
+      "idempotent": true,
+      "note": "Apply query cost limits; choose raw or rolled-up resolution based on requested time span."
+    }
+  ],
+  "entities": [
+    {
+      "name": "Sample",
+      "fields": "series_id: hash(metric_name, labels)\ntimestamp: int64 sort key\nvalue: float64",
+      "storeNodeId": "tsdb"
+    }
+  ]
+}

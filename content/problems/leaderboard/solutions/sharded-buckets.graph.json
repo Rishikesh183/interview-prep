@@ -1,0 +1,174 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "Game client",
+      "no": "Mobile caller with intermittent connectivity for real-time leaderboard."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for real-time leaderboard."
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Leaderboard Service",
+      "no": "ZINCRBY on score updates; ZREVRANGE for top 100; ZREVRANK for own rank"
+    },
+    {
+      "i": "redis",
+      "t": "cache",
+      "x": 840,
+      "y": 0,
+      "l": "Score-range sorted-set shards",
+      "c": {
+        "strategy": "write-through",
+        "ttl": "24h",
+        "cluster": true
+      },
+      "no": "Maintain score-range buckets, per-bucket counts and a player-to-bucket directory. Top-N scans highest buckets; rank sums counts above the player bucket."
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 840,
+      "y": 180,
+      "l": "Scores DB",
+      "c": {
+        "replicas": 2
+      },
+      "no": "Source of truth; rebuild ZSETs from here"
+    },
+    {
+      "i": "updates",
+      "t": "event_stream",
+      "x": 840,
+      "y": 360,
+      "l": "Score events",
+      "no": "Partition by player_id for ordered score changes."
+    },
+    {
+      "i": "updater",
+      "t": "worker",
+      "x": 1120,
+      "y": 0,
+      "l": "Bucket movers",
+      "no": "Dedup event IDs, apply versions, and coordinate cross-bucket moves so rank never counts a player twice."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "svc",
+      "l": "Call Leaderboard Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "redis",
+      "o": "rw",
+      "l": "Lookup / update hot state",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "db",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "svc",
+      "d": "updates",
+      "m": "a",
+      "l": "Publish committed score update",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "updates",
+      "d": "updater",
+      "m": "a",
+      "l": "Consume score events",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "updater",
+      "d": "redis",
+      "l": "Update buckets and counts",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "svc",
+      "method": "POST",
+      "path": "/v1/scores",
+      "request": "{ \"board\": \"daily\", \"playerId\": \"u1\", \"delta\": 10, \"eventId\": \"e1\" }",
+      "response": "200 { \"score\": 120, \"version\": 8 }",
+      "statusCodes": "200, 409",
+      "auth": true,
+      "idempotent": true,
+      "note": "Authenticate game servers and dedup eventId; clients must not arbitrarily assign scores."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/leaderboards/{board}/top",
+      "request": "No request body; ?limit=100",
+      "response": "200 { \"players\": [{ \"playerId\": \"u1\", \"rank\": 1, \"score\": 120 }] }",
+      "statusCodes": "200, 400",
+      "auth": false,
+      "idempotent": true,
+      "note": "Read the serving sorted sets; document lag if an asynchronous index is used."
+    },
+    {
+      "id": "a3",
+      "ownerNodeId": "svc",
+      "method": "GET",
+      "path": "/v1/leaderboards/{board}/rank/{playerId}",
+      "request": "No request body.",
+      "response": "200 { \"rank\": 1, \"score\": 120, \"asOfVersion\": 8 }",
+      "statusCodes": "200, 404",
+      "auth": false,
+      "idempotent": true,
+      "note": "A sharded rank needs counts of higher score buckets plus the rank within the player bucket."
+    }
+  ],
+  "entities": [
+    {
+      "name": "PlayerScore",
+      "fields": "board_id: string\nplayer_id: string\nscore: int64\nversion: int64\nPK(board_id, player_id)",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "RankIndex",
+      "fields": "board_id: string\nbucket: string\nplayer_id: string member\nscore: int64 sorted score",
+      "storeNodeId": "redis"
+    }
+  ]
+}

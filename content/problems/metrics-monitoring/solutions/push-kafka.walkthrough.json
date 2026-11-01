@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "overview": "Agents push batches to collectors which write to Kafka; consumers write to a sharded TSDB; a Flink job computes 1-min/1-h rollups; alert evaluator reads recent data from Kafka/stream and notifies via PagerDuty.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative fleet: 10K hosts × 1K series, scraped every 15 s.",
+      "calculation": "10,000 × 1,000 / 15 ≈ 666,667 samples/s.",
+      "result": "15 days at 16 raw bytes/sample ≈ 13.8 TB before compression/replication.",
+      "implication": "Control label cardinality; downsample historical blocks and separate ingestion from expensive queries."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "agents",
+      "purpose": "External system boundary for metrics & monitoring.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "users",
+      "purpose": "User-facing caller for metrics & monitoring.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for metrics & monitoring.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "collect",
+      "purpose": "Implement the owned APIs and coordinate state transitions for metrics & monitoring.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "kafka",
+      "purpose": "Retain ordered events for replayable consumers for metrics & monitoring.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "flink",
+      "purpose": "1-min and 1-h rollups; downsampling for 1-year retention",
+      "rationale": "Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay."
+    },
+    {
+      "nodeId": "writer",
+      "purpose": "Execute background work with bounded concurrency for metrics & monitoring.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "tsdb",
+      "purpose": "Store timestamped series with time-range indexes for metrics & monitoring.",
+      "rationale": "Bound cardinality and retention; prefer downsampled blocks for long-range queries."
+    },
+    {
+      "nodeId": "alerts",
+      "purpose": "Implement the owned APIs and coordinate state transitions for metrics & monitoring.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "notify",
+      "purpose": "Route delivery hints to the chosen channel for metrics & monitoring.",
+      "rationale": "A notification is not the authoritative business record; apply preference policy, retries and deduplication."
+    },
+    {
+      "nodeId": "pager",
+      "purpose": "External system boundary for metrics & monitoring.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "query",
+      "purpose": "Implement the owned APIs and coordinate state transitions for metrics & monitoring.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Sample",
+      "purpose": "Timestamped values indexed by series and time.",
+      "accessPatterns": ["Append samples in batches; range-read matching series."],
+      "constraints": [
+        "Bound label cardinality, dedup HA replicas and define retention/downsampling tiers."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Read time-range series for a dashboard.",
+      "rationale": "Apply query cost limits; choose raw or rolled-up resolution based on requested time span."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Accept bounded batches from push agents.",
+      "rationale": "Acknowledge after WAL/stream append and reject excessive label cardinality."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Host agents",
+      "explanation": "In Design, add External Service and name it “Host agents”. Place it in the leftmost caller/background lane. External system boundary for metrics & monitoring. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["agents"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Dashboards",
+      "explanation": "In Design, add Web Client and name it “Dashboards”. Place it in the leftmost caller/background lane. User-facing caller for metrics & monitoring. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["users"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Host agents, Dashboards. Distribute incoming connections across healthy instances for metrics & monitoring. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1", "e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Collectors",
+      "explanation": "In Design, add Service and name it “Collectors”. Place it in column 3, row 1 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for metrics & monitoring. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["collect"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Metrics stream",
+      "explanation": "In Design, add Event Stream and name it “Metrics stream”. Place it in column 4, row 1 of the HLD; its callers are Collectors. Retain ordered events for replayable consumers for metrics & monitoring. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["kafka"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Rollups",
+      "explanation": "In Design, add Stream Processor and name it “Rollups”. Place it in column 5, row 1 of the HLD; its callers are Metrics stream. 1-min and 1-h rollups; downsampling for 1-year retention Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["flink"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "TSDB writers",
+      "explanation": "In Design, add Worker and name it “TSDB writers”. Place it in column 5, row 2 of the HLD; its callers are Metrics stream. Execute background work with bounded concurrency for metrics & monitoring. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["writer"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "TSDB",
+      "explanation": "In Design, add Time-Series DB and name it “TSDB”. Place it in column 6, row 1 of the HLD; its callers are TSDB writers, Rollups, Query Service. Store timestamped series with time-range indexes for metrics & monitoring. Bound cardinality and retention; prefer downsampled blocks for long-range queries. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["tsdb"],
+      "edgeIds": ["e8", "e9"],
+      "apiIds": [],
+      "entityNames": ["Sample"]
+    },
+    {
+      "title": "Alert evaluator",
+      "explanation": "In Design, add Service and name it “Alert evaluator”. Place it in column 6, row 2 of the HLD; its callers are Rollups. Implement the owned APIs and coordinate state transitions for metrics & monitoring. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["alerts"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Notifier",
+      "explanation": "In Design, add Notification Service and name it “Notifier”. Place it in column 7, row 1 of the HLD; its callers are Alert evaluator. Route delivery hints to the chosen channel for metrics & monitoring. A notification is not the authoritative business record; apply preference policy, retries and deduplication. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["notify"],
+      "edgeIds": ["e11"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "PagerDuty",
+      "explanation": "In Design, add External Service and name it “PagerDuty”. Place it in column 8, row 1 of the HLD; its callers are Notifier. External system boundary for metrics & monitoring. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["pager"],
+      "edgeIds": ["e12"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Query Service",
+      "explanation": "In Design, add Service and name it “Query Service”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for metrics & monitoring. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["query"],
+      "edgeIds": ["e4", "e13"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Push samples and roll up",
+      "steps": [
+        {
+          "title": "Host agents → LB → Collectors → Metrics stream → TSDB writers → TSDB",
+          "explanation": "Validate label cardinality, append durably and batch-write raw samples.",
+          "nodeIds": ["agents", "lb", "collect", "kafka", "writer", "tsdb"],
+          "edgeIds": ["e1", "e3", "e5", "e6", "e8"]
+        },
+        {
+          "title": "Metrics stream → Rollups → TSDB",
+          "explanation": "Compute time-window rollups and retain older data at lower resolution.",
+          "nodeIds": ["kafka", "flink", "tsdb"],
+          "edgeIds": ["e7", "e9"]
+        }
+      ],
+      "apiId": "a2"
+    },
+    {
+      "id": "flow-2",
+      "title": "Query and alert",
+      "steps": [
+        {
+          "title": "Dashboards → LB → Query Service → TSDB",
+          "explanation": "Bound time range, resolution and series count for dashboard queries.",
+          "nodeIds": ["users", "lb", "query", "tsdb"],
+          "edgeIds": ["e2", "e4", "e13"]
+        },
+        {
+          "title": "Rollups → Alert evaluator → Notifier → PagerDuty",
+          "explanation": "Evaluate sustained threshold conditions and deduplicate pages.",
+          "nodeIds": ["flink", "alerts", "notify", "pager"],
+          "edgeIds": ["e10", "e11", "e12"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A target disappears or ingestion backs up",
+      "handling": "Track scrape failures and missing series separately from zero values. Alert on collection health, cap buffers, and expose dropped-sample counters rather than hiding data gaps.",
+      "nodeIds": ["writer"]
+    }
+  ],
+  "alternatives": "Use push collectors and a replayable stream for high ingest rates and short-lived producers. Use pull scraping with local WAL/TSDB for discoverable long-lived targets, adding object blocks and HA query deduplication for global retention.",
+  "sectionApplicability": {}
+}

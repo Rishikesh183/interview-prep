@@ -39,5 +39,11 @@
     "Token-based rate limits"
   ],
   "rubricFocus": ["Streaming transport", "GPU scheduling", "Rate limiting and fairness"],
-  "prerequisites": ["rate-limiting-algorithms", "message-queues-vs-streams", "websockets-realtime"]
+  "prerequisites": [
+    "rate-limiting-algorithms",
+    "message-queues-vs-streams",
+    "websockets-realtime",
+    "backpressure-load-shedding",
+    "hot-partitions"
+  ]
 }

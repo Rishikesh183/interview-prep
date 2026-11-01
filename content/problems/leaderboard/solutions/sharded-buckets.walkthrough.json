@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "overview": "Updates flow through Kafka; consumers write to shards bucketed by score range so top-N only reads the highest shard; ranks = sum of counts in higher shards + local rank.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative board: 10M members at 100 B of index state each.",
+      "calculation": "10,000,000 × 100 B ≈ 1 GB before allocator and skip-list overhead.",
+      "result": "Real sorted-set memory is higher and must be measured.",
+      "implication": "One Redis board has a memory and write limit; shard by score range only when measurements require it."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for real-time leaderboard.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for real-time leaderboard.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "ZINCRBY on score updates; ZREVRANGE for top 100; ZREVRANK for own rank",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "redis",
+      "purpose": "Maintain score-range buckets, per-bucket counts and a player-to-bucket directory. Top-N scans highest buckets; rank sums counts above the player bucket.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Source of truth; rebuild ZSETs from here",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "updates",
+      "purpose": "Partition by player_id for ordered score changes.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "updater",
+      "purpose": "Dedup event IDs, apply versions, and coordinate cross-bucket moves so rank never counts a player twice.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "PlayerScore",
+      "purpose": "Authoritative score and update version.",
+      "accessPatterns": ["Apply a uniquely identified score event; rebuild the serving index."],
+      "constraints": ["Dedup event_id and persist before updating derived ranking state."],
+      "relationships": [
+        "RankIndex materializes the committed score; event/version checks prevent duplicate increments."
+      ]
+    },
+    {
+      "entityName": "RankIndex",
+      "purpose": "Derived sorted-set ranking index.",
+      "accessPatterns": ["Top-N, player rank, and nearby players."],
+      "constraints": [
+        "One member per player per board. Bucket movement must update counts and directory consistently."
+      ],
+      "relationships": [
+        "board_id/player_id members derive from PlayerScore and can be rebuilt after cache loss."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Apply a trusted score update.",
+      "rationale": "Authenticate game servers and dedup eventId; clients must not arbitrarily assign scores."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Fetch the highest ranked players.",
+      "rationale": "Read the serving sorted sets; document lag if an asynchronous index is used."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Retrieve a player rank.",
+      "rationale": "A sharded rank needs counts of higher score buckets plus the rank within the player bucket."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Game client",
+      "explanation": "In Design, add Mobile Client and name it “Game client”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for real-time leaderboard. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Game client. Distribute incoming connections across healthy instances for real-time leaderboard. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Leaderboard Service",
+      "explanation": "In Design, add Service and name it “Leaderboard Service”. Place it in column 3, row 1 of the HLD; its callers are LB. ZINCRBY on score updates; ZREVRANGE for top 100; ZREVRANK for own rank Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1", "a2", "a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Score-range sorted-set shards",
+      "explanation": "In Design, add Cache and name it “Score-range sorted-set shards”. Place it in column 4, row 1 of the HLD; its callers are Leaderboard Service, Bucket movers. Maintain score-range buckets, per-bucket counts and a player-to-bucket directory. Top-N scans highest buckets; rank sums counts above the player bucket. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["redis"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": ["RankIndex"]
+    },
+    {
+      "title": "Scores DB",
+      "explanation": "In Design, add SQL Database and name it “Scores DB”. Place it in column 4, row 2 of the HLD; its callers are Leaderboard Service. Source of truth; rebuild ZSETs from here Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["PlayerScore"]
+    },
+    {
+      "title": "Score events",
+      "explanation": "In Design, add Event Stream and name it “Score events”. Place it in column 4, row 3 of the HLD; its callers are Leaderboard Service. Partition by player_id for ordered score changes. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["updates"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Bucket movers",
+      "explanation": "In Design, add Worker and name it “Bucket movers”. Place it in column 5, row 1 of the HLD; its callers are Score events. Dedup event IDs, apply versions, and coordinate cross-bucket moves so rank never counts a player twice. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["updater"],
+      "edgeIds": ["e6", "e7"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Move a player between score buckets",
+      "steps": [
+        {
+          "title": "Game client → LB → Leaderboard Service → Scores DB",
+          "explanation": "Commit the new authoritative score and event outbox.",
+          "nodeIds": ["client", "lb", "svc", "db"],
+          "edgeIds": ["e1", "e2", "e4"]
+        },
+        {
+          "title": "Leaderboard Service → Score events → Bucket movers → Score-range sorted-set shards",
+          "explanation": "Consume ordered player events; coordinate removal, insertion and count/directory updates under a version.",
+          "nodeIds": ["svc", "updates", "updater", "redis"],
+          "edgeIds": ["e5", "e6", "e7"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Read a global rank",
+      "steps": [
+        {
+          "title": "Game client → LB → Leaderboard Service → Score-range sorted-set shards",
+          "explanation": "Sum counts of higher buckets and add the local rank. Top-N scans buckets from highest down; lag follows the materialized-index policy.",
+          "nodeIds": ["client", "lb", "svc", "redis"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Score commits but the ranking index update is lost",
+      "handling": "Replay a durable outbox/event log using score versions. Reads may temporarily lag; rebuild Redis from authoritative scores rather than losing results.",
+      "nodeIds": ["redis", "db", "updater"]
+    }
+  ],
+  "alternatives": "Use a single sorted-set shard while the board fits measured memory/write limits. Use score-range shards beyond those limits, accepting versioned cross-bucket moves and count-based global rank calculations.",
+  "sectionApplicability": {}
+}

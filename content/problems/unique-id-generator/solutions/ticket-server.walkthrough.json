@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "overview": "Two DB-backed ticket servers hand out ranges (odd/even) of 10K IDs; app servers allocate locally from their range.",
+  "limitations": [
+    "Range allocation preserves uniqueness, but consumption across servers is not roughly ordered by actual creation time. Prefer Snowflake when the time-order requirement is strict."
+  ],
+  "estimation": [
+    {
+      "assumption": "Range size 10K IDs; illustrative aggregate demand 1M IDs/s.",
+      "calculation": "1,000,000 / 10,000 = 100 range reservations/s.",
+      "result": "Most allocations avoid a database round trip; a crash wastes unused IDs.",
+      "implication": "Choose ranges to trade fewer DB writes for more gaps, and explicitly relax global creation-time ordering."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for unique id generator.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for unique id generator.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Asks for IDs in batches",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "idgen",
+      "purpose": "Two ticket servers allocate disjoint odd/even counter ranges using transactional high-water marks. Worker IDs are implicit in the disjoint namespace. Range allocation is monotonic, but local consumption is not timestamp ordered; clock skew does not affect uniqueness.",
+      "rationale": "Document bit width, time ordering, clock behavior, sequence limits and namespace reuse."
+    },
+    {
+      "nodeId": "counter",
+      "purpose": "Allocate disjoint ranges atomically; lost ranges create gaps and must never be reused.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "TicketRange",
+      "purpose": "Durable high-water marks for disjoint ID ranges.",
+      "accessPatterns": ["Atomically reserve a new range; allocate locally until exhausted."],
+      "constraints": [
+        "Never reuse an allocated range; gaps are valid. Global creation-time ordering is not guaranteed."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Generate a bounded batch of unique IDs.",
+      "rationale": "Serialize 64-bit integers as strings in JSON. Library mode calls this locally; UUIDv7 returns 128-bit values and requires a relaxed ID-width requirement."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Callers",
+      "explanation": "In Design, add Web Client and name it “Callers”. Place it in the leftmost caller/background lane. User-facing caller for unique id generator. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Callers. Distribute incoming connections across healthy instances for unique id generator. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Order Service",
+      "explanation": "In Design, add Service and name it “Order Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Asks for IDs in batches Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Independent range allocators",
+      "explanation": "In Design, add ID Generator and name it “Independent range allocators”. Place it in column 4, row 1 of the HLD; its callers are Order Service. Two ticket servers allocate disjoint odd/even counter ranges using transactional high-water marks. Worker IDs are implicit in the disjoint namespace. Range allocation is monotonic, but local consumption is not timestamp ordered; clock skew does not affect uniqueness. Document bit width, time ordering, clock behavior, sequence limits and namespace reuse. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["idgen"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Ticket high-water marks",
+      "explanation": "In Design, add SQL Database and name it “Ticket high-water marks”. Place it in column 5, row 1 of the HLD; its callers are Independent range allocators. Allocate disjoint ranges atomically; lost ranges create gaps and must never be reused. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["counter"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["TicketRange"]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Reserve an exclusive counter range",
+      "steps": [
+        {
+          "title": "Independent range allocators → Ticket high-water marks",
+          "explanation": "Transactionally advance a high-water mark in a disjoint odd/even namespace. Lost ranges are never reused.",
+          "nodeIds": ["idgen", "counter"],
+          "edgeIds": ["e4"]
+        }
+      ]
+    },
+    {
+      "id": "flow-2",
+      "title": "Consume the range locally",
+      "steps": [
+        {
+          "title": "Callers → LB → Order Service → Independent range allocators",
+          "explanation": "Allocate local counters with no DB round trip per ID. IDs are 64-bit but are not globally ordered by actual creation time.",
+          "nodeIds": ["client", "lb", "svc", "idgen"],
+          "edgeIds": ["e1", "e2", "e3"]
+        }
+      ],
+      "apiId": "a1"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Clock moves backward or a worker lease is reassigned",
+      "handling": "A Snowflake generator stops/waits rather than emitting overlapping timestamps; fence obsolete leases and delay namespace reuse. Ticket ranges avoid clock dependence but lose global time order.",
+      "nodeIds": ["idgen", "counter"]
+    }
+  ],
+  "alternatives": "Use Snowflake for strict 64-bit roughly time-ordered IDs with disciplined leases and clocks. Use ticket ranges if creation-time order can be relaxed. Use UUIDv7 only if 128-bit width and probabilistic uniqueness are acceptable.",
+  "sectionApplicability": {}
+}

@@ -60,6 +60,12 @@ export function validateConcepts(files: RawConceptFiles): ConceptValidation {
         else {
           graph = fromStored(stored.data);
           for (const n of graph.nodes) if (!CATALOG[n.type]) at(`graph: unknown type "${n.type}"`);
+          const ids = new Set(graph.nodes.map((n) => n.id));
+          if (ids.size !== graph.nodes.length) at("graph: duplicate node IDs");
+          if (new Set(graph.edges.map((e) => e.id)).size !== graph.edges.length)
+            at("graph: duplicate edge IDs");
+          for (const e of graph.edges)
+            if (!ids.has(e.source) || !ids.has(e.target)) at(`graph: dangling edge ${e.id}`);
         }
       } catch (err) {
         at(`graph: invalid JSON (${(err as Error).message})`);

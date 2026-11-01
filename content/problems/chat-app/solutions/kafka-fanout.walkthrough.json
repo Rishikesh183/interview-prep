@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "overview": "Chat servers append every message to Kafka partitioned by conversation_id (ordering per partition). Delivery workers consume, persist to storage and route to the recipient's chat server via a session registry; offline recipients get a push.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative sizing: 1M concurrent users; 50K connections per gateway.",
+      "calculation": "1,000,000 / 50,000 = 20 gateway instances before redundancy and headroom.",
+      "result": "At least 20 connection-capacity units; provision more for failover and measured fan-out.",
+      "implication": "Connection count and message fan-out need separate capacity budgets; partition history by conversation."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "User-facing caller for chat app (whatsapp).",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for chat app (whatsapp).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "ws",
+      "purpose": "Tracks online presence via heartbeats; sends delivered/read receipt events",
+      "rationale": "Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances."
+    },
+    {
+      "nodeId": "kafka",
+      "purpose": "Per-partition ordering",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "deliver",
+      "purpose": "Execute background work with bounded concurrency for chat app (whatsapp).",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "sessions",
+      "purpose": "user → gateway node, refreshed by heartbeats",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "store",
+      "purpose": "Store partitioned point-lookup state for chat app (whatsapp).",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "notif",
+      "purpose": "Offline delivery via APNs/FCM",
+      "rationale": "A notification is not the authoritative business record; apply preference policy, retries and deduplication."
+    },
+    {
+      "nodeId": "api",
+      "purpose": "Implement the owned APIs and coordinate state transitions for chat app (whatsapp).",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Message",
+      "purpose": "Durable ordered conversation history.",
+      "accessPatterns": [
+        "Read messages after a sequence cursor; dedup sends by client message_id."
+      ],
+      "constraints": [
+        "Partition by conversation_id and time bucket; assign order within a conversation and acknowledge only after durable acceptance."
+      ],
+      "relationships": [
+        "conversation_id links the message to Conversation; sequence orders history inside that conversation."
+      ]
+    },
+    {
+      "entityName": "Conversation",
+      "purpose": "Membership and conversation sequencing state.",
+      "accessPatterns": ["Authorize a sender and list members for delivery."],
+      "constraints": [
+        "Membership checks precede sends; sequence allocation must have a single authority or a partitioned durable log."
+      ],
+      "relationships": [
+        "Message records are partitioned by conversation_id; membership authorizes send and history access."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Send and receive conversation events over one persistent connection.",
+      "rationale": "Dedup by messageId; distinguish durable acceptance, recipient delivery and read receipts. Reconnect resumes from the last acknowledged sequence."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Fetch missed messages after reconnect or load older history.",
+      "rationale": "Use cursor pagination over conversation sequence, never a global ordering requirement."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Clients",
+      "explanation": "In Design, add Web Client and name it “Clients”. Place it in the leftmost caller/background lane. User-facing caller for chat app (whatsapp). Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Clients. Distribute incoming connections across healthy instances for chat app (whatsapp). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Gateway nodes",
+      "explanation": "In Design, add WebSocket Server and name it “Gateway nodes”. Place it in column 3, row 1 of the HLD; its callers are LB, Delivery workers. Tracks online presence via heartbeats; sends delivered/read receipt events Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ws"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Kafka",
+      "explanation": "In Design, add Event Stream and name it “Kafka”. Place it in column 4, row 1 of the HLD; its callers are Gateway nodes. Per-partition ordering Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["kafka"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Delivery workers",
+      "explanation": "In Design, add Worker and name it “Delivery workers”. Place it in column 5, row 1 of the HLD; its callers are Kafka. Execute background work with bounded concurrency for chat app (whatsapp). Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["deliver"],
+      "edgeIds": ["e5", "e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Session registry",
+      "explanation": "In Design, add Cache and name it “Session registry”. Place it in column 6, row 1 of the HLD; its callers are Delivery workers, Gateway nodes. user → gateway node, refreshed by heartbeats Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sessions"],
+      "edgeIds": ["e7", "e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Message store",
+      "explanation": "In Design, add Key-Value Store and name it “Message store”. Place it in column 6, row 2 of the HLD; its callers are Delivery workers, Sync API. Store partitioned point-lookup state for chat app (whatsapp). Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["store"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": ["Message", "Conversation"]
+    },
+    {
+      "title": "Push",
+      "explanation": "In Design, add Notification Service and name it “Push”. Place it in column 6, row 3 of the HLD; its callers are Delivery workers. Offline delivery via APNs/FCM A notification is not the authoritative business record; apply preference policy, retries and deduplication. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["notif"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Sync API",
+      "explanation": "In Design, add Service and name it “Sync API”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for chat app (whatsapp). Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["api"],
+      "edgeIds": ["e3", "e11"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Durable send and fan-out",
+      "steps": [
+        {
+          "title": "Clients → LB → Gateway nodes → Kafka → Delivery workers → Message store",
+          "explanation": "Dedup the client ID, append by conversation, then persist delivery state before committing the consumer offset.",
+          "nodeIds": ["client", "lb", "ws", "kafka", "deliver", "store"],
+          "edgeIds": ["e1", "e2", "e4", "e5", "e6"]
+        },
+        {
+          "title": "Delivery workers → Session registry",
+          "explanation": "Resolve the recipient gateway from a fresh session registry.",
+          "nodeIds": ["deliver", "sessions"],
+          "edgeIds": ["e7"]
+        },
+        {
+          "title": "Delivery workers → Gateway nodes",
+          "explanation": "Forward to that gateway; recheck the session epoch before delivery.",
+          "nodeIds": ["deliver", "ws"],
+          "edgeIds": ["e8"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Recover missed messages",
+      "steps": [
+        {
+          "title": "Clients → LB → Sync API → Message store",
+          "explanation": "Use a conversation cursor to replay messages after reconnect.",
+          "nodeIds": ["client", "lb", "api", "store"],
+          "edgeIds": ["e1", "e3", "e11"]
+        },
+        {
+          "title": "Delivery workers → Push",
+          "explanation": "Offline push is a hint, not the source of truth.",
+          "nodeIds": ["deliver", "notif"],
+          "edgeIds": ["e9"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Recipient disconnects after the send is acknowledged",
+      "handling": "Retain the durable message and let reconnect fetch by sequence. Pub/sub alone cannot replay missed delivery; push notifications only prompt a client to sync.",
+      "nodeIds": ["deliver", "sessions", "store"]
+    }
+  ],
+  "alternatives": "Use write-before-publish pub/sub for low delivery latency with durable history recovery. Use Kafka fan-out when replay, independent consumers and burst buffering justify added latency and operating cost.",
+  "sectionApplicability": {}
+}

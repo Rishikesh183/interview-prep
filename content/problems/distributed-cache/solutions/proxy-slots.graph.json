@@ -1,0 +1,166 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Users",
+      "no": "User-facing caller for distributed cache."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for distributed cache."
+    },
+    {
+      "i": "app",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "App servers",
+      "no": "Smart client library holds the consistent hashing ring (150 virtual nodes per server); local near cache for hot keys"
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 840,
+      "y": 0,
+      "l": "Cache cluster",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "1h",
+        "cluster": true
+      },
+      "no": "Each key also written to the next node on the ring (replica) for failover"
+    },
+    {
+      "i": "sd",
+      "t": "service_discovery",
+      "x": 840,
+      "y": 180,
+      "l": "Slot ownership metadata",
+      "no": "Gossip heartbeats; publishes the ring to clients"
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 840,
+      "y": 360,
+      "l": "Source of truth",
+      "c": {
+        "replicas": 2
+      },
+      "no": "Store authoritative records with transactional constraints for distributed cache."
+    },
+    {
+      "i": "proxy",
+      "t": "service",
+      "x": 840,
+      "y": 540,
+      "l": "Cache routing proxies",
+      "no": "Proxy computes Redis-style 16384 hash slots; application clients do not maintain the hash ring. Refresh slot ownership on MOVED and retry safely."
+    },
+    {
+      "i": "replica",
+      "t": "cache",
+      "x": 1120,
+      "y": 0,
+      "l": "Cache replicas",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "10m"
+      },
+      "no": "Replicate each primary slot shard; promote a replica after failure. Cached values remain disposable."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "app",
+      "l": "Call App servers",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "app",
+      "d": "db",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "app",
+      "d": "proxy",
+      "l": "Cache GET / SET",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "proxy",
+      "d": "cache",
+      "l": "Route by slot",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "proxy",
+      "d": "sd",
+      "l": "Refresh slot owners",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "cache",
+      "d": "replica",
+      "l": "Replicate cached values",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "cache",
+      "method": "RPC",
+      "path": "Cache.Get",
+      "request": "{ \"key\": \"product:42\" }",
+      "response": "{ \"hit\": true, \"value\": \"...\", \"version\": 8 }",
+      "statusCodes": "OK, MISS, UNAVAILABLE",
+      "auth": true,
+      "idempotent": true,
+      "note": "Client-ring or proxy routing chooses the shard. A miss causes the application, not the cache, to fetch the source of truth."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "cache",
+      "method": "RPC",
+      "path": "Cache.Set",
+      "request": "{ \"key\": \"product:42\", \"value\": \"...\", \"ttlSeconds\": 600 }",
+      "response": "{ \"stored\": true }",
+      "statusCodes": "OK, INVALID_ARGUMENT, UNAVAILABLE",
+      "auth": true,
+      "idempotent": true,
+      "note": "Hash key routing must be consistent for GET and SET. Never treat replication of cached data as a durable write guarantee."
+    }
+  ],
+  "entities": [
+    {
+      "name": "CacheEntry",
+      "fields": "key: bytes PK\nvalue: bytes\nexpires_at: timestamp\nversion: int64",
+      "storeNodeId": "cache"
+    }
+  ]
+}

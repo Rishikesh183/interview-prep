@@ -68,7 +68,7 @@ export function SettingsView() {
         {status === "disabled" ? (
           <p className="text-sm">
             Local-only mode: everything is saved in this browser. Set the Supabase variables to
-            enable sign-in and sync across devices.
+            enable sign-in, submission and progress sync across devices.
           </p>
         ) : status === "loading" ? (
           <p className="text-muted-foreground text-sm">Loading...</p>
@@ -104,6 +104,17 @@ export function SettingsView() {
             </div>
           </div>
         )}
+      </Card>
+      <Card title="Storage">
+        <p className="text-sm">
+          Drafts and attempt history are stored only in this browser, using IndexedDB. They are not
+          uploaded to Supabase and do not follow you to another device.
+        </p>
+        <p className="text-muted-foreground mt-2 text-sm">
+          When signed in, only your best progress per problem and solutions you explicitly save are
+          synced. Clearing site data removes local history; export any designs you want to keep
+          first.
+        </p>
       </Card>
     </div>
   );

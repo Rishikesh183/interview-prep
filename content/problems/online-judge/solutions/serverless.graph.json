@@ -1,0 +1,162 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "x": 0,
+      "y": 0,
+      "l": "Browser",
+      "no": "User-facing caller for online judge (leetcode)."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for online judge (leetcode)."
+    },
+    {
+      "i": "api",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Submission API",
+      "no": "Implement the owned APIs and coordinate state transitions for online judge (leetcode)."
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 840,
+      "y": 0,
+      "l": "Submissions",
+      "c": {
+        "replicas": 2
+      },
+      "no": "Store authoritative records with transactional constraints for online judge (leetcode)."
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "x": 840,
+      "y": 180,
+      "l": "Judge queue",
+      "no": "Buffer independently retryable asynchronous work for online judge (leetcode)."
+    },
+    {
+      "i": "judge",
+      "t": "serverless_fn",
+      "x": 1120,
+      "y": 0,
+      "l": "Isolated judge functions",
+      "c": {
+        "trigger": "queue"
+      },
+      "no": "One isolated execution per submission with explicit time limits, memory limits, filesystem and network limits. Dedup submission_id and persist verdict before acknowledging the trigger."
+    },
+    {
+      "i": "s3",
+      "t": "object_storage",
+      "x": 1400,
+      "y": 0,
+      "l": "Hidden test data",
+      "no": "Persist immutable large objects for online judge (leetcode)."
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "api",
+      "l": "Call Submission API",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "api",
+      "d": "db",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "api",
+      "d": "q",
+      "m": "a",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "q",
+      "d": "judge",
+      "m": "a",
+      "l": "Call Isolated judge functions",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "judge",
+      "d": "s3",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "judge",
+      "d": "db",
+      "o": "w",
+      "l": "verdict",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "api",
+      "method": "POST",
+      "path": "/v1/submissions",
+      "request": "{ \"requestId\": \"r1\", \"problemId\": \"p1\", \"language\": \"cpp\", \"source\": \"...\" }",
+      "response": "202 { \"submissionId\": \"s1\", \"status\": \"QUEUED\" }",
+      "statusCodes": "202, 400, 429",
+      "auth": true,
+      "idempotent": true,
+      "rateLimited": true,
+      "note": "Publish execution only after the submission record is durable; enforce user quotas."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "api",
+      "method": "GET",
+      "path": "/v1/submissions/{id}",
+      "request": "No request body.",
+      "response": "200 { \"status\": \"FINISHED\", \"verdict\": \"ACCEPTED\", \"runtimeMs\": 42 }",
+      "statusCodes": "200, 403, 404",
+      "auth": true,
+      "idempotent": true,
+      "note": "Poll with backoff or use a notification hint; hidden test details must remain private."
+    }
+  ],
+  "entities": [
+    {
+      "name": "Submission",
+      "fields": "submission_id: string PK\nuser_id: string\nproblem_id: string\nlanguage: string\nsource_key: string\nstatus: QUEUED|RUNNING|FINISHED\nverdict: string?\ntest_version: string",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "TestBundle",
+      "fields": "problem_id: string\nversion: string\nobject_key: string\nchecksum: string",
+      "storeNodeId": "s3"
+    }
+  ]
+}

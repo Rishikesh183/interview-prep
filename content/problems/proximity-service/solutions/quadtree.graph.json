@@ -1,0 +1,190 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "mobile_client",
+      "x": 0,
+      "y": 0,
+      "l": "App",
+      "no": "Mobile caller with intermittent connectivity for proximity service (yelp)."
+    },
+    {
+      "i": "lb",
+      "t": "load_balancer",
+      "x": 280,
+      "y": 0,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for proximity service (yelp)."
+    },
+    {
+      "i": "search",
+      "t": "service",
+      "x": 560,
+      "y": 0,
+      "l": "Search Service",
+      "no": "Queries the target geohash cell plus its 8 neighbours (boundaries)"
+    },
+    {
+      "i": "biz",
+      "t": "service",
+      "x": 560,
+      "y": 180,
+      "l": "Business Service",
+      "no": "Implement the owned APIs and coordinate state transitions for proximity service (yelp)."
+    },
+    {
+      "i": "geo",
+      "t": "geo_index",
+      "x": 840,
+      "y": 0,
+      "l": "In-memory quadtrees",
+      "c": {
+        "strategy": "quadtree"
+      },
+      "no": "Split dense cells until at most 100 businesses per leaf. Traverse cells intersecting the radius, then exact-distance filter; swap rebuilt versioned trees atomically."
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "x": 840,
+      "y": 180,
+      "l": "Cell cache",
+      "c": {
+        "strategy": "cache-aside",
+        "ttl": "10m"
+      },
+      "no": "Serve derived or transient hot state for proximity service (yelp)."
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "x": 840,
+      "y": 360,
+      "l": "Businesses",
+      "c": {
+        "replicas": 3,
+        "readReplicas": true
+      },
+      "no": "Store authoritative records with transactional constraints for proximity service (yelp)."
+    },
+    {
+      "i": "rebuild",
+      "t": "batch_processor",
+      "x": 840,
+      "y": 540,
+      "l": "Nightly index rebuild",
+      "c": {
+        "schedule": "nightly"
+      },
+      "no": "Owner edits show up the next day"
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "lb",
+      "l": "Public request",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "lb",
+      "d": "search",
+      "a": "a1",
+      "l": "Call Search Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "lb",
+      "d": "biz",
+      "a": "a2",
+      "l": "Call Business Service",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "search",
+      "d": "geo",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e5",
+      "s": "search",
+      "d": "cache",
+      "o": "rw",
+      "l": "Lookup / update hot state",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "search",
+      "d": "db",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e7",
+      "s": "biz",
+      "d": "db",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e8",
+      "s": "rebuild",
+      "d": "db",
+      "o": "r",
+      "l": "Read / write state",
+      "h": "r>l"
+    },
+    {
+      "i": "e9",
+      "s": "rebuild",
+      "d": "geo",
+      "o": "w",
+      "l": "Read / write state",
+      "h": "r>l"
+    }
+  ],
+  "apis": [
+    {
+      "id": "a1",
+      "ownerNodeId": "search",
+      "method": "GET",
+      "path": "/v1/search/nearby",
+      "request": "No request body; ?lat=12.97&lng=77.59&radiusM=2000&limit=20&cursor=opaque-query-snapshot",
+      "response": "200 { \"businesses\": [{ \"id\": \"b1\", \"distanceM\": 350 }], \"nextCursor\": \"opaque\" }",
+      "statusCodes": "200, 400",
+      "auth": false,
+      "idempotent": true,
+      "pagination": "cursor",
+      "note": "Search every intersecting cell, then exact-distance filter and rank. A fixed nine-cell scan is only sufficient for a bounded radius/cell-size combination. Bind cursors to the query center/radius and stable distance/ID ordering."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "biz",
+      "method": "POST",
+      "path": "/v1/businesses",
+      "request": "{ \"businessId\": \"b1\", \"latitude\": 12.97, \"longitude\": 77.59, \"category\": \"cafe\" }",
+      "response": "201 { \"businessId\": \"b1\", \"indexStatus\": \"PENDING\" }",
+      "statusCodes": "201, 400, 409",
+      "auth": true,
+      "idempotent": true,
+      "note": "Publish index changes through a durable change feed; document freshness if rebuilding periodically."
+    }
+  ],
+  "entities": [
+    {
+      "name": "Business",
+      "fields": "business_id: string PK\nlatitude: float64\nlongitude: float64\ngeohash: string INDEX\ncategory: string\nversion: int64",
+      "storeNodeId": "db"
+    }
+  ]
+}

@@ -1,0 +1,289 @@
+{
+  "version": 1,
+  "overview": "Creators get a presigned multipart upload URL and upload straight to S3. The upload service records metadata and enqueues a transcode job. Workers split the video into segments, encode each segment into 240p–4K renditions in parallel, write HLS segments + manifests back to S3, and mark the video ready. Viewers fetch manifests and segments via the CDN; the player switches renditions (ABR).",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative playback: 1M simultaneous viewers at 3 Mbps.",
+      "calculation": "1,000,000 × 3 Mbps = 3 Tbps delivery bandwidth.",
+      "result": "Playback traffic greatly exceeds small metadata/API responses.",
+      "implication": "CDN absorbs segment traffic; scale transcoders by queue age and processing time, not viewer count."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "creator",
+      "purpose": "Multipart upload with presigned URLs (resumable)",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "viewer",
+      "purpose": "HLS adaptive bitrate: switches renditions by bandwidth",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "cdn",
+      "purpose": "Serve cacheable media or static responses close to users for youtube / netflix.",
+      "rationale": "Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for youtube / netflix.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "upload",
+      "purpose": "Implement the owned APIs and coordinate state transitions for youtube / netflix.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "video",
+      "purpose": "Returns manifest URL + metadata",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "raw",
+      "purpose": "Persist immutable large objects for youtube / netflix.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "out",
+      "purpose": "Persist immutable large objects for youtube / netflix.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "q",
+      "purpose": "Buffer independently retryable asynchronous work for youtube / netflix.",
+      "rationale": "Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path."
+    },
+    {
+      "nodeId": "tx",
+      "purpose": "Split into segments, encode 240p–4K in parallel",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for youtube / netflix.",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "mcache",
+      "purpose": "Serve derived or transient hot state for youtube / netflix.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Video",
+      "purpose": "Video processing state and published rendition manifest.",
+      "accessPatterns": [
+        "Create upload; mark one processing version ready; read metadata for playback."
+      ],
+      "constraints": ["Publish READY only after all required segments and manifests exist."],
+      "relationships": [
+        "MediaObject.video_id/processing_version identify objects referenced by the published manifest."
+      ]
+    },
+    {
+      "entityName": "MediaObject",
+      "purpose": "Immutable original bytes and generated media artifacts.",
+      "accessPatterns": [
+        "Multipart upload raw bytes; workers read originals; CDN reads published segments."
+      ],
+      "constraints": [
+        "Pin a processing version so an old retry cannot overwrite a newer manifest."
+      ],
+      "relationships": [
+        "Video metadata selects a complete processing version; unreferenced outputs can be collected."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Start a resumable multipart upload.",
+      "rationale": "API returns signed upload parts; the creator sends media bytes to raw object storage."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Finalize the upload and schedule transcoding.",
+      "rationale": "Use an outbox/object-store event and dedup processing version; duplicate completion must not publish incomplete media."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Retrieve playback metadata for a ready video.",
+      "rationale": "The player fetches HLS/DASH segments from CDN and switches bitrate adaptively."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Creator Studio",
+      "explanation": "In Design, add Web Client and name it “Creator Studio”. Place it in the leftmost caller/background lane. Multipart upload with presigned URLs (resumable) Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["creator"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Player",
+      "explanation": "In Design, add Mobile Client and name it “Player”. Place it in the leftmost caller/background lane. HLS adaptive bitrate: switches renditions by bandwidth Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["viewer"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "CDN",
+      "explanation": "In Design, add CDN and name it “CDN”. Place it in column 2, row 1 of the HLD; its callers are Player. Serve cacheable media or static responses close to users for youtube / netflix. Origin paths remain available; TTL, signed access and expiry policies must agree with the authoritative metadata. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cdn"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 2 of the HLD; its callers are Creator Studio, Player. Distribute incoming connections across healthy instances for youtube / netflix. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1", "e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Upload Service",
+      "explanation": "In Design, add Service and name it “Upload Service”. Place it in column 3, row 1 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for youtube / netflix. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["upload"],
+      "edgeIds": ["e5"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Video API",
+      "explanation": "In Design, add Service and name it “Video API”. Place it in column 3, row 2 of the HLD; its callers are LB. Returns manifest URL + metadata Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["video"],
+      "edgeIds": ["e6"],
+      "apiIds": ["a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Raw uploads",
+      "explanation": "In Design, add Object Storage and name it “Raw uploads”. Place it in column 2, row 3 of the HLD; its callers are Creator Studio, Transcoders. Persist immutable large objects for youtube / netflix. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["raw"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["MediaObject"]
+    },
+    {
+      "title": "Renditions (HLS)",
+      "explanation": "In Design, add Object Storage and name it “Renditions (HLS)”. Place it in column 3, row 3 of the HLD; its callers are Transcoders, CDN. Persist immutable large objects for youtube / netflix. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["out"],
+      "edgeIds": ["e13"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Transcode jobs",
+      "explanation": "In Design, add Message Queue and name it “Transcode jobs”. Place it in column 4, row 1 of the HLD; its callers are Upload Service. Buffer independently retryable asynchronous work for youtube / netflix. Consumers acknowledge after durable completion; bound retries and send poison work to a dead-letter path. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["q"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Transcoders",
+      "explanation": "In Design, add Worker and name it “Transcoders”. Place it in column 5, row 1 of the HLD; its callers are Transcode jobs. Split into segments, encode 240p–4K in parallel Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["tx"],
+      "edgeIds": ["e9", "e10", "e11"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Video metadata",
+      "explanation": "In Design, add SQL Database and name it “Video metadata”. Place it in column 6, row 1 of the HLD; its callers are Upload Service, Transcoders, Video API. Store authoritative records with transactional constraints for youtube / netflix. Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e7", "e12", "e15"],
+      "apiIds": [],
+      "entityNames": ["Video"]
+    },
+    {
+      "title": "Metadata cache",
+      "explanation": "In Design, add Cache and name it “Metadata cache”. Place it in column 4, row 2 of the HLD; its callers are Video API. Serve derived or transient hot state for youtube / netflix. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["mcache"],
+      "edgeIds": ["e14"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Upload and transcode",
+      "steps": [
+        {
+          "title": "Creator Studio → LB → Upload Service → Video metadata",
+          "explanation": "Create UPLOADING metadata and signed multipart URLs.",
+          "nodeIds": ["creator", "lb", "upload", "db"],
+          "edgeIds": ["e1", "e5", "e7"]
+        },
+        {
+          "title": "Creator Studio → Raw uploads",
+          "explanation": "Upload parts directly and complete the multipart object.",
+          "nodeIds": ["creator", "raw"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Upload Service → Transcode jobs → Transcoders → Raw uploads",
+          "explanation": "Verify completion, enqueue a versioned transcode task and read the original.",
+          "nodeIds": ["upload", "q", "tx", "raw"],
+          "edgeIds": ["e8", "e9", "e10"]
+        },
+        {
+          "title": "Transcoders → Renditions (HLS)",
+          "explanation": "Write immutable renditions and HLS manifests.",
+          "nodeIds": ["tx", "out"],
+          "edgeIds": ["e11"]
+        },
+        {
+          "title": "Transcoders → Video metadata",
+          "explanation": "Mark READY only after the manifest references complete segments.",
+          "nodeIds": ["tx", "db"],
+          "edgeIds": ["e12"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Watch with adaptive bitrate",
+      "steps": [
+        {
+          "title": "Player → LB → Video API → Metadata cache",
+          "explanation": "Read ready playback metadata from cache or durable metadata.",
+          "nodeIds": ["viewer", "lb", "video", "mcache"],
+          "edgeIds": ["e2", "e6", "e14"]
+        },
+        {
+          "title": "Video API → Video metadata",
+          "explanation": "On metadata miss, load the READY processing version.",
+          "nodeIds": ["video", "db"],
+          "edgeIds": ["e15"]
+        },
+        {
+          "title": "Player → CDN → Renditions (HLS)",
+          "explanation": "Player fetches manifests/segments through CDN and adapts rendition by bandwidth.",
+          "nodeIds": ["viewer", "cdn", "out"],
+          "edgeIds": ["e3", "e13"]
+        }
+      ],
+      "apiId": "a3"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A transcoder fails after writing some renditions",
+      "handling": "Retry deterministic versioned segment jobs, validate outputs and publish the manifest atomically when complete. Garbage-collect abandoned versions; the old READY version remains playable.",
+      "nodeIds": ["tx", "db", "mcache"]
+    }
+  ],
+  "alternatives": "Use worker transcoders for long jobs and GPU/codec control. Use event-triggered functions for bounded chunk jobs that fit runtime constraints, with an explicit completion barrier before publication.",
+  "sectionApplicability": {}
+}

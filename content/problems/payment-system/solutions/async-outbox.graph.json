@@ -6,37 +6,40 @@
       "t": "mobile_client",
       "x": 0,
       "y": 0,
-      "l": "App"
+      "l": "App",
+      "no": "Mobile caller with intermittent connectivity for payment system / wallet."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
+      "x": 280,
       "y": 0,
-      "l": "LB"
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for payment system / wallet."
     },
     {
       "i": "auth",
       "t": "auth_service",
-      "x": 520,
+      "x": 560,
       "y": 0,
       "l": "Auth",
       "c": {
         "method": "OAuth"
-      }
+      },
+      "no": "Validate caller identity and issue/verify scoped credentials for payment system / wallet."
     },
     {
       "i": "orders",
       "t": "service",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Payment Orders",
       "no": "Order + outbox row in one transaction"
     },
     {
       "i": "db",
       "t": "sql_db",
-      "x": 780,
+      "x": 840,
       "y": 0,
       "l": "Payments + ledger",
       "no": "Double-entry ledger, append-only"
@@ -44,37 +47,40 @@
     {
       "i": "relay",
       "t": "worker",
-      "x": 0,
-      "y": 130,
-      "l": "Outbox relay"
+      "x": 840,
+      "y": 180,
+      "l": "Outbox relay",
+      "no": "Execute background work with bounded concurrency for payment system / wallet."
     },
     {
       "i": "q",
       "t": "message_queue",
-      "x": 260,
-      "y": 130,
-      "l": "Payment commands"
+      "x": 280,
+      "y": 180,
+      "l": "Payment commands",
+      "no": "Buffer independently retryable asynchronous work for payment system / wallet."
     },
     {
       "i": "exec",
       "t": "worker",
-      "x": 520,
-      "y": 260,
+      "x": 560,
+      "y": 360,
       "l": "Payment executors",
       "no": "Calls PSP with idempotency key; retries with backoff"
     },
     {
       "i": "psp",
       "t": "external_service",
-      "x": 780,
-      "y": 130,
-      "l": "PSP"
+      "x": 840,
+      "y": 360,
+      "l": "PSP",
+      "no": "External system boundary for payment system / wallet."
     },
     {
       "i": "recon",
       "t": "scheduler",
       "x": 0,
-      "y": 260,
+      "y": 180,
       "l": "Reconciliation job",
       "c": {
         "cron": "0 2 * * *"
@@ -87,18 +93,21 @@
       "i": "e1",
       "s": "client",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "lb",
       "d": "auth",
+      "l": "Call Auth",
       "h": "r>l"
     },
     {
       "i": "e3",
       "s": "lb",
       "d": "orders",
+      "l": "Call Payment Orders",
       "h": "r>l"
     },
     {
@@ -106,6 +115,7 @@
       "s": "orders",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -113,6 +123,7 @@
       "s": "relay",
       "d": "db",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -120,6 +131,7 @@
       "s": "relay",
       "d": "q",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -127,12 +139,14 @@
       "s": "q",
       "d": "exec",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
       "i": "e8",
       "s": "exec",
       "d": "psp",
+      "l": "Call PSP",
       "h": "r>l"
     },
     {
@@ -140,6 +154,7 @@
       "s": "exec",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -147,6 +162,7 @@
       "s": "recon",
       "d": "db",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -155,16 +171,37 @@
       "id": "a1",
       "ownerNodeId": "orders",
       "method": "POST",
-      "path": "/v1/payment-orders",
+      "path": "/v1/payments",
+      "request": "{ \"idempotencyKey\": \"checkout42\", \"amountMinor\": 10000, \"currency\": \"INR\", \"paymentToken\": \"provider-token\" }",
+      "response": "201/202 { \"paymentId\": \"p1\", \"status\": \"PROCESSING\" }",
+      "statusCodes": "201, 202, 400, 402, 409",
       "auth": true,
       "idempotent": true,
-      "statusCodes": "202, 409"
+      "note": "Return the prior result for the same key and payload. A timeout does not mean the provider failed; reconcile by provider reference."
+    },
+    {
+      "id": "a2",
+      "ownerNodeId": "orders",
+      "method": "GET",
+      "path": "/v1/payments/{id}",
+      "request": "No request body.",
+      "response": "200 { \"paymentId\": \"p1\", \"status\": \"SUCCEEDED\" }",
+      "statusCodes": "200, 403, 404",
+      "auth": true,
+      "idempotent": true,
+      "note": "Only an authorized caller sees this payment; settlement and payment authorization are distinct states."
     }
   ],
   "entities": [
     {
+      "name": "Payment",
+      "fields": "payment_id: string PK\nidempotency_key: string UNIQUE\namount_minor: int64\ncurrency: string\nstatus: PENDING|PROCESSING|SUCCEEDED|FAILED\nprovider_id: string?",
+      "storeNodeId": "db"
+    },
+    {
       "name": "LedgerEntry",
-      "fields": "entry_id, account, amount, direction, txn_id"
+      "fields": "entry_id: string PK\ntransaction_id: string INDEX\naccount_id: string\namount_minor_signed: int64\ncurrency: string",
+      "storeNodeId": "db"
     }
   ]
 }

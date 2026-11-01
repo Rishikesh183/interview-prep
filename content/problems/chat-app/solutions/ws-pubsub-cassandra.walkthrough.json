@@ -1,0 +1,234 @@
+{
+  "version": 1,
+  "overview": "Clients keep a WebSocket to a chat server (sticky via L4 LB). A message is assigned a per-conversation sequence, written to Cassandra (partition = conversation_id, clustering = message_id) and published to a Redis channel per user; whichever server holds the recipient's socket delivers it. If the recipient is offline the message waits in storage and a push notification goes out.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative sizing: 1M concurrent users; 50K connections per gateway.",
+      "calculation": "1,000,000 / 50,000 = 20 gateway instances before redundancy and headroom.",
+      "result": "At least 20 connection-capacity units; provision more for failover and measured fan-out.",
+      "implication": "Connection count and message fan-out need separate capacity budgets; partition history by conversation."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for chat app (whatsapp).",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for chat app (whatsapp).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "ws",
+      "purpose": "Heartbeats update presence; ACKs drive delivered/read receipts",
+      "rationale": "Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances."
+    },
+    {
+      "nodeId": "ps",
+      "purpose": "Channel per user id; the node holding the socket subscribes",
+      "rationale": "Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications."
+    },
+    {
+      "nodeId": "msg",
+      "purpose": "Assigns per-conversation sequence (snowflake) for ordering",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "cass",
+      "purpose": "Store partitioned ordered records for chat app (whatsapp).",
+      "rationale": "Bound partitions with time buckets if needed; partition/clustering keys must match history queries."
+    },
+    {
+      "nodeId": "presence",
+      "purpose": "online / last seen",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "notif",
+      "purpose": "Offline users",
+      "rationale": "A notification is not the authoritative business record; apply preference policy, retries and deduplication."
+    },
+    {
+      "nodeId": "apns",
+      "purpose": "External system boundary for chat app (whatsapp).",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "hist",
+      "purpose": "Implement the owned APIs and coordinate state transitions for chat app (whatsapp).",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Message",
+      "purpose": "Durable ordered conversation history.",
+      "accessPatterns": [
+        "Read messages after a sequence cursor; dedup sends by client message_id."
+      ],
+      "constraints": [
+        "Partition by conversation_id and time bucket; assign order within a conversation and acknowledge only after durable acceptance."
+      ],
+      "relationships": [
+        "conversation_id links the message to Conversation; sequence orders history inside that conversation."
+      ]
+    },
+    {
+      "entityName": "Conversation",
+      "purpose": "Membership and conversation sequencing state.",
+      "accessPatterns": ["Authorize a sender and list members for delivery."],
+      "constraints": [
+        "Membership checks precede sends; sequence allocation must have a single authority or a partitioned durable log."
+      ],
+      "relationships": [
+        "Message records are partitioned by conversation_id; membership authorizes send and history access."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Send and receive conversation events over one persistent connection.",
+      "rationale": "Dedup by messageId; distinguish durable acceptance, recipient delivery and read receipts. Reconnect resumes from the last acknowledged sequence."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Fetch missed messages after reconnect or load older history.",
+      "rationale": "Use cursor pagination over conversation sequence, never a global ordering requirement."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Mobile app",
+      "explanation": "In Design, add Mobile Client and name it “Mobile app”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for chat app (whatsapp). Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "L4 LB",
+      "explanation": "In Design, add Load Balancer and name it “L4 LB”. Place it in column 2, row 1 of the HLD; its callers are Mobile app. Distribute incoming connections across healthy instances for chat app (whatsapp). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Chat servers",
+      "explanation": "In Design, add WebSocket Server and name it “Chat servers”. Place it in column 3, row 1 of the HLD; its callers are L4 LB, Redis Pub/Sub. Heartbeats update presence; ACKs drive delivered/read receipts Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ws"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Redis Pub/Sub",
+      "explanation": "In Design, add Pub/Sub and name it “Redis Pub/Sub”. Place it in column 4, row 1 of the HLD; its callers are Message Service. Channel per user id; the node holding the socket subscribes Persist important state before publishing; reconnect reads the durable source because pub/sub can lose notifications. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ps"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Message Service",
+      "explanation": "In Design, add Service and name it “Message Service”. Place it in column 4, row 2 of the HLD; its callers are Chat servers. Assigns per-conversation sequence (snowflake) for ordering Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["msg"],
+      "edgeIds": ["e4", "e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Cassandra",
+      "explanation": "In Design, add Wide-Column DB and name it “Cassandra”. Place it in column 5, row 1 of the HLD; its callers are Message Service, History API. Store partitioned ordered records for chat app (whatsapp). Bound partitions with time buckets if needed; partition/clustering keys must match history queries. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cass"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["Message", "Conversation"]
+    },
+    {
+      "title": "Presence Redis",
+      "explanation": "In Design, add Cache and name it “Presence Redis”. Place it in column 4, row 3 of the HLD; its callers are Chat servers. online / last seen Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["presence"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Push Notifications",
+      "explanation": "In Design, add Notification Service and name it “Push Notifications”. Place it in column 5, row 2 of the HLD; its callers are Message Service. Offline users A notification is not the authoritative business record; apply preference policy, retries and deduplication. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["notif"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "APNs / FCM",
+      "explanation": "In Design, add External Service and name it “APNs / FCM”. Place it in column 6, row 1 of the HLD; its callers are Push Notifications. External system boundary for chat app (whatsapp). Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["apns"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "History API",
+      "explanation": "In Design, add Service and name it “History API”. Place it in column 3, row 2 of the HLD; its callers are L4 LB. Implement the owned APIs and coordinate state transitions for chat app (whatsapp). Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["hist"],
+      "edgeIds": ["e3", "e11"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Send to an online recipient",
+      "steps": [
+        {
+          "title": "Mobile app → L4 LB → Chat servers → Message Service → Cassandra",
+          "explanation": "Authorize membership, dedup client message_id, assign a conversation sequence and persist before ack.",
+          "nodeIds": ["client", "lb", "ws", "msg", "cass"],
+          "edgeIds": ["e1", "e2", "e4", "e5"]
+        },
+        {
+          "title": "Message Service → Redis Pub/Sub → Chat servers",
+          "explanation": "Publish the committed message; the recipient gateway delivers it if its socket is connected.",
+          "nodeIds": ["msg", "ps", "ws"],
+          "edgeIds": ["e6", "e7"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Reconnect or offline delivery",
+      "steps": [
+        {
+          "title": "Mobile app → L4 LB → History API → Cassandra",
+          "explanation": "Read messages after the last acknowledged sequence. A missed pub/sub notification does not lose durable history.",
+          "nodeIds": ["client", "lb", "hist", "cass"],
+          "edgeIds": ["e1", "e3", "e11"]
+        },
+        {
+          "title": "Message Service → Push Notifications → APNs / FCM",
+          "explanation": "For offline recipients, send a push hint to reconnect and sync.",
+          "nodeIds": ["msg", "notif", "apns"],
+          "edgeIds": ["e9", "e10"]
+        }
+      ],
+      "apiId": "a2"
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Recipient disconnects after the send is acknowledged",
+      "handling": "Retain the durable message and let reconnect fetch by sequence. Pub/sub alone cannot replay missed delivery; push notifications only prompt a client to sync.",
+      "nodeIds": ["presence"]
+    }
+  ],
+  "alternatives": "Use write-before-publish pub/sub for low delivery latency with durable history recovery. Use Kafka fan-out when replay, independent consumers and burst buffering justify added latency and operating cost.",
+  "sectionApplicability": {}
+}

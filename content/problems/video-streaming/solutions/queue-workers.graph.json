@@ -13,70 +13,76 @@
       "i": "viewer",
       "t": "mobile_client",
       "x": 0,
-      "y": 130,
+      "y": 180,
       "l": "Player",
       "no": "HLS adaptive bitrate: switches renditions by bandwidth"
     },
     {
       "i": "cdn",
       "t": "cdn",
-      "x": 260,
+      "x": 280,
       "y": 0,
       "c": {
         "content": ["media"],
         "ttl": "30d"
-      }
+      },
+      "no": "Serve cacheable media or static responses close to users for youtube / netflix."
     },
     {
       "i": "lb",
       "t": "load_balancer",
-      "x": 260,
-      "y": 130,
-      "l": "LB"
+      "x": 280,
+      "y": 180,
+      "l": "LB",
+      "no": "Distribute incoming connections across healthy instances for youtube / netflix."
     },
     {
       "i": "upload",
       "t": "service",
-      "x": 520,
+      "x": 560,
       "y": 0,
-      "l": "Upload Service"
+      "l": "Upload Service",
+      "no": "Implement the owned APIs and coordinate state transitions for youtube / netflix."
     },
     {
       "i": "video",
       "t": "service",
-      "x": 520,
-      "y": 130,
+      "x": 560,
+      "y": 180,
       "l": "Video API",
       "no": "Returns manifest URL + metadata"
     },
     {
       "i": "raw",
       "t": "object_storage",
-      "x": 260,
-      "y": 260,
-      "l": "Raw uploads"
+      "x": 280,
+      "y": 360,
+      "l": "Raw uploads",
+      "no": "Persist immutable large objects for youtube / netflix."
     },
     {
       "i": "out",
       "t": "object_storage",
-      "x": 520,
-      "y": 260,
+      "x": 560,
+      "y": 360,
       "l": "Renditions (HLS)",
       "c": {
         "lifecycle": "Infrequent access after 90d"
-      }
+      },
+      "no": "Persist immutable large objects for youtube / netflix."
     },
     {
       "i": "q",
       "t": "message_queue",
-      "x": 780,
+      "x": 840,
       "y": 0,
-      "l": "Transcode jobs"
+      "l": "Transcode jobs",
+      "no": "Buffer independently retryable asynchronous work for youtube / netflix."
     },
     {
       "i": "tx",
       "t": "worker",
-      "x": 1040,
+      "x": 1120,
       "y": 0,
       "l": "Transcoders",
       "c": {
@@ -88,23 +94,25 @@
     {
       "i": "db",
       "t": "sql_db",
-      "x": 1300,
+      "x": 1400,
       "y": 0,
       "l": "Video metadata",
       "c": {
         "readReplicas": true
-      }
+      },
+      "no": "Store authoritative records with transactional constraints for youtube / netflix."
     },
     {
       "i": "mcache",
       "t": "cache",
-      "x": 780,
-      "y": 130,
+      "x": 840,
+      "y": 180,
       "l": "Metadata cache",
       "c": {
         "strategy": "cache-aside",
         "ttl": "1h"
-      }
+      },
+      "no": "Serve derived or transient hot state for youtube / netflix."
     }
   ],
   "e": [
@@ -112,12 +120,14 @@
       "i": "e1",
       "s": "creator",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
       "i": "e2",
       "s": "viewer",
       "d": "lb",
+      "l": "Public request",
       "h": "r>l"
     },
     {
@@ -140,12 +150,15 @@
       "i": "e5",
       "s": "lb",
       "d": "upload",
+      "l": "Call Upload Service",
       "h": "r>l"
     },
     {
       "i": "e6",
       "s": "lb",
       "d": "video",
+      "a": "a3",
+      "l": "Call Video API",
       "h": "r>l"
     },
     {
@@ -153,6 +166,7 @@
       "s": "upload",
       "d": "db",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -160,6 +174,7 @@
       "s": "upload",
       "d": "q",
       "m": "a",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -167,6 +182,7 @@
       "s": "q",
       "d": "tx",
       "m": "a",
+      "l": "Consume work",
       "h": "r>l"
     },
     {
@@ -174,6 +190,7 @@
       "s": "tx",
       "d": "raw",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -181,6 +198,7 @@
       "s": "tx",
       "d": "out",
       "o": "w",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -195,6 +213,7 @@
       "i": "e13",
       "s": "cdn",
       "d": "out",
+      "l": "Read / write state",
       "h": "r>l"
     },
     {
@@ -202,6 +221,7 @@
       "s": "video",
       "d": "mcache",
       "o": "r",
+      "l": "Lookup / update hot state",
       "h": "r>l"
     },
     {
@@ -209,6 +229,7 @@
       "s": "video",
       "d": "db",
       "o": "r",
+      "l": "Read / write state",
       "h": "r>l"
     }
   ],
@@ -218,23 +239,47 @@
       "ownerNodeId": "upload",
       "method": "POST",
       "path": "/v1/videos",
+      "request": "{ \"title\": \"demo\", \"sizeBytes\": 104857600, \"contentType\": \"video/mp4\" }",
+      "response": "201 { \"videoId\": \"v1\", \"uploadId\": \"u1\", \"uploadUrls\": [] }",
+      "statusCodes": "201, 400, 413",
       "auth": true,
-      "response": "{ videoId, uploadUrls[] }",
-      "statusCodes": "201"
+      "note": "API returns signed upload parts; the creator sends media bytes to raw object storage."
     },
     {
       "id": "a2",
+      "ownerNodeId": "upload",
+      "method": "POST",
+      "path": "/v1/videos/{id}/complete",
+      "request": "{ \"uploadId\": \"u1\", \"parts\": [{ \"number\": 1, \"etag\": \"...\" }] }",
+      "response": "202 { \"videoId\": \"v1\", \"status\": \"PROCESSING\" }",
+      "statusCodes": "202, 409",
+      "auth": true,
+      "idempotent": true,
+      "note": "Use an outbox/object-store event and dedup processing version; duplicate completion must not publish incomplete media."
+    },
+    {
+      "id": "a3",
       "ownerNodeId": "video",
       "method": "GET",
       "path": "/v1/videos/{id}/manifest",
+      "request": "No request body.",
+      "response": "200 { \"manifestUrl\": \"https://cdn/video/v1/master.m3u8\", \"renditions\": [\"240p\",\"720p\"] }",
+      "statusCodes": "200, 404, 409",
       "auth": false,
-      "response": "{ hlsUrl, renditions[] }"
+      "idempotent": true,
+      "note": "The player fetches HLS/DASH segments from CDN and switches bitrate adaptively."
     }
   ],
   "entities": [
     {
       "name": "Video",
-      "fields": "id, owner_id, title, status, duration, renditions[], created_at"
+      "fields": "video_id: string PK\nowner_id: string\ntitle: string\nstatus: UPLOADING|PROCESSING|READY|FAILED\nmanifest_key: string?\nrenditions: string[]",
+      "storeNodeId": "db"
+    },
+    {
+      "name": "MediaObject",
+      "fields": "object_key: string PK\nvideo_id: string\nprocessing_version: string\nkind: raw|segment|manifest\nchecksum: string",
+      "storeNodeId": "raw"
     }
   ]
 }

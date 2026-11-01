@@ -1,0 +1,70 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "client",
+      "t": "web_client",
+      "l": "Concurrent readers",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "svc",
+      "t": "service",
+      "l": "Service + single-flight",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "cache",
+      "t": "cache",
+      "l": "Cached values",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "lease",
+      "t": "coordination",
+      "l": "Optional per-key lease",
+      "x": 560,
+      "y": 180
+    },
+    {
+      "i": "db",
+      "t": "sql_db",
+      "l": "Rate-protected origin",
+      "x": 840,
+      "y": 180
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "client",
+      "d": "svc",
+      "l": "Many requests for one key",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "svc",
+      "d": "cache",
+      "l": "Hit or bounded-staleness check",
+      "h": "r>l"
+    },
+    {
+      "i": "e3",
+      "s": "svc",
+      "d": "lease",
+      "l": "Elect one bounded refresh owner",
+      "h": "r>l"
+    },
+    {
+      "i": "e4",
+      "s": "svc",
+      "d": "db",
+      "l": "Only refresh owner reads origin",
+      "h": "r>l"
+    }
+  ]
+}

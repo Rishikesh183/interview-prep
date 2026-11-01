@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "overview": "Streaming path as above for the 1-hour view; hourly/daily Spark jobs compute exact counts for longer windows.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative stream: 1M events/s and 60 one-second buckets.",
+      "calculation": "1,000,000 × 60 = 60M events per minute if retained individually.",
+      "result": "Sketches bound counter memory independently of distinct item count, with approximation cost.",
+      "implication": "Choose sketch error/confidence and window granularity explicitly; retain raw data for exact historical repair."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Mobile caller with intermittent connectivity for top-k trending.",
+      "rationale": "Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for top-k trending.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "ingest",
+      "purpose": "Implement the owned APIs and coordinate state transitions for top-k trending.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "kafka",
+      "purpose": "Retain ordered events for replayable consumers for top-k trending.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "flink",
+      "purpose": "Count-min sketch + min-heap per partition, partial top-K every minute",
+      "rationale": "Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay."
+    },
+    {
+      "nodeId": "merge",
+      "purpose": "Merges partial lists into the global top 100 per window",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "redis",
+      "purpose": "Serve derived or transient hot state for top-k trending.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "archive",
+      "purpose": "Execute background work with bounded concurrency for top-k trending.",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Persist immutable large objects for top-k trending.",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    },
+    {
+      "nodeId": "trends",
+      "purpose": "Implement the owned APIs and coordinate state transitions for top-k trending.",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "batch",
+      "purpose": "Recompute counts from raw events by window. Publish a new version after successful completion; do not overwrite the live partial window.",
+      "rationale": "Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "TrendingWindow",
+      "purpose": "Materialized top-K serving state for a completed or live window.",
+      "accessPatterns": [
+        "Read top items for a chosen window; atomically publish a new result version."
+      ],
+      "constraints": [
+        "Approximate candidates need an error/recall policy; mergeable count sketches do not guarantee a globally heavy item appears in every local top-K."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Record an event for windowed popularity.",
+      "rationale": "Dedup event IDs within the policy window; separate event time from processing time."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Read materialized trending items.",
+      "rationale": "Expose window and approximation/freshness semantics; do not recompute a global sort on every query."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Apps",
+      "explanation": "In Design, add Mobile Client and name it “Apps”. Place it in the leftmost caller/background lane. Mobile caller with intermittent connectivity for top-k trending. Use stable request IDs and reconnect/cursor recovery rather than assuming one continuous session. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Apps. Distribute incoming connections across healthy instances for top-k trending. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Event ingest",
+      "explanation": "In Design, add Service and name it “Event ingest”. Place it in column 3, row 1 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for top-k trending. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["ingest"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Events",
+      "explanation": "In Design, add Event Stream and name it “Events”. Place it in column 4, row 1 of the HLD; its callers are Event ingest. Retain ordered events for replayable consumers for top-k trending. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["kafka"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Counters",
+      "explanation": "In Design, add Stream Processor and name it “Counters”. Place it in column 5, row 1 of the HLD; its callers are Events. Count-min sketch + min-heap per partition, partial top-K every minute Choose windowing, watermarks and allowed lateness; make sink writes idempotent under replay. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["flink"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Top-K merger",
+      "explanation": "In Design, add Worker and name it “Top-K merger”. Place it in column 6, row 1 of the HLD; its callers are Counters. Merges partial lists into the global top 100 per window Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["merge"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Trending cache",
+      "explanation": "In Design, add Cache and name it “Trending cache”. Place it in column 7, row 1 of the HLD; its callers are Top-K merger, Trends API, Exact historical counts. Serve derived or transient hot state for top-k trending. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["redis"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": ["TrendingWindow"]
+    },
+    {
+      "title": "Archiver",
+      "explanation": "In Design, add Worker and name it “Archiver”. Place it in column 5, row 2 of the HLD; its callers are Events. Execute background work with bounded concurrency for top-k trending. Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["archive"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Raw events",
+      "explanation": "In Design, add Object Storage and name it “Raw events”. Place it in column 6, row 2 of the HLD; its callers are Archiver, Exact historical counts. Persist immutable large objects for top-k trending. Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Trends API",
+      "explanation": "In Design, add Service and name it “Trends API”. Place it in column 3, row 2 of the HLD; its callers are LB. Implement the owned APIs and coordinate state transitions for top-k trending. Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["trends"],
+      "edgeIds": ["e3", "e10"],
+      "apiIds": ["a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Exact historical counts",
+      "explanation": "In Design, add Batch Processor and name it “Exact historical counts”. Place it in column 4, row 2 of the HLD. Recompute counts from raw events by window. Publish a new version after successful completion; do not overwrite the live partial window. Publish only complete outputs; retain a checkpoint/manifest for deterministic retries and reconciliation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["batch"],
+      "edgeIds": ["e11", "e12"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Serve a low-latency estimate",
+      "steps": [
+        {
+          "title": "Apps → LB → Event ingest → Events → Counters → Top-K merger → Trending cache",
+          "explanation": "Maintain approximate live-window results with an explicit error/candidate policy.",
+          "nodeIds": ["client", "lb", "ingest", "kafka", "flink", "merge", "redis"],
+          "edgeIds": ["e1", "e2", "e4", "e5", "e7", "e8"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Replace completed historical windows",
+      "steps": [
+        {
+          "title": "Events → Archiver → Raw events",
+          "explanation": "Persist raw events with immutable input manifests.",
+          "nodeIds": ["kafka", "archive", "s3"],
+          "edgeIds": ["e6", "e9"]
+        },
+        {
+          "title": "Exact historical counts → Raw events",
+          "explanation": "Count exact completed historical windows.",
+          "nodeIds": ["batch", "s3"],
+          "edgeIds": ["e11"]
+        },
+        {
+          "title": "Exact historical counts → Trending cache",
+          "explanation": "Publish an exact version without overwriting the in-progress live window.",
+          "nodeIds": ["batch", "redis"],
+          "edgeIds": ["e12"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Late events arrive after a window was published",
+      "handling": "Use a watermark and an allowed-lateness policy; publish corrected window versions if supported. Keep approximate live and exact batch outputs distinguishable.",
+      "nodeIds": ["merge", "redis", "archive"]
+    }
+  ],
+  "alternatives": "Use sketches for bounded-memory approximate live trends. Add exact batch recomputation for settled historical windows when accuracy justifies a second pipeline; expose approximation and output-version metadata.",
+  "sectionApplicability": {}
+}

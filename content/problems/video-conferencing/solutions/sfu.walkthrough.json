@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "overview": "Signaling over WebSockets; clients send 3 simulcast layers to a regional SFU which forwards the right layer to each receiver; STUN/TURN for NAT; recording bots join as participants and write to S3.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative room: 10 publishers each sending 1 Mbps.",
+      "calculation": "SFU ingress ≈ 10 Mbps; forwarding everyone to everyone costs up to 10 × 9 = 90 Mbps egress.",
+      "result": "Layer selection and active-speaker limits reduce egress; MCU trades bandwidth for encode CPU.",
+      "implication": "Size media servers by packet/egress or codec compute separately from signaling connections."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "client",
+      "purpose": "Sends 3 simulcast layers; adapts to bandwidth",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "dns",
+      "purpose": "Routes to the nearest region",
+      "rationale": "DNS caching and TTL affect failover speed; do not rely on instant propagation."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "By meeting id",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "sig",
+      "purpose": "Maintain long-lived sessions and deliver realtime events for video conferencing (zoom).",
+      "rationale": "Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances."
+    },
+    {
+      "nodeId": "meet",
+      "purpose": "Implement the owned APIs and coordinate state transitions for video conferencing (zoom).",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "db",
+      "purpose": "Store authoritative records with transactional constraints for video conferencing (zoom).",
+      "rationale": "Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes."
+    },
+    {
+      "nodeId": "mlb",
+      "purpose": "Distribute incoming connections across healthy instances for video conferencing (zoom).",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "sfu",
+      "purpose": "Selective forwarding unit: forwards the right simulcast layer to each receiver (no mixing)",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "turn",
+      "purpose": "ICE / NAT traversal",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    },
+    {
+      "nodeId": "rec",
+      "purpose": "Execute background work with bounded concurrency for video conferencing (zoom).",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "s3",
+      "purpose": "Persist immutable large objects for video conferencing (zoom).",
+      "rationale": "Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "Meeting",
+      "purpose": "Meeting control-plane state, permissions and media-region assignment.",
+      "accessPatterns": ["Create/join a meeting; authorize participants; end a session."],
+      "constraints": [
+        "Short-lived join tokens bind identity, meeting and media region. Media packets do not pass through this SQL database."
+      ],
+      "relationships": []
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Create the meeting control-plane record.",
+      "rationale": "Recording permissions and retention are explicit; allocate a nearby media region."
+    },
+    {
+      "apiId": "a2",
+      "purpose": "Authorize a participant and return media-session credentials.",
+      "rationale": "Signaling exchanges SDP/ICE over WebSockets; RTP media goes to SFU/MCU or TURN, independently of the API."
+    },
+    {
+      "apiId": "a3",
+      "purpose": "Exchange session negotiation messages.",
+      "rationale": "Use ICE with STUN/TURN; WebSocket signaling does not carry the video media stream."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Participants",
+      "explanation": "In Design, add Web Client and name it “Participants”. Place it in the leftmost caller/background lane. Sends 3 simulcast layers; adapts to bandwidth Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["client"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Geo DNS",
+      "explanation": "In Design, add DNS and name it “Geo DNS”. Place it in column 2, row 1 of the HLD; its callers are Participants. Routes to the nearest region DNS caching and TTL affect failover speed; do not rely on instant propagation. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["dns"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Signaling LB",
+      "explanation": "In Design, add Load Balancer and name it “Signaling LB”. Place it in column 2, row 2 of the HLD; its callers are Participants. By meeting id Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e2"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Signaling",
+      "explanation": "In Design, add WebSocket Server and name it “Signaling”. Place it in column 3, row 1 of the HLD; its callers are Signaling LB. Maintain long-lived sessions and deliver realtime events for video conferencing (zoom). Durable history is stored separately; shared routing/pub-sub connects clients on different gateway instances. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sig"],
+      "edgeIds": ["e3"],
+      "apiIds": ["a3"],
+      "entityNames": []
+    },
+    {
+      "title": "Meeting Service",
+      "explanation": "In Design, add Service and name it “Meeting Service”. Place it in column 3, row 2 of the HLD; its callers are Signaling LB. Implement the owned APIs and coordinate state transitions for video conferencing (zoom). Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["meet"],
+      "edgeIds": ["e4"],
+      "apiIds": ["a1", "a2"],
+      "entityNames": []
+    },
+    {
+      "title": "Meetings",
+      "explanation": "In Design, add SQL Database and name it “Meetings”. Place it in column 4, row 1 of the HLD; its callers are Meeting Service. Store authoritative records with transactional constraints for video conferencing (zoom). Choose keys and indexes from the documented access patterns; replicas provide availability, not conflict-free arbitrary writes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["db"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": ["Meeting"]
+    },
+    {
+      "title": "Media LB",
+      "explanation": "In Design, add Load Balancer and name it “Media LB”. Place it in column 2, row 3 of the HLD; its callers are Participants. Distribute incoming connections across healthy instances for video conferencing (zoom). Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["mlb"],
+      "edgeIds": ["e7"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Regional SFU",
+      "explanation": "In Design, add Service and name it “Regional SFU”. Place it in column 3, row 3 of the HLD; its callers are Media LB. Selective forwarding unit: forwards the right simulcast layer to each receiver (no mixing) Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["sfu"],
+      "edgeIds": ["e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "STUN/TURN",
+      "explanation": "In Design, add External Service and name it “STUN/TURN”. Place it in column 2, row 4 of the HLD; its callers are Participants. ICE / NAT traversal Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["turn"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Recording bots",
+      "explanation": "In Design, add Worker and name it “Recording bots”. Place it in column 4, row 2 of the HLD; its callers are Regional SFU. Execute background work with bounded concurrency for video conferencing (zoom). Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["rec"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Recordings",
+      "explanation": "In Design, add Object Storage and name it “Recordings”. Place it in column 5, row 1 of the HLD; its callers are Recording bots. Persist immutable large objects for video conferencing (zoom). Publish metadata pointers only after objects are complete; use checksums, versioned keys and lifecycle cleanup. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["s3"],
+      "edgeIds": ["e10"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Join and negotiate",
+      "steps": [
+        {
+          "title": "Participants → Signaling LB → Meeting Service → Meetings",
+          "explanation": "Authorize meeting membership and issue a short-lived regional token.",
+          "nodeIds": ["client", "lb", "meet", "db"],
+          "edgeIds": ["e2", "e4", "e5"]
+        },
+        {
+          "title": "Participants → Signaling LB → Signaling",
+          "explanation": "Exchange SDP and ICE candidates over WebSocket.",
+          "nodeIds": ["client", "lb", "sig"],
+          "edgeIds": ["e2", "e3"]
+        },
+        {
+          "title": "Participants → STUN/TURN",
+          "explanation": "Use STUN/TURN when direct connectivity fails.",
+          "nodeIds": ["client", "turn"],
+          "edgeIds": ["e6"]
+        }
+      ],
+      "apiId": "a2"
+    },
+    {
+      "id": "flow-2",
+      "title": "Forward media and record",
+      "steps": [
+        {
+          "title": "Participants → Media LB → Regional SFU",
+          "explanation": "Send simulcast layers; the SFU chooses a layer per receiver based on bandwidth.",
+          "nodeIds": ["client", "mlb", "sfu"],
+          "edgeIds": ["e7", "e8"]
+        },
+        {
+          "title": "Regional SFU → Recording bots → Recordings",
+          "explanation": "An authorized recording bot consumes selected tracks and writes versioned recording objects.",
+          "nodeIds": ["sfu", "rec", "s3"],
+          "edgeIds": ["e9", "e10"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "A participant changes network or the media node fails",
+      "handling": "Use ICE restart, reconnect signaling and reassign a healthy media node/region with a new token. Expect a short media interruption; preserve meeting permissions and roster.",
+      "nodeIds": ["db", "rec"]
+    }
+  ],
+  "alternatives": "Use an SFU when server bandwidth is cheaper than encoding CPU and clients decode multiple streams. Use an MCU when light clients or composed output justify mixing and re-encoding latency.",
+  "sectionApplicability": {}
+}

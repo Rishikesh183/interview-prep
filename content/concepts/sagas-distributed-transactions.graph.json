@@ -1,0 +1,111 @@
+{
+  "v": 1,
+  "n": [
+    {
+      "i": "coord",
+      "t": "service",
+      "l": "Checkout coordinator",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "i": "state",
+      "t": "sql_db",
+      "l": "Durable saga state",
+      "x": 280,
+      "y": 0
+    },
+    {
+      "i": "q",
+      "t": "message_queue",
+      "l": "Step commands / results",
+      "x": 280,
+      "y": 220
+    },
+    {
+      "i": "seats",
+      "t": "worker",
+      "l": "Seat reservation step",
+      "x": 560,
+      "y": 0
+    },
+    {
+      "i": "pay",
+      "t": "worker",
+      "l": "Payment step",
+      "x": 560,
+      "y": 220
+    },
+    {
+      "i": "psp",
+      "t": "external_service",
+      "l": "Provider",
+      "x": 840,
+      "y": 220
+    }
+  ],
+  "e": [
+    {
+      "i": "e1",
+      "s": "coord",
+      "d": "state",
+      "l": "Persist state/version/deadlines",
+      "h": "r>l"
+    },
+    {
+      "i": "e2",
+      "s": "coord",
+      "d": "q",
+      "l": "Issue idempotent step",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e3",
+      "s": "q",
+      "d": "seats",
+      "l": "Hold / confirm / release",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e4",
+      "s": "q",
+      "d": "pay",
+      "l": "Authorize / void / refund",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e5",
+      "s": "pay",
+      "d": "psp",
+      "l": "Stable provider request identity",
+      "h": "r>l"
+    },
+    {
+      "i": "e6",
+      "s": "seats",
+      "d": "q",
+      "l": "Publish fenced step outcome",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e7",
+      "s": "pay",
+      "d": "q",
+      "l": "Publish payment outcome",
+      "h": "r>l",
+      "m": "a"
+    },
+    {
+      "i": "e8",
+      "s": "q",
+      "d": "coord",
+      "l": "Resume workflow or compensate",
+      "h": "r>l",
+      "m": "a"
+    }
+  ]
+}

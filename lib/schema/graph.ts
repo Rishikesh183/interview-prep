@@ -29,6 +29,8 @@ export const ProtocolSchema = z.enum([
   "Kafka",
   "SQL",
   "internal",
+  "WebRTC",
+  "UDP",
 ]);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 

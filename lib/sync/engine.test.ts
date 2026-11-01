@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getAttempt, listAttempts, deleteAttempt, saveAttempt } from "@/lib/db/attempts";
 import { getProgress, recordResult } from "@/lib/db/progress";
 import { db } from "@/lib/db/dexie";
@@ -13,40 +13,35 @@ import {
   AttemptRowSchema,
   MySolutionRowSchema,
   type Attempt,
-  type AttemptRow,
   type MySolutionRow,
   type ProgressRow,
 } from "@/lib/schema";
 import { weakUrlShortener } from "@/test/fixtures";
-import { SyncEngine, type RemoteAttempts } from "./engine";
+import { SyncEngine, type RemoteProfile } from "./engine";
 import { attemptToRow, rowToAttempt } from "./mapping";
 
 const USER = "11111111-1111-4111-8111-111111111111";
 
 /** In-memory server with the same last-write-wins rule as the Postgres trigger. */
 function fakeServer() {
-  const rows = new Map<string, AttemptRow>();
   const progress = new Map<string, ProgressRow>();
   const solutions = new Map<string, MySolutionRow>();
-  const remote: RemoteAttempts = {
-    async listStamps() {
-      return [...rows.values()].map((r) => ({ id: r.id, updatedAt: Date.parse(r.updated_at) }));
-    },
-    async fetch(ids) {
-      return ids.flatMap((id) => (rows.has(id) ? [structuredClone(rows.get(id)!)] : []));
-    },
-    async upsert(batch) {
-      for (const row of batch) {
-        AttemptRowSchema.parse(row); // what PostgREST would accept
-        const existing = rows.get(row.id);
-        if (!existing || Date.parse(row.updated_at) >= Date.parse(existing.updated_at)) {
-          rows.set(row.id, structuredClone(row));
-        }
-      }
-    },
-    async remove(ids) {
-      ids.forEach((id) => rows.delete(id));
-    },
+  const attemptTransport = {
+    listStamps: vi.fn(async () => {
+      throw new Error("History must never be listed remotely");
+    }),
+    fetch: vi.fn(async () => {
+      throw new Error("History must never be downloaded");
+    }),
+    upsert: vi.fn(async () => {
+      throw new Error("History must never be uploaded");
+    }),
+    remove: vi.fn(async () => {
+      throw new Error("History must never be deleted remotely");
+    }),
+  };
+  const remote: RemoteProfile & typeof attemptTransport = {
+    ...attemptTransport,
     async listProgress() {
       return [...progress.values()].map((r) => structuredClone(r));
     },
@@ -76,7 +71,7 @@ function fakeServer() {
       ids.forEach((id) => solutions.delete(id));
     },
   };
-  return { rows, progress, solutions, remote };
+  return { progress, solutions, remote, attemptTransport };
 }
 
 async function wipeDevice() {
@@ -112,84 +107,102 @@ describe("mapping", () => {
 });
 
 describe("SyncEngine", () => {
-  it("laptop edit → phone (fresh device) after sign-in sees the same design", async () => {
+  it("does not lose a result recorded while the progress pull is in flight", async () => {
     const server = fakeServer();
-    const laptop = attempt();
-    await db().attempts.put(laptop);
+    vi.spyOn(server.remote, "listProgress").mockImplementation(async () => {
+      await recordResult({
+        problemId: "url-shortener",
+        points: 10,
+        ratio: 1,
+        solved: true,
+        at: 2000,
+      });
+      return [
+        {
+          user_id: USER,
+          problem_id: "url-shortener",
+          best_points: 5,
+          best_ratio: 0.5,
+          solved_at: null,
+        },
+      ];
+    });
     await new SyncEngine(server.remote, USER).syncAll();
-    expect(server.rows.size).toBe(1);
-
-    await wipeDevice(); // the phone has nothing locally
-    const plan = await new SyncEngine(server.remote, USER).syncAll();
-    expect(plan.pull).toEqual([laptop.id]);
-    expect(await getAttempt(laptop.id)).toEqual(laptop);
+    expect(await getProgress("url-shortener")).toMatchObject({ bestPoints: 10, bestRatio: 1 });
   });
 
-  it("pushes only changed attempts on the fast path", async () => {
+  it("marks only the uploaded progress version as pushed without overwriting a newer submit", async () => {
     const server = fakeServer();
+    await recordResult({
+      problemId: "url-shortener",
+      points: 5,
+      ratio: 0.5,
+      solved: false,
+      at: 1000,
+    });
+    vi.spyOn(server.remote, "upsertProgress").mockImplementation(async () => {
+      await recordResult({
+        problemId: "url-shortener",
+        points: 10,
+        ratio: 1,
+        solved: true,
+        at: 2000,
+      });
+    });
+    await new SyncEngine(server.remote, USER).pushDirty();
+    expect(await getProgress("url-shortener")).toMatchObject({
+      bestPoints: 10,
+      updatedAt: 2000,
+      pushedAt: 1000,
+    });
+  });
+
+  it("does not overwrite a solution renamed during its upload", async () => {
+    const server = fakeServer();
+    const saved = await saveMySolution(attempt({ status: "submitted" }), "Original");
+    vi.spyOn(server.remote, "upsertMySolutions").mockImplementation(async () => {
+      await renameMySolution(saved.id, "Renamed during upload");
+    });
+    await new SyncEngine(server.remote, USER).pushDirty();
+    expect((await listMySolutions("url-shortener"))[0].title).toBe("Renamed during upload");
+  });
+  it("never uploads, downloads, rekeys or deletes local attempt history", async () => {
+    const server = fakeServer();
+    const entries = [
+      attempt(),
+      attempt({ id: "legacy-id", status: "submitted" }),
+      attempt({ status: "reviewed" }),
+    ];
+    await db().attempts.bulkPut(entries);
+    await db().syncState.put({ id: entries[0].id, syncedUpdatedAt: 0 });
+    await db().tombstones.put({ id: "old-cloud-attempt", deletedAt: 1 });
     const engine = new SyncEngine(server.remote, USER);
     await engine.bindUser();
-    const a = attempt();
-    await db().attempts.put(a);
-    expect(await engine.pushDirty()).toBe(1);
+    await engine.syncAll();
     expect(await engine.pushDirty()).toBe(0);
-    await saveAttempt({ ...a, requirements: { ...a.requirements, functional: ["changed"] } });
-    expect(await engine.pushDirty()).toBe(1);
-    expect(rowToAttempt(server.rows.get(a.id)!).requirements.functional).toEqual(["changed"]);
+    for (const entry of entries) expect(await getAttempt(entry.id)).toEqual(entry);
+    for (const call of Object.values(server.attemptTransport)) expect(call).not.toHaveBeenCalled();
   });
 
-  it("last write wins in both directions", async () => {
-    const server = fakeServer();
-    const a = attempt({ updatedAt: 1_000 });
-    await server.remote.upsert([
-      await attemptToRow({ ...a, updatedAt: 5_000, elapsedMs: 99 }, USER),
-    ]);
-    await db().attempts.put(a);
-    await new SyncEngine(server.remote, USER).syncAll();
-    expect((await getAttempt(a.id))!.elapsedMs).toBe(99); // remote was newer
-
-    // A stale push can't overwrite the newer server row.
-    await server.remote.upsert([
-      await attemptToRow({ ...a, updatedAt: 2_000, elapsedMs: 1 }, USER),
-    ]);
-    expect(rowToAttempt(server.rows.get(a.id)!).elapsedMs).toBe(99);
-  });
-
-  it("propagates deletes both ways", async () => {
+  it("local edits and deletions do not schedule cloud history writes", async () => {
     const server = fakeServer();
     const engine = new SyncEngine(server.remote, USER);
-    const [a, b] = [attempt(), attempt()];
-    await db().attempts.bulkPut([a, b]);
-    await engine.syncAll();
-
-    await deleteAttempt(a.id); // deleted here → removed on server
-    await engine.pushDirty();
-    expect([...server.rows.keys()]).toEqual([b.id]);
-
-    await server.remote.remove([b.id]); // deleted on another device → removed here
-    await engine.syncAll();
+    const local = attempt();
+    await saveAttempt(local);
+    expect(await engine.pushDirty()).toBe(0);
+    await deleteAttempt(local.id);
+    expect(await engine.pushDirty()).toBe(0);
+    expect(await db().tombstones.count()).toBe(0);
     expect(await listAttempts()).toEqual([]);
+    for (const call of Object.values(server.attemptTransport)) expect(call).not.toHaveBeenCalled();
   });
 
-  it("gives legacy (pre-UUID) attempts a UUID before uploading", async () => {
-    const server = fakeServer();
-    await db().attempts.put(attempt({ id: "abc123" }));
-    await new SyncEngine(server.remote, USER).syncAll();
-    const [synced] = await listAttempts();
-    expect(synced.id).not.toBe("abc123");
-    expect(server.rows.has(synced.id)).toBe(true);
-  });
-
-  it("treats local attempts as new when a different account signs in", async () => {
-    const server = fakeServer();
-    await db().attempts.put(attempt());
-    const first = new SyncEngine(server.remote, USER);
-    await first.bindUser();
-    await first.syncAll();
-
-    const other = new SyncEngine(fakeServer().remote, "22222222-2222-4222-8222-222222222222");
-    await other.bindUser();
-    expect(await db().syncState.count()).toBe(0);
+  it("binding another account leaves device history and its IDs intact", async () => {
+    const local = attempt({ id: "local-history" });
+    await db().attempts.put(local);
+    await new SyncEngine(fakeServer().remote, USER).bindUser();
+    await new SyncEngine(fakeServer().remote, "22222222-2222-4222-8222-222222222222").bindUser();
+    expect(await getAttempt(local.id)).toEqual(local);
   });
 
   it("syncs progress across devices and never lowers it", async () => {

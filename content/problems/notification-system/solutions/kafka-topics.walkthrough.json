@@ -1,0 +1,213 @@
+{
+  "version": 1,
+  "overview": "Requests are written to a Kafka topic per channel; consumer groups per channel scale independently. Failed sends go to a retry topic with delay, then a dead-letter topic.",
+  "limitations": [],
+  "estimation": [
+    {
+      "assumption": "Illustrative campaign: 10M recipients over 10 minutes.",
+      "calculation": "10,000,000 / 600 ≈ 16,667 deliveries/s before retries and multiple channels.",
+      "result": "Provider quotas may be lower than application enqueue throughput.",
+      "implication": "Separate channel queues/consumer groups and enforce provider-specific rate limits."
+    }
+  ],
+  "components": [
+    {
+      "nodeId": "caller",
+      "purpose": "User-facing caller for notification system.",
+      "rationale": "Keep validation and durable state in services; retry only according to the API contract."
+    },
+    {
+      "nodeId": "lb",
+      "purpose": "Distribute incoming connections across healthy instances for notification system.",
+      "rationale": "Health checks and routing policy support scale-out; connection-based systems need compatible session routing."
+    },
+    {
+      "nodeId": "svc",
+      "purpose": "Dedup via idempotency key in Redis (SETNX, 24h)",
+      "rationale": "Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants."
+    },
+    {
+      "nodeId": "dedup",
+      "purpose": "Serve derived or transient hot state for notification system.",
+      "rationale": "Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store."
+    },
+    {
+      "nodeId": "prefs",
+      "purpose": "Durable versioned user preferences, notification identity and outbox/delivery state; Redis only accelerates dedup.",
+      "rationale": "Define the partition key and consistency requirements; conditional writes protect version and ownership checks."
+    },
+    {
+      "nodeId": "push",
+      "purpose": "Retain ordered events for replayable consumers for notification system.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "email",
+      "purpose": "Retain ordered events for replayable consumers for notification system.",
+      "rationale": "Ordering is within a partition; checkpoint only after durable effects and dedup replays."
+    },
+    {
+      "nodeId": "cw",
+      "purpose": "Retry topic with backoff, then dead-letter topic",
+      "rationale": "Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement."
+    },
+    {
+      "nodeId": "prov",
+      "purpose": "External system boundary for notification system.",
+      "rationale": "Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes."
+    }
+  ],
+  "entityDetails": [
+    {
+      "entityName": "UserPreference",
+      "purpose": "User consent and delivery-channel policy.",
+      "accessPatterns": ["Read preferences before enqueue; invalidate cached preference changes."],
+      "constraints": [
+        "Policy storage is authoritative; a preferences cache must have bounded staleness."
+      ],
+      "relationships": [
+        "NotificationLog checks consent and the applicable preference version before delivery."
+      ]
+    },
+    {
+      "entityName": "NotificationLog",
+      "purpose": "Durable delivery attempt and dedup state.",
+      "accessPatterns": ["Claim a delivery, persist provider IDs and inspect failures."],
+      "constraints": [
+        "Dedup logical notification/channel; provider timeouts may still leave an ambiguous send outcome."
+      ],
+      "relationships": [
+        "user_id links delivery policy to UserPreference; deduplication is per logical notification/channel."
+      ]
+    }
+  ],
+  "apiDetails": [
+    {
+      "apiId": "a1",
+      "purpose": "Accept an authorized logical notification for asynchronous delivery.",
+      "rationale": "Check preferences, dedup the idempotency key and publish durably before acknowledging."
+    }
+  ],
+  "buildSteps": [
+    {
+      "title": "Producers",
+      "explanation": "In Design, add Web Client and name it “Producers”. Place it in the leftmost caller/background lane. User-facing caller for notification system. Keep validation and durable state in services; retry only according to the API contract. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["caller"],
+      "edgeIds": [],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "LB",
+      "explanation": "In Design, add Load Balancer and name it “LB”. Place it in column 2, row 1 of the HLD; its callers are Producers. Distribute incoming connections across healthy instances for notification system. Health checks and routing policy support scale-out; connection-based systems need compatible session routing. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["lb"],
+      "edgeIds": ["e1"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Notify API",
+      "explanation": "In Design, add Service and name it “Notify API”. Place it in column 3, row 1 of the HLD; its callers are LB. Dedup via idempotency key in Redis (SETNX, 24h) Keep request handlers stateless where possible; the datastore or a fenced owner enforces concurrency invariants. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["svc"],
+      "edgeIds": ["e2"],
+      "apiIds": ["a1"],
+      "entityNames": []
+    },
+    {
+      "title": "Dedup Redis",
+      "explanation": "In Design, add Cache and name it “Dedup Redis”. Place it in column 4, row 1 of the HLD; its callers are Notify API. Serve derived or transient hot state for notification system. Specify TTL and update strategy; durable state remains elsewhere unless an atomic admission decision explicitly depends on this store. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["dedup"],
+      "edgeIds": ["e3"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Preferences + delivery records",
+      "explanation": "In Design, add Key-Value Store and name it “Preferences + delivery records”. Place it in column 4, row 2 of the HLD; its callers are Notify API. Durable versioned user preferences, notification identity and outbox/delivery state; Redis only accelerates dedup. Define the partition key and consistency requirements; conditional writes protect version and ownership checks. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["prefs"],
+      "edgeIds": ["e4"],
+      "apiIds": [],
+      "entityNames": ["UserPreference", "NotificationLog"]
+    },
+    {
+      "title": "push topic",
+      "explanation": "In Design, add Event Stream and name it “push topic”. Place it in column 4, row 3 of the HLD; its callers are Notify API. Retain ordered events for replayable consumers for notification system. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["push"],
+      "edgeIds": ["e5"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "email topic",
+      "explanation": "In Design, add Event Stream and name it “email topic”. Place it in column 4, row 4 of the HLD; its callers are Notify API. Retain ordered events for replayable consumers for notification system. Ordering is within a partition; checkpoint only after durable effects and dedup replays. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["email"],
+      "edgeIds": ["e6"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Channel consumers",
+      "explanation": "In Design, add Worker and name it “Channel consumers”. Place it in column 5, row 1 of the HLD; its callers are push topic, email topic. Retry topic with backoff, then dead-letter topic Assume retries; identify work stably, fence obsolete attempts and commit results before acknowledgement. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["cw"],
+      "edgeIds": ["e7", "e8"],
+      "apiIds": [],
+      "entityNames": []
+    },
+    {
+      "title": "Providers",
+      "explanation": "In Design, add External Service and name it “Providers”. Place it in column 6, row 1 of the HLD; its callers are Channel consumers. External system boundary for notification system. Use timeouts, authenticated requests and idempotency when supported; define ambiguous outcomes. Apply the configuration below and add the listed connections once both ends exist.",
+      "nodeIds": ["prov"],
+      "edgeIds": ["e9"],
+      "apiIds": [],
+      "entityNames": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-1",
+      "title": "Publish an authorized notification",
+      "steps": [
+        {
+          "title": "Producers → LB → Notify API → Dedup Redis",
+          "explanation": "Dedup logical delivery identity; Redis alone is not the durable record.",
+          "nodeIds": ["caller", "lb", "svc", "dedup"],
+          "edgeIds": ["e1", "e2", "e3"]
+        },
+        {
+          "title": "Notify API → Preferences + delivery records",
+          "explanation": "Check consent and persist notification/outbox state in the authoritative preference/delivery store.",
+          "nodeIds": ["svc", "prefs"],
+          "edgeIds": ["e4"]
+        },
+        {
+          "title": "Notify API → email topic → Channel consumers → Providers",
+          "explanation": "Publish by channel and deliver under provider quotas.",
+          "nodeIds": ["svc", "email", "cw", "prov"],
+          "edgeIds": ["e6", "e8", "e9"]
+        }
+      ],
+      "apiId": "a1"
+    },
+    {
+      "id": "flow-2",
+      "title": "Replay or retry channel work",
+      "steps": [
+        {
+          "title": "push topic → Channel consumers → Providers",
+          "explanation": "Resume from committed offsets, dedup delivery IDs and route delayed retries/dead letters without blocking healthy channels.",
+          "nodeIds": ["push", "cw", "prov"],
+          "edgeIds": ["e7", "e9"]
+        }
+      ]
+    }
+  ],
+  "failureCases": [
+    {
+      "scenario": "Provider times out after accepting a message",
+      "handling": "Retry using provider idempotency where supported; retain the ambiguous attempt and provider request ID. Bound retries with backoff and a DLQ; do not promise universal exactly-once delivery.",
+      "nodeIds": ["dedup", "prefs", "cw"]
+    }
+  ],
+  "alternatives": "Use channel queues for operational simplicity and failure isolation. Use Kafka topics for replay, ordered partitions and independent consumers, accepting lag management and retry-topic complexity.",
+  "sectionApplicability": {}
+}

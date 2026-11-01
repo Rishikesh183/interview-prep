@@ -37,5 +37,11 @@
     "Payments and idempotency"
   ],
   "rubricFocus": ["Inventory modelling", "Overbooking prevention", "Search architecture"],
-  "prerequisites": ["search-indexes", "consistency-models", "idempotency"]
+  "prerequisites": [
+    "search-indexes",
+    "consistency-models",
+    "idempotency",
+    "change-data-capture",
+    "sagas-distributed-transactions"
+  ]
 }

@@ -33,5 +33,12 @@
   ],
   "deepDives": ["Presigned uploads", "Thumbnail pipeline", "Feed fan-out", "Like counters"],
   "rubricFocus": ["Upload path", "Media delivery via CDN", "Feed generation"],
-  "prerequisites": ["object-storage-blobs", "cdn", "message-queues-vs-streams"]
+  "prerequisites": [
+    "object-storage-blobs",
+    "cdn",
+    "message-queues-vs-streams",
+    "fan-out-on-write",
+    "hybrid-fan-out",
+    "change-data-capture"
+  ]
 }

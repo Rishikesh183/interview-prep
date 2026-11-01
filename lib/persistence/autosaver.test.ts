@@ -127,4 +127,65 @@ describe("createAutosaver", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0].edit).toBe(1);
   });
+
+  it("serializes once per burst of changes, not once per change", async () => {
+    let snapshots = 0;
+    const saver = createAutosaver({
+      snapshot: () => {
+        snapshots++;
+        return value;
+      },
+      save: async (v) => {
+        saved.push(v.n);
+      },
+      onStatus: () => {},
+    });
+    saver.markSaved();
+    snapshots = 0;
+    for (let i = 1; i <= 50; i++) {
+      value = { n: i };
+      saver.schedule();
+    }
+    expect(snapshots).toBe(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(saved).toEqual([50]);
+    // One check, one write.
+    expect(snapshots).toBe(2);
+  });
+
+  it("reports unsaved changes until the write lands", async () => {
+    let fail = false;
+    const saver = createAutosaver({
+      snapshot: () => value,
+      save: async () => {
+        if (fail) throw new Error("quota");
+      },
+      onStatus: () => {},
+    });
+    saver.markSaved();
+    expect(saver.hasUnsavedChanges()).toBe(false);
+    value = { n: 1 };
+    saver.schedule();
+    expect(saver.hasUnsavedChanges()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(saver.hasUnsavedChanges()).toBe(false);
+
+    fail = true;
+    value = { n: 2 };
+    await saver.flush();
+    expect(saver.hasUnsavedChanges()).toBe(true);
+  });
+
+  it("doesn't count ignored fields as unsaved", () => {
+    let state = { edit: 0, ticks: 0 };
+    const saver = createAutosaver({
+      snapshot: () => state,
+      save: async () => {},
+      onStatus: () => {},
+      changeKey: ({ ticks: _t, ...rest }) => rest,
+    });
+    saver.markSaved();
+    state = { edit: 0, ticks: 3 };
+    expect(saver.hasUnsavedChanges()).toBe(false);
+  });
 });

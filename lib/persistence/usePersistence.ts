@@ -16,7 +16,10 @@ type Options<T> = {
   changeKey?: (value: T) => unknown;
 };
 
-/** Load once, then autosave on store changes; flushes when the tab hides or the view unmounts. */
+/**
+ * Load once, then autosave on store changes; flushes when the tab hides or the view unmounts.
+ * Closing or reloading the tab with changes not yet written asks the browser to confirm.
+ */
 export function usePersistence<T>({
   load,
   snapshot,
@@ -43,6 +46,14 @@ export function usePersistence<T>({
       if (document.visibilityState === "hidden") void saver.flush();
     };
     const onPageHide = () => void saver.flush();
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!saver.hasUnsavedChanges()) return;
+      // Start writing now: if the user stays (or the page lingers), the save still lands.
+      void saver.flush();
+      e.preventDefault();
+      // Older browsers only show the prompt when returnValue is set.
+      e.returnValue = "";
+    };
 
     setStatus("loading");
     void load().then(() => {
@@ -53,6 +64,7 @@ export function usePersistence<T>({
       unsubs = subscribe.map((sub) => sub(() => saver.schedule()));
       document.addEventListener("visibilitychange", onHide);
       window.addEventListener("pagehide", onPageHide);
+      window.addEventListener("beforeunload", onBeforeUnload);
     });
 
     return () => {
@@ -62,6 +74,7 @@ export function usePersistence<T>({
       unsubs.forEach((u) => u());
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
     };
     // `key` identifies what is loaded; the callbacks are expected to be stable per key.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -208,6 +208,22 @@ export const ProblemSchema = ProblemFileSchema.extend({
 });
 export type Problem = z.infer<typeof ProblemSchema>;
 
+/** Anonymous practice payload: authored answers never reach the public page/RSC response. */
+export const PublicProblemSchema = ProblemSchema.extend({
+  functionalReqs: z.tuple([]),
+  nonFunctionalReqs: z.tuple([]),
+  outOfScope: z.tuple([]),
+  deepDives: z.tuple([]),
+  rubricFocus: z.tuple([]),
+  references: z.tuple([]),
+});
+export type PublicProblem = z.infer<typeof PublicProblemSchema>;
+
+export const SolutionContentSchema = z.object({
+  viewerId: z.string().uuid(),
+  problem: ProblemSchema,
+});
+
 export type ProblemSummary = Pick<
   Problem,
   "id" | "number" | "title" | "difficulty" | "priority" | "tags" | "track"

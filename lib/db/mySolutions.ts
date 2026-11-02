@@ -56,16 +56,25 @@ export async function deleteMySolution(id: string): Promise<void> {
 const peekKey = (problemId: string) => `peek:${problemId}`;
 
 /** Remembers that solutions were opened before this problem was ever submitted. */
-export async function markSolutionsPeeked(problemId: string, now = Date.now()): Promise<void> {
+export async function markSolutionsPeeked(
+  problemId: string,
+  now = Date.now(),
+  guard?: () => void,
+): Promise<void> {
   const d = db();
-  await d.meta.put({ key: peekKey(problemId), value: String(now) });
-  // The attempt in progress (if any) scores 0 from now on.
-  const open = (await d.attempts.where("problemId").equals(problemId).toArray())
-    .filter((a) => a.status === "in_progress")
-    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  if (open && !open.solutionViewedBeforeSubmit) {
-    await d.attempts.put({ ...open, solutionViewedBeforeSubmit: true, updatedAt: now });
-  }
+  await d.transaction("rw", d.meta, d.attempts, async () => {
+    guard?.();
+    await d.meta.put({ key: peekKey(problemId), value: String(now) });
+    // The attempt in progress (if any) scores 0 from now on.
+    const open = (await d.attempts.where("problemId").equals(problemId).toArray())
+      .filter((a) => a.status === "in_progress")
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    guard?.();
+    if (open && !open.solutionViewedBeforeSubmit) {
+      await d.attempts.put({ ...open, solutionViewedBeforeSubmit: true, updatedAt: now });
+    }
+    guard?.();
+  });
 }
 
 export async function solutionsPeeked(problemId: string): Promise<boolean> {

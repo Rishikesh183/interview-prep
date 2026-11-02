@@ -1,7 +1,9 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Loader2, Lock } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { DifficultyBadge } from "@/components/problems/DifficultyBadge";
@@ -9,10 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { db } from "@/lib/db/dexie";
 import { hasSubmittedProblem } from "@/lib/db/attempts";
-import { markSolutionsPeeked } from "@/lib/db/mySolutions";
+import { useAuth } from "@/components/auth/useAuth";
+import { solutionAccess } from "@/lib/solutions/access";
+import { unlockProblemSolutions } from "@/lib/solutions/unlock";
 import type { Problem } from "@/lib/schema";
 import { MySolutions } from "./MySolutions";
 import { ApproachWalkthrough } from "./ApproachWalkthrough";
+import { SolutionSignIn, SolutionLoading } from "./SolutionAccessNotice";
+import { useSolutionContent } from "./useSolutionContent";
 
 /** Unlocked once the problem was submitted, or after "Unlock anyway" (PHASE-2 §3, §5). */
 function useUnlocked(problemId: string): boolean | undefined {
@@ -27,7 +33,10 @@ function useUnlocked(problemId: string): boolean | undefined {
 }
 
 export function SolutionsView({ problem }: { problem: Problem }) {
-  const unlocked = useUnlocked(problem.id);
+  const auth = useAuth();
+  const eligible = useUnlocked(problem.id);
+  const unlocked = solutionAccess(auth.status, auth.user?.id, eligible);
+  const content = useSolutionContent(problem.id, unlocked === true);
 
   return (
     <>
@@ -47,8 +56,14 @@ export function SolutionsView({ problem }: { problem: Problem }) {
           <h1 className="text-2xl font-semibold tracking-tight">{problem.title}: solutions</h1>
         </div>
 
-        {unlocked === undefined ? null : unlocked ? (
-          <Unlocked problem={problem} />
+        {auth.status !== "signed-in" || !auth.user ? (
+          <SolutionSignIn status={auth.status} returnTo={`/problems/${problem.id}/solutions`} />
+        ) : unlocked === undefined ? null : unlocked ? (
+          content.problem ? (
+            <Unlocked problem={content.problem} />
+          ) : (
+            <SolutionLoading error={content.error} retry={content.retry} />
+          )
         ) : (
           <Locked problem={problem} />
         )}
@@ -58,11 +73,21 @@ export function SolutionsView({ problem }: { problem: Problem }) {
 }
 
 function Locked({ problem }: { problem: Problem }) {
-  const onUnlock = () => {
+  const [unlocking, setUnlocking] = useState(false);
+  const onUnlock = async () => {
+    if (unlocking) return;
     const ok = window.confirm(
       "Unlock the solutions before submitting? Your attempt in progress (and any new attempt before your first submit) will score 0 points.",
     );
-    if (ok) void markSolutionsPeeked(problem.id);
+    if (!ok) return;
+    setUnlocking(true);
+    try {
+      await unlockProblemSolutions(problem.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't unlock solutions.");
+    } finally {
+      setUnlocking(false);
+    }
   };
   return (
     <section className="space-y-3 rounded-lg border border-dashed p-6">
@@ -70,15 +95,16 @@ function Locked({ problem }: { problem: Problem }) {
         <Lock className="size-4" /> Solutions are locked
       </h2>
       <p className="text-muted-foreground text-sm">
-        Submit an attempt at this problem first. Then you&apos;ll see {problem.references.length}{" "}
-        reference approaches with diagrams, walkthroughs and the tests they pass.
+        Submit an attempt at this problem first. Then you&apos;ll see reference approaches with
+        diagrams, walkthroughs and the tests they pass.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm">
           <Link href={`/problems/${problem.id}`}>Attempt it</Link>
         </Button>
-        <Button variant="outline" size="sm" onClick={onUnlock}>
-          Unlock anyway (scores 0 until you submit)
+        <Button variant="outline" size="sm" disabled={unlocking} onClick={() => void onUnlock()}>
+          {unlocking && <Loader2 className="animate-spin" />}{" "}
+          {unlocking ? "Checking sign-in…" : "Unlock anyway (scores 0 until you submit)"}
         </Button>
       </div>
     </section>

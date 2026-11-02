@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getProblem, loadProblems } from "@/lib/problems/load";
+import { publicProblem } from "@/lib/problems/public";
 import { WorkspaceClient } from "./WorkspaceClient";
 
 type Params = { params: Promise<{ id: string }> };
@@ -17,5 +18,5 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function ProblemPage({ params }: Params) {
   const problem = getProblem((await params).id);
   if (!problem) notFound();
-  return <WorkspaceClient problem={problem} />;
+  return <WorkspaceClient problem={publicProblem(problem)} />;
 }

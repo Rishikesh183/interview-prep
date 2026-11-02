@@ -105,7 +105,7 @@ export function Review({ problem }: { problem: Problem }) {
       {submitted && <AiReviewPanel problem={problem} />}
 
       <SolutionsGate problem={problem}>
-        <References problem={problem} />
+        {(referenceProblem) => <References problem={referenceProblem} />}
       </SolutionsGate>
     </div>
   );

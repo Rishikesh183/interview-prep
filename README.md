@@ -26,6 +26,8 @@ cross-device progress sync and AI review use the configured services.
   forfeits the points.
 - **Reference solutions** — 76 guided approaches with state ownership, contracts, incremental
   HLD construction, highlighted flows and final diagrams you can inspect and compare.
+  Viewing or unlocking references requires sign-in; answer content is served through a verified,
+  private endpoint rather than embedded in public practice pages.
 - **AI review (optional)** — a rubric-based review of your design plus a few follow-up questions,
   via any [OpenRouter](https://openrouter.ai) model (free models work).
 - **Learn** — 37 concept pages covering backend foundations, interview patterns and frontend

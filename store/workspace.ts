@@ -21,9 +21,16 @@ import {
   type AppNode,
 } from "@/lib/graph/convert";
 import { snapToGrid } from "@/lib/graph/placement";
-import type { ApiEndpoint, EdgeData, Graph, NodeData } from "@/lib/schema";
+import { planReplacement, repairOwnership, type EditorDocument } from "@/lib/graph/replacement";
+import { insertPreset } from "@/lib/graph/presets";
+import type { ApiEndpoint, Entity, EdgeData, Graph, NodeData } from "@/lib/schema";
 
-type GraphState = { nodes: AppNode[]; edges: AppEdge[]; apis: ApiEndpoint[] };
+type GraphState = EditorDocument;
+let historyBoundary = 0;
+let historyGroup = "";
+const checkpoint = () => {
+  historyGroup = `structural:${++historyBoundary}`;
+};
 
 /** Nodes/edges called out by a lint issue (or later, an AI review issue). Not undoable. */
 export type Highlight = { nodeIds: string[]; edgeIds: string[] };
@@ -48,6 +55,10 @@ export type WorkspaceState = GraphState & {
   duplicateSelected: () => void;
   setGraph: (graph: Graph) => void;
   setApis: (apis: ApiEndpoint[]) => void;
+  setEntities: (entities: Entity[]) => void;
+  setDocument: (graph: Graph, apis: ApiEndpoint[], entities?: Entity[]) => void;
+  replaceNode: (nodeId: string, type: string, removeApis?: boolean) => boolean;
+  addPreset: (id: string) => string[];
   getGraph: () => Graph;
 };
 
@@ -66,16 +77,7 @@ function historyView(state: GraphState): GraphState {
     nodes: state.nodes.map(({ selected: _s, dragging: _d, measured: _m, resizing: _r, ...n }) => n),
     edges: state.edges.map(({ selected: _s, ...e }) => e),
     apis: state.apis,
-  };
-}
-
-/** After nodes are removed: drop APIs they owned and unlink edges from those APIs. */
-function pruneApis(nodes: AppNode[], edges: AppEdge[], apis: ApiEndpoint[]) {
-  const nodeIds = new Set(nodes.map((n) => n.id));
-  const keptApis = apis.filter((a) => nodeIds.has(a.ownerNodeId));
-  return {
-    apis: keptApis.length === apis.length ? apis : keptApis,
-    edges: unlinkApis(edges, keptApis),
+    entities: state.entities,
   };
 }
 
@@ -94,21 +96,33 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       nodes: [],
       edges: [],
       apis: [],
+      entities: [],
       highlight: NO_HIGHLIGHT,
       setHighlight: (highlight) => set({ highlight }),
 
       onNodesChange: (changes) => {
+        if (changes.some((c) => c.type === "remove")) checkpoint();
+        else if (changes.some((c) => c.type === "position"))
+          historyGroup = `drag:${changes
+            .filter((c) => c.type === "position")
+            .map((c) => c.id)
+            .sort()
+            .join(",")}`;
         const nodes = applyNodeChanges(changes, get().nodes);
         if (!changes.some((c) => c.type === "remove")) return set({ nodes });
         const edges = get().edges.filter(
           (e) => nodes.some((n) => n.id === e.source) && nodes.some((n) => n.id === e.target),
         );
-        set({ nodes, ...pruneApis(nodes, edges, get().apis) });
+        set(repairOwnership({ ...get(), nodes, edges }));
       },
-      onEdgesChange: (changes) => set({ edges: applyEdgeChanges(changes, get().edges) }),
+      onEdgesChange: (changes) => {
+        if (changes.some((c) => c.type === "remove")) checkpoint();
+        set({ edges: applyEdgeChanges(changes, get().edges) });
+      },
 
       onConnect: (connection) => {
         const { nodes, edges } = get();
+        checkpoint();
         if (connection.source === connection.target) return;
         const source = nodes.find((n) => n.id === connection.source);
         const target = nodes.find((n) => n.id === connection.target);
@@ -126,6 +140,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       addNode: (type, position) => {
+        checkpoint();
         const def = getComponent(type);
         if (!def) return null;
         const { nodes } = get();
@@ -149,28 +164,34 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         return id;
       },
 
-      updateNodeData: (id, patch) =>
+      updateNodeData: (id, patch) => {
+        historyGroup = `node:${id}:${Object.keys(patch).sort().join(",")}`;
         set({
           nodes: get().nodes.map((n) =>
             n.id === id ? { ...n, data: { ...n.data, ...patch } } : n,
           ),
-        }),
+        });
+      },
 
-      updateNodeConfig: (id, key, value) =>
+      updateNodeConfig: (id, key, value) => {
+        historyGroup = `config:${id}:${key}`;
         set({
           nodes: get().nodes.map((n) =>
             n.id === id
               ? { ...n, data: { ...n.data, config: { ...n.data.config, [key]: value } } }
               : n,
           ),
-        }),
+        });
+      },
 
-      updateEdgeData: (id, patch) =>
+      updateEdgeData: (id, patch) => {
+        historyGroup = `edge:${id}:${Object.keys(patch).sort().join(",")}`;
         set({
           edges: get().edges.map((e) =>
             e.id === id && e.data ? { ...e, data: { ...e.data, ...patch } } : e,
           ),
-        }),
+        });
+      },
 
       selectEdge: (id) =>
         set({
@@ -191,6 +212,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       addApi: (ownerNodeId) => {
+        checkpoint();
         const { apis } = get();
         const id = nextId(
           "a",
@@ -218,25 +240,30 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         return id;
       },
 
-      updateApi: (id, patch) =>
-        set({ apis: get().apis.map((a) => (a.id === id ? { ...a, ...patch } : a)) }),
+      updateApi: (id, patch) => {
+        historyGroup = `api:${id}:${Object.keys(patch).sort().join(",")}`;
+        set({ apis: get().apis.map((a) => (a.id === id ? { ...a, ...patch } : a)) });
+      },
 
       removeApi: (id) => {
+        checkpoint();
         const apis = get().apis.filter((a) => a.id !== id);
         set({ apis, edges: unlinkApis(get().edges, apis) });
       },
 
       deleteSelected: () => {
+        checkpoint();
         const { nodes, edges, apis } = get();
         const removed = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
         const keptNodes = nodes.filter((n) => !removed.has(n.id));
         const keptEdges = edges.filter(
           (e) => !e.selected && !removed.has(e.source) && !removed.has(e.target),
         );
-        set({ nodes: keptNodes, ...pruneApis(keptNodes, keptEdges, apis) });
+        set(repairOwnership({ ...get(), nodes: keptNodes, edges: keptEdges, apis }));
       },
 
       duplicateSelected: () => {
+        checkpoint();
         const { nodes, edges } = get();
         const selected = nodes.filter((n) => n.selected);
         if (!selected.length) return;
@@ -279,7 +306,37 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         });
       },
 
-      setGraph: (graph) => set({ ...fromGraph(graph), highlight: NO_HIGHLIGHT }),
+      setGraph: (graph) => {
+        checkpoint();
+        set({ ...fromGraph(graph), highlight: NO_HIGHLIGHT });
+      },
+      setDocument: (graph, apis, entities = []) => {
+        checkpoint();
+        set({
+          ...repairOwnership({ ...fromGraph(graph), apis, entities }),
+          highlight: NO_HIGHLIGHT,
+        });
+      },
+      setEntities: (entities) => {
+        if (entities.length !== get().entities.length) checkpoint();
+        else
+          historyGroup = `entity:${entities.findIndex((e, i) => JSON.stringify(e) !== JSON.stringify(get().entities[i]))}`;
+        set({ entities });
+      },
+      replaceNode: (nodeId, type, removeApis = false) => {
+        const plan = planReplacement(get(), nodeId, type);
+        if (!plan || (plan.removedApis.length > 0 && !removeApis)) return false;
+        checkpoint();
+        set({ ...plan.document, highlight: NO_HIGHLIGHT });
+        return true;
+      },
+      addPreset: (id) => {
+        const preset = insertPreset(get(), id);
+        if (!preset) return [];
+        get().setDocument(preset.graph, preset.apis, preset.entities);
+        get().selectNodes(preset.addedIds);
+        return preset.addedIds;
+      },
       setApis: (apis) => set({ apis }),
       getGraph: () => toGraph(get().nodes, get().edges),
     }),
@@ -291,10 +348,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // 4-argument _handleSet; forward every argument untouched.
       handleSet: (handleSet) => {
         const record = handleSet as unknown as (...args: unknown[]) => void;
-        let last = 0;
+        let last = 0,
+          lastGroup = "";
         return (...args) => {
           const now = Date.now();
-          if (now - last > HISTORY_COALESCE_MS) record(...args);
+          if (historyGroup !== lastGroup || now - last > HISTORY_COALESCE_MS) record(...args);
+          lastGroup = historyGroup;
           last = now;
         };
       },
@@ -306,14 +365,24 @@ export function useHistory() {
   return useStore(
     useWorkspaceStore.temporal,
     useShallow((s) => ({
-      undo: s.undo,
-      redo: s.redo,
+      undo: undoWorkspace,
+      redo: redoWorkspace,
       canUndo: s.pastStates.length > 0,
       canRedo: s.futureStates.length > 0,
     })),
   );
 }
 
+export function undoWorkspace() {
+  checkpoint();
+  useWorkspaceStore.temporal.getState().undo(1);
+}
+export function redoWorkspace() {
+  checkpoint();
+  useWorkspaceStore.temporal.getState().redo(1);
+}
+
 export function resetHistory() {
+  checkpoint();
   useWorkspaceStore.temporal.getState().clear();
 }

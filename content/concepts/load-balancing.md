@@ -1,8 +1,8 @@
 ---
 title: "Load balancing"
 tags: ["networking"]
-components: ["load_balancer","dns","service_discovery"]
-related: ["scalability-basics","consistent-hashing","websockets-realtime"]
+components: ["load_balancer", "edge_gateway", "dns", "service_discovery"]
+related: ["scalability-basics", "consistent-hashing", "websockets-realtime"]
 ---
 
 ## What it is
@@ -14,6 +14,8 @@ A load balancer spreads incoming requests across several server instances so no 
 Any time a tier has more than one instance. Also at the edge (DNS / geo routing) to send users to the nearest region.
 
 ## How it works
+
+The **API Gateway + Load Balancer** canvas component is a logical L7 ingress offering both gateway policies and healthy-instance routing. Connect each frontend caller to it and route outbound connections to services. Configure replicated/managed ingress; one physical proxy is not automatically highly available. Keep separate nodes for L4 balancing, distinct deployment/scaling boundaries or policies between the two hops. Avoid charging the same rate-limit bucket twice when a separate limiter tier is present.
 
 - **L4** balancers route by IP/port (fast, protocol-agnostic); **L7** balancers understand HTTP and can route by path, header or cookie.
 - Algorithms: round-robin, least-connections, weighted, and **consistent hashing** when the same key should land on the same server (caches, WebSocket rooms).

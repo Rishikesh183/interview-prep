@@ -104,6 +104,28 @@ export const progress = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.problemId] }), ownRows(t.userId)],
 ).enableRLS();
 
+/** One compact current design per question; writes go through the revision-checked RPC. */
+export const designDrafts = pgTable(
+  "design_drafts",
+  {
+    userId: userId(),
+    problemId: text("problem_id").notNull(),
+    revision: integer("revision").notNull().default(1),
+    content: jsonb("content").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "design_drafts_pkey", columns: [t.userId, t.problemId] }),
+    check("design_drafts_revision_check", sql`${t.revision} > 0`),
+    check(
+      "design_drafts_content_check",
+      sql`jsonb_typeof(${t.content}) = 'object' AND ${t.content}->>'v' = '1'`,
+    ),
+    check("design_drafts_size", sql`octet_length(${t.content}::text) <= 1048576`),
+    ownRows(t.userId, "select"),
+  ],
+).enableRLS();
+
 export const mySolutions = pgTable(
   "my_solutions",
   {

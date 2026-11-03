@@ -282,6 +282,19 @@ const DEFS: ComponentDef[] = [
     description: "Throttles requests per key",
     icon: Gauge,
     fields: {
+      scope: f.select("Enforcement scope", ["local", "distributed"], {
+        default: "local",
+        badge: true,
+      }),
+      instances: f.number("Limiter instances", 1, { min: 1, badge: instancesBadge }),
+      sharedStore: f.nodeRef("Shared atomic counter store", ["cache", "nosql_kv", "sql_db"]),
+      atomicity: f.text("Atomic update / consistency", {
+        multiline: true,
+        placeholder: "Redis Lua: refill + consume + expiry atomically",
+      }),
+      failureMode: f.select("Counter-store failure policy", ["fail-open", "fail-closed"], {
+        default: "fail-closed",
+      }),
       algorithm: f.select("Algorithm", ["token-bucket", "sliding-window", "fixed-window"], {
         default: "token-bucket",
         badge: true,
@@ -464,6 +477,10 @@ const DEFS: ComponentDef[] = [
     description: "In-memory cache (Redis / Memcached)",
     icon: MemoryStick,
     fields: {
+      purpose: f.select("Role", ["cache", "counter-store"], {
+        default: "cache",
+        badge: (v) => (v === "counter-store" ? "atomic counters" : ""),
+      }),
       engine: f.select("Engine", ["Redis", "Memcached"], { default: "Redis", badge: true }),
       strategy: f.select("Strategy", ["cache-aside", "write-through", "write-back"], {
         badge: true,
@@ -672,6 +689,42 @@ const DEFS: ComponentDef[] = [
     icon: SquareDashed,
   }),
 ];
+
+// Specializations reuse the same field definitions as their generic counterparts.
+DEFS.push(
+  define({
+    type: "microservice",
+    category: "compute",
+    label: "Microservice",
+    description: "Independently deployed business capability with its own API boundary",
+    icon: Boxes,
+    fields: {
+      ...DEFS.find((d) => d.type === "service")!.fields,
+      domain: f.text("Business capability", { placeholder: "Orders, identity, billing..." }),
+      ownership: f.text("Data / API ownership", { multiline: true }),
+    },
+  }),
+);
+DEFS.push(
+  define({
+    type: "edge_gateway",
+    category: "edge",
+    label: "API Gateway + Load Balancer",
+    description:
+      "Logical L7 ingress combining authentication, routing and healthy-instance balancing",
+    icon: Scale,
+    fields: {
+      ...DEFS.find((d) => d.type === "api_gateway")!.fields,
+      ...DEFS.find((d) => d.type === "load_balancer")!.fields,
+      layer: f.select("Layer", ["L7"], { default: "L7", badge: true }),
+      instances: f.number("Ingress instances", 2, { min: 1 }),
+      deployment: f.text("HA / deployment boundary", {
+        multiline: true,
+        default: "Logical replicated ingress; avoid a single physical proxy as a failure point.",
+      }),
+    },
+  }),
+);
 
 export const CATALOG: Readonly<Record<string, ComponentDef>> = Object.fromEntries(
   DEFS.map((d) => [d.type, d]),

@@ -56,9 +56,9 @@ const base = () =>
   );
 
 describe("lint rules", () => {
-  it("has the 14 rules from the spec", () => {
-    expect(RULES).toHaveLength(14);
-    expect(new Set(RULES.map((r) => r.id)).size).toBe(14);
+  it("keeps the 14 base rules plus distributed counter-state validation", () => {
+    expect(RULES).toHaveLength(15);
+    expect(new Set(RULES.map((r) => r.id)).size).toBe(15);
   });
 
   describe("1. client-direct-store", () => {

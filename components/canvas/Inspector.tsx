@@ -14,6 +14,7 @@ import { ApiList } from "@/components/workspace/ApiList";
 import { API_OWNER_TYPES } from "@/lib/workspace/stages";
 import { ConfigForm } from "./form/ConfigForm";
 import { CATEGORY_STYLES } from "./nodes/categoryStyles";
+import { ReplaceComponent } from "./ReplaceComponent";
 
 export function Inspector({ node }: { node: AppNode }) {
   const updateNodeData = useWorkspaceStore((s) => s.updateNodeData);
@@ -63,6 +64,7 @@ export function Inspector({ node }: { node: AppNode }) {
         >
           <Copy />
         </Button>
+        <ReplaceComponent nodeId={node.id} />
         <Button variant="ghost" size="icon-sm" onClick={deleteSelected} title="Delete (Del)">
           <Trash2 />
         </Button>

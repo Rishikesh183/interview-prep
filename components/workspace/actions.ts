@@ -48,7 +48,12 @@ export async function submitAttempt(problem: Problem): Promise<PointsBreakdown |
   useAttemptStore.getState().submit(breakdown.points);
   // Written now rather than by the debounced autosave: a submit must survive leaving the page.
   const submitted = snapshotAttempt();
-  if (submitted) await saveAttempt(submitted);
+  if (submitted)
+    await saveAttempt(
+      submitted,
+      userId,
+      () => useAttemptStore.getState().meta?.id === submitted.id,
+    );
   await recordResult({
     problemId: problem.id,
     points: breakdown.points,

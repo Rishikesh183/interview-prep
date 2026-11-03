@@ -3,14 +3,17 @@ import { z } from "zod";
 import {
   ApiEndpointSchema,
   GraphSchema,
+  EntitySchema,
   type Attempt,
   type MySolution,
   type Progress,
+  type LocalDraft,
 } from "@/lib/schema";
 
 export const SandboxContentSchema = z.object({
   graph: GraphSchema,
   apis: z.array(ApiEndpointSchema).default([]),
+  entities: z.array(EntitySchema).optional(),
 });
 export type SandboxContent = z.infer<typeof SandboxContentSchema>;
 
@@ -39,6 +42,7 @@ class ArenaDB extends Dexie {
   meta!: EntityTable<MetaRow, "key">;
   progress!: EntityTable<Progress, "problemId">;
   mySolutions!: EntityTable<MySolution, "id">;
+  drafts!: EntityTable<LocalDraft, "id">;
 
   constructor() {
     super("sysdesign-arena");
@@ -71,6 +75,7 @@ class ArenaDB extends Dexie {
       progress: "problemId",
       mySolutions: "id, problemId, createdAt",
     });
+    this.version(6).stores({ drafts: "id, userId, problemId, [userId+problemId]" });
   }
 }
 

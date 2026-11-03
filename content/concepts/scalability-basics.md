@@ -1,8 +1,9 @@
 ---
 title: "Scalability basics"
 tags: ["fundamentals"]
-components: ["service","serverless_fn","note","group"]
-related: ["load-balancing","caching-strategies","sharding-partitioning","back-of-envelope-estimation"]
+components: ["service", "microservice", "serverless_fn", "note", "group"]
+related:
+  ["load-balancing", "caching-strategies", "sharding-partitioning", "back-of-envelope-estimation"]
 ---
 
 ## What it is
@@ -15,8 +16,10 @@ Always ask about it first: how many users, how fast is it growing, what is read-
 
 ## How it works
 
+A Microservice node makes an independently deployed business/API boundary explicit. It still needs scaling, failure handling and clear data ownership. Multiple instances of one service can also form a distributed system without splitting into microservices. For distributed rate limiting, refill/consume/expiry must be atomic for each key across all instances.
+
 - **Vertical scaling**: a bigger machine. Simple, but has a ceiling and is a single point of failure.
-- **Horizontal scaling**: more machines behind a load balancer. Needs *stateless* services: keep session data in a shared store, not in server memory.
+- **Horizontal scaling**: more machines behind a load balancer. Needs _stateless_ services: keep session data in a shared store, not in server memory.
 - Scale the **data tier** separately: read replicas for reads, caching for hot data, sharding when writes or size outgrow one machine.
 - Move slow work **off the request path** with queues and workers.
 - In diagrams, use **groups** to show regions/AZs and **notes** to explain why each piece is there.

@@ -25,7 +25,7 @@ function Tool({ label, onClick, disabled, children }: ToolProps) {
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={onClick}
+          onClick={() => onClick()}
           disabled={disabled}
           aria-label={label}
         >
@@ -56,7 +56,7 @@ export function Toolbar({ fileBase = "design", readOnly = false }: Props) {
 
   const exportJson = () => {
     const s = useWorkspaceStore.getState();
-    downloadJson(buildExport(s.getGraph(), s.apis), `${fileBase}.json`);
+    downloadJson(buildExport(s.getGraph(), s.apis, s.entities), `${fileBase}.json`);
   };
 
   const exportPng = async () => {
@@ -74,8 +74,7 @@ export function Toolbar({ fileBase = "design", readOnly = false }: Props) {
       return;
     }
     const s = useWorkspaceStore.getState();
-    s.setGraph(result.graph);
-    s.setApis(result.apis);
+    s.setDocument(result.graph, result.apis, result.entities);
     toast.success(`Imported ${result.graph.nodes.length} nodes. Ctrl+Z to undo.`);
     requestAnimationFrame(() => void fitView({ padding: 0.2 }));
   };
@@ -83,8 +82,11 @@ export function Toolbar({ fileBase = "design", readOnly = false }: Props) {
   const clear = () => {
     if (!window.confirm("Clear the whole canvas? You can undo with Ctrl+Z.")) return;
     const s = useWorkspaceStore.getState();
-    s.setGraph({ nodes: [], edges: [] });
-    s.setApis([]);
+    s.setDocument(
+      { nodes: [], edges: [] },
+      [],
+      s.entities.map((e) => ({ ...e, storeNodeId: undefined })),
+    );
   };
 
   return (

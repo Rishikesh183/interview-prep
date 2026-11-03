@@ -32,6 +32,7 @@ export const GROUPS: Record<string, readonly string[]> = {
   ],
   "@compute": [
     "service",
+    "microservice",
     "worker",
     "serverless_fn",
     "websocket_server",
@@ -39,10 +40,16 @@ export const GROUPS: Record<string, readonly string[]> = {
     "batch_processor",
   ],
   /** Where client traffic enters the system. */
-  "@entry": ["load_balancer", "api_gateway"],
+  "@entry": ["load_balancer", "api_gateway", "edge_gateway"],
 };
 
 export const ANY_TYPE = "*";
+
+const FAMILIES: Record<string, string[]> = {
+  service: ["service", "microservice"],
+  api_gateway: ["api_gateway", "edge_gateway"],
+  load_balancer: ["load_balancer", "edge_gateway"],
+};
 
 export type TypeRefs = string | readonly string[];
 
@@ -50,7 +57,7 @@ export type TypeRefs = string | readonly string[];
 export function expandTypes(refs: TypeRefs): Set<string> | null {
   const items = typeof refs === "string" ? [refs] : refs;
   if (items.includes(ANY_TYPE)) return null;
-  return new Set(items.flatMap((t) => GROUPS[t] ?? [t]));
+  return new Set(items.flatMap((t) => GROUPS[t] ?? FAMILIES[t] ?? [t]));
 }
 
 export function isGroupOrWildcard(ref: string): boolean {

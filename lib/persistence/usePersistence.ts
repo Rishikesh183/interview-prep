@@ -7,7 +7,7 @@ type Subscribe = (listener: () => void) => () => void;
 
 type Options<T> = {
   /** Loads and applies state to the stores. Re-runs when `key` changes. */
-  load: () => Promise<void>;
+  load: (signal: AbortSignal) => Promise<void>;
   snapshot: () => T | null;
   save: (value: T) => Promise<void>;
   /** Store subscriptions that should trigger an autosave. */
@@ -31,6 +31,7 @@ export function usePersistence<T>({
   const [status, setStatus] = useState<SaveStatus>("loading");
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     let loaded = false;
     let unsubs: (() => void)[] = [];
@@ -56,21 +57,26 @@ export function usePersistence<T>({
     };
 
     setStatus("loading");
-    void load().then(() => {
-      if (cancelled) return;
-      loaded = true;
-      saver.markSaved();
-      setStatus("saved");
-      unsubs = subscribe.map((sub) => sub(() => saver.schedule()));
-      document.addEventListener("visibilitychange", onHide);
-      window.addEventListener("pagehide", onPageHide);
-      window.addEventListener("beforeunload", onBeforeUnload);
-    });
+    void load(controller.signal)
+      .then(() => {
+        if (cancelled) return;
+        loaded = true;
+        saver.markSaved();
+        setStatus("saved");
+        unsubs = subscribe.map((sub) => sub(() => saver.schedule()));
+        document.addEventListener("visibilitychange", onHide);
+        window.addEventListener("pagehide", onPageHide);
+        window.addEventListener("beforeunload", onBeforeUnload);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
 
     return () => {
       // Never flush before loading: the stores may still hold a previous page's state.
       if (loaded) void saver.flush();
       cancelled = true;
+      controller.abort();
       unsubs.forEach((u) => u());
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", onPageHide);

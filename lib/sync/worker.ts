@@ -8,8 +8,8 @@ import { SyncEngine } from "./engine";
 import { supabaseRemote } from "./supabaseRemote";
 
 /**
- * Background sync for compact progress and explicitly saved solutions only.
- * Drafts, full attempts and history are local-only and never trigger network writes.
+ * Background sync for current design drafts, progress and saved solutions.
+ * Full attempts/history stay local. Drafts are account-scoped single snapshots per question.
  */
 
 export const PUSH_DEBOUNCE_MS = 5000;
@@ -26,6 +26,7 @@ let engine: SyncEngine | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 let initial: Promise<void> = Promise.resolve();
 let timer: ReturnType<typeof setTimeout> | undefined;
+let firstDirtyAt: number | undefined;
 let subscription: Subscription | undefined;
 let detach: (() => void) | undefined;
 
@@ -42,8 +43,10 @@ function run(job: (e: SyncEngine) => Promise<unknown>): Promise<void> {
     useSyncStatus.setState({ status: "syncing", error: null });
     try {
       await job(current);
+      if (engine !== current) return;
       useSyncStatus.setState({ status: "synced", lastSyncedAt: Date.now() });
     } catch (err) {
+      if (engine !== current) return;
       useSyncStatus.setState({
         status: "error",
         error: err instanceof Error ? err.message : "Sync failed",
@@ -58,37 +61,46 @@ export const syncNow = () => run((e) => e.syncAll());
 const pushNow = () => {
   clearTimeout(timer);
   timer = undefined;
+  firstDirtyAt = undefined;
   return run((e) => e.pushDirty());
 };
 
 /** Watch only cloud-backed records; local history must not trigger network traffic. */
-async function dirtySummary() {
-  const [progress, solutions] = await Promise.all([
+async function dirtySummary(userId: string) {
+  const [progress, solutions, drafts] = await Promise.all([
     db().progress.toArray(),
     db().mySolutions.toArray(),
+    db().drafts.where("userId").equals(userId).toArray(),
   ]);
   const progressDirty = progress.filter((p) => (p.pushedAt ?? -1) < p.updatedAt).length;
   const solutionsDirty = solutions.filter(
     (s) => s.deletedAt !== undefined || (s.pushedAt ?? -1) < s.updatedAt,
   ).length;
-  return { count: progressDirty + solutionsDirty, progressChanged: progressDirty > 0 };
+  return {
+    count: progressDirty + solutionsDirty + drafts.filter((r) => r.dirty && !r.remote).length,
+    progressChanged: progressDirty > 0,
+  };
 }
 
 export function startSync(client: SupabaseClient, userId: string): void {
   stopSync();
-  engine = new SyncEngine(supabaseRemote(client), userId);
+  engine = new SyncEngine(supabaseRemote(client, userId), userId);
   initial = run(async (e) => {
     await e.bindUser();
     await e.syncAll();
   });
 
-  subscription = liveQuery(dirtySummary).subscribe({
+  subscription = liveQuery(() => dirtySummary(userId)).subscribe({
     next: ({ count, progressChanged }) => {
       if (!count) return;
       if (progressChanged) void pushNow();
       else {
+        firstDirtyAt ??= Date.now();
         clearTimeout(timer);
-        timer = setTimeout(() => void pushNow(), PUSH_DEBOUNCE_MS);
+        timer = setTimeout(
+          () => void pushNow(),
+          Math.max(0, Math.min(PUSH_DEBOUNCE_MS, 15000 - (Date.now() - firstDirtyAt))),
+        );
       }
     },
   });
@@ -108,15 +120,17 @@ export function startSync(client: SupabaseClient, userId: string): void {
 }
 
 export function stopSync(): void {
+  engine?.cancel();
   clearTimeout(timer);
   timer = undefined;
+  firstDirtyAt = undefined;
   subscription?.unsubscribe();
   subscription = undefined;
   detach?.();
   detach = undefined;
   engine = null;
   initial = Promise.resolve();
-  useSyncStatus.setState({ status: "off", error: null });
+  useSyncStatus.setState({ status: "off", error: null, lastSyncedAt: null });
 }
 
 /**

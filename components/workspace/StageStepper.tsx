@@ -15,6 +15,7 @@ export function StageStepper({ track = "backend" }: { track?: import("@/lib/sche
       nodeCount: s.nodes.length,
       edgeCount: s.edges.length,
       apiCount: s.apis.length,
+      entities: s.entities,
     })),
   );
   if (!meta) return null;

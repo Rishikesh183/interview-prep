@@ -12,11 +12,11 @@ const graph: Graph = {
 describe("parseImport", () => {
   it("accepts our export envelope", () => {
     const res = parseImport(JSON.stringify(buildExport(graph, [])));
-    expect(res).toEqual({ ok: true, graph, apis: [] });
+    expect(res).toEqual({ ok: true, graph, apis: [], entities: [] });
   });
 
   it("accepts a bare graph", () => {
-    expect(parseImport(JSON.stringify(graph))).toEqual({ ok: true, graph, apis: [] });
+    expect(parseImport(JSON.stringify(graph))).toEqual({ ok: true, graph, apis: [], entities: [] });
   });
 
   it("rejects invalid JSON", () => {

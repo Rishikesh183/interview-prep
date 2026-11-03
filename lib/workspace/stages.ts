@@ -1,3 +1,4 @@
+import { GROUPS } from "@/lib/catalog/groups";
 import type { Attempt, Stage, Track } from "@/lib/schema";
 
 export const STAGES: { id: Stage; label: string; hint: string }[] = [
@@ -43,7 +44,20 @@ export function stagesFor(track: Track = "backend") {
 }
 
 /** Node types that can own API endpoints or browser contracts. */
+export const STATE_OWNER_TYPES = [
+  ...GROUPS["@storage"],
+  ...GROUPS["@frontend-state"],
+  "cache",
+  "coordination",
+  "event_stream",
+  "message_queue",
+  "id_generator",
+  "geo_index",
+];
+
 export const API_OWNER_TYPES = [
+  "microservice",
+  "edge_gateway",
   ...FRONTEND_API_OWNER_TYPES,
   "service",
   "api_gateway",

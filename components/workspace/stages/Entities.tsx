@@ -13,6 +13,7 @@ import { GROUPS } from "@/lib/catalog/groups";
 import { CATALOG } from "@/lib/catalog/components";
 import { addStageNode } from "../addStageNode";
 import { highlightLater } from "@/components/canvas/useFocusOnCanvas";
+import { useWorkspaceStore } from "@/store/workspace";
 import { useAttemptStore } from "@/store/attempt";
 import { StageIntro } from "./StageIntro";
 
@@ -31,7 +32,7 @@ export function Entities({ track = "backend" }: { track?: import("@/lib/schema")
   const storeTypes = frontend ? [...GROUPS["@frontend-state"]] : STORE_TYPES;
   const [storeType, setStoreType] = useState(frontend ? "client_store" : "sql_db");
   const [storeName, setStoreName] = useState("");
-  const entities = useAttemptStore((s) => s.meta?.entities);
+  const entities = useWorkspaceStore((s) => s.entities);
   const setEntities = useAttemptStore((s) => s.setEntities);
   const storeOptions = useNodeOptions(storeTypes);
   if (!entities) return null;

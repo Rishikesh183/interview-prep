@@ -6,6 +6,8 @@ import type { Capacity } from "@/lib/schema";
  */
 export const CAPACITY: Record<string, Capacity> = {
   service: { rps: 1_000 },
+  microservice: { rps: 1_000 },
+  edge_gateway: { rps: 20_000 },
   websocket_server: { connections: 50_000 },
   worker: { opsPerSec: 500 },
   serverless_fn: { rps: 1_000 },

@@ -15,6 +15,8 @@ export function AuthSync() {
     }
 
     let currentUserId: string | null = null;
+    let version = 0,
+      disposed = false;
     const apply = (user: import("@supabase/supabase-js").User | null) => {
       useAuth.setState({ status: user ? "signed-in" : "signed-out", user });
       if (user?.id === currentUserId) return;
@@ -23,11 +25,22 @@ export function AuthSync() {
       else stopSync();
     };
 
-    void client.auth.getUser().then(({ data }) => apply(data.user));
-    const { data } = client.auth.onAuthStateChange((_event, session) =>
-      apply(session?.user ?? null),
-    );
+    const initialVersion = version;
+    void client.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!disposed && version === initialVersion) apply(data.user);
+      })
+      .catch(() => {
+        if (!disposed && version === initialVersion) apply(null);
+      });
+    const { data } = client.auth.onAuthStateChange((_event, session) => {
+      if (disposed) return;
+      version++;
+      apply(session?.user ?? null);
+    });
     return () => {
+      disposed = true;
       data.subscription.unsubscribe();
       stopSync();
     };

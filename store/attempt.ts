@@ -17,7 +17,7 @@ import { usePreferences } from "./preferences";
 import { resetHistory, useWorkspaceStore } from "./workspace";
 
 /** Everything in an attempt except the canvas (graph + APIs), which lives in the workspace store. */
-export type AttemptMeta = Omit<Attempt, "graph" | "apis">;
+export type AttemptMeta = Omit<Attempt, "graph" | "apis" | "entities">;
 
 type AttemptState = {
   meta: AttemptMeta | null;
@@ -57,10 +57,9 @@ export const useAttemptStore = create<AttemptState>()((set, get) => {
     problem: null,
 
     load: (attempt, { pristine = false, problem } = {}) => {
-      const { graph, apis, ...meta } = attempt;
+      const { graph, apis, entities, ...meta } = attempt;
       const ws = useWorkspaceStore.getState();
-      ws.setGraph(graph);
-      ws.setApis(apis);
+      ws.setDocument(graph, apis, entities);
       resetHistory();
       set({ meta, pristine, problem: problem ?? null });
     },
@@ -75,7 +74,10 @@ export const useAttemptStore = create<AttemptState>()((set, get) => {
       const meta = get().meta;
       if (meta) patch({ estimation: { ...meta.estimation, ...p } });
     },
-    setEntities: (entities) => patch({ entities }),
+    setEntities: (entities) => {
+      useWorkspaceStore.getState().setEntities(entities);
+      set({ pristine: false });
+    },
     setTimerLimit: (timerLimitMin) => patch({ timerLimitMin }),
     toggleTimerPaused: () => {
       const meta = get().meta;
@@ -140,6 +142,7 @@ export function snapshotAttempt(): Attempt | null {
     estimation: { ...meta.estimation, outputs: estimate(estimation) },
     graph,
     apis: ws.apis,
+    entities: ws.entities,
     lint,
   };
 }

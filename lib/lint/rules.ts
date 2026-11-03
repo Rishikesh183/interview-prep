@@ -11,7 +11,7 @@ import type {
   Problem,
   Requirements,
 } from "@/lib/schema";
-import { GROUPS } from "@/lib/catalog/groups";
+import { GROUPS, expandTypes } from "@/lib/catalog/groups";
 
 export type LintContext = {
   graph: Graph;
@@ -41,6 +41,7 @@ const CONSUMERS = set([
   "worker",
   "stream_processor",
   "service",
+  "microservice",
   "serverless_fn",
   "websocket_server",
   "batch_processor",
@@ -86,6 +87,33 @@ function scalesWrites(n: GraphNode): boolean {
 
 export const RULES: Rule[] = [
   {
+    id: "distributed-limiter-state",
+    title: "Distributed limiter needs shared atomic state",
+    check: (ix) =>
+      ix.nodes
+        .filter((n) => n.type === "rate_limiter" && n.data.config.scope === "distributed")
+        .flatMap((n) => {
+          const store = ix.byId.get(String(n.data.config.sharedStore ?? ""));
+          if (
+            store &&
+            ["cache", "nosql_kv", "sql_db"].includes(store.type) &&
+            ix.reachable(n.id).has(store.id) &&
+            String(n.data.config.atomicity ?? "").trim()
+          )
+            return [];
+          return [
+            issue(
+              "distributed-limiter-state",
+              n.id,
+              "warn",
+              `${label(n)} needs a connected shared store and atomic update policy.`,
+              "Choose the counter store, connect it and explain an atomic refill/check/consume operation and failure policy.",
+              [n.id],
+            ),
+          ];
+        }),
+  },
+  {
     id: "client-direct-store",
     title: "Client talks to a database or cache directly",
     check: (ix) =>
@@ -108,7 +136,7 @@ export const RULES: Rule[] = [
     title: "Scaled-out service without a load balancer or gateway",
     check: (ix) =>
       ix.nodes
-        .filter((n) => n.type === "service")
+        .filter((n) => ["service", "microservice"].includes(n.type))
         .filter((n) => {
           const min = num(n.data.config.instancesMin, 1);
           const max = num(n.data.config.instancesMax, min);
@@ -252,7 +280,7 @@ export const RULES: Rule[] = [
     check: (ix, ctx) => {
       const owners = new Set(ctx.apis.map((a) => a.ownerNodeId));
       return ix.nodes
-        .filter((n) => n.type === "service" && !owners.has(n.id))
+        .filter((n) => ["service", "microservice"].includes(n.type) && !owners.has(n.id))
         .map((n) =>
           issue(
             "service-no-apis",
@@ -303,7 +331,12 @@ export const RULES: Rule[] = [
     title: "Cache without a strategy or TTL",
     check: (ix) =>
       ix.nodes
-        .filter((n) => n.type === "cache" && (!n.data.config.strategy || !n.data.config.ttl))
+        .filter(
+          (n) =>
+            n.type === "cache" &&
+            n.data.config.purpose !== "counter-store" &&
+            (!n.data.config.strategy || !n.data.config.ttl),
+        )
         .map((n) => {
           const missing = [!n.data.config.strategy && "strategy", !n.data.config.ttl && "TTL"]
             .filter(Boolean)
@@ -367,7 +400,10 @@ export const RULES: Rule[] = [
           // Consistent-hash routing (e.g. by room/document id) keeps the parties on one node.
           const sticky = [...ix.ancestors(n.id)].some((id) => {
             const lb = ix.byId.get(id)!;
-            return lb.type === "load_balancer" && lb.data.config.algorithm === "consistent-hash";
+            return (
+              ["load_balancer", "edge_gateway"].includes(lb.type) &&
+              lb.data.config.algorithm === "consistent-hash"
+            );
           });
           return !sticky;
         })
@@ -411,7 +447,9 @@ export const RULES: Rule[] = [
     check: (ix, ctx) => {
       if (!ctx.problem || ctx.keyComponentHints === false) return [];
       const present = new Set(ix.nodes.map((n) => n.type));
-      const missing = ctx.problem.keyComponents.filter((t) => !present.has(t));
+      const missing = ctx.problem.keyComponents.filter(
+        (t) => ![...(expandTypes(t) ?? [])].some((type) => present.has(type)),
+      );
       if (!missing.length) return [];
       const names = missing.map((t) => getComponent(t)?.label ?? t).join(", ");
       return [

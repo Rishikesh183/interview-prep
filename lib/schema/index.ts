@@ -14,3 +14,4 @@ export * from "./concept";
 export * from "./mySolution";
 export * from "./walkthrough";
 export * from "./leaderboard";
+export * from "./draft";

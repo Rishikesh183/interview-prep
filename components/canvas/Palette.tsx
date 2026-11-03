@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { componentsByCategory, type ComponentDef } from "@/lib/catalog/components";
 import { cn } from "@/lib/utils";
 import { CATEGORY_STYLES } from "./nodes/categoryStyles";
+import { PRESETS } from "@/lib/graph/presets";
+import { useWorkspaceStore } from "@/store/workspace";
+import { useReactFlow } from "@xyflow/react";
 
 export const DRAG_MIME = "application/x-sysdesign-node";
 
@@ -21,6 +24,7 @@ function matches(def: ComponentDef, q: string): boolean {
 }
 
 export function Palette({ onAdd, track }: Props) {
+  const { fitView } = useReactFlow();
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   useShortcuts({ search: () => searchRef.current?.focus() });
@@ -58,6 +62,28 @@ export function Palette({ onAdd, track }: Props) {
         </div>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-2">
+        {track !== "frontend" &&
+          PRESETS.filter(
+            (p) =>
+              !query || `${p.label} ${p.description}`.toLowerCase().includes(query.toLowerCase()),
+          ).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              title={p.description}
+              className="hover:bg-accent w-full rounded-md border px-2 py-2 text-left text-xs"
+              onClick={() => {
+                const ids = useWorkspaceStore.getState().addPreset(p.id);
+                requestAnimationFrame(
+                  () =>
+                    void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.2, maxZoom: 1 }),
+                );
+              }}
+            >
+              {p.label}
+              <span className="text-muted-foreground mt-1 block text-[10px]">{p.description}</span>
+            </button>
+          ))}
         {groups.map(({ category, items }) => (
           <section key={category.id}>
             <h3 className="text-muted-foreground mb-1 px-1 text-[10px] font-semibold tracking-wider uppercase">

@@ -46,6 +46,8 @@ export type TestRun = z.infer<typeof TestRunSchema>;
 export const AttemptSchema = z.object({
   id: z.string().min(1),
   problemId: z.string().min(1),
+  /** Device-local attribution prevents an old account's draft from uploading to a new one. */
+  ownerUserId: z.string().uuid().optional(),
   startedAt: z.number(),
   updatedAt: z.number(),
   submittedAt: z.number().optional(),

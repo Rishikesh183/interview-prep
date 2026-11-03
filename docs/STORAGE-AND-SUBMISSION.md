@@ -8,14 +8,15 @@ Public practice/solution page payloads omit reference approaches, graphs, walkth
 
 The submission action checks identity again after asynchronous work and refuses to lock a different attempt opened during verification. The UI also prevents duplicate submission clicks. Best progress is recorded after a successful submit.
 
-| Data                                | Browser              | Supabase                                                        |
-| ----------------------------------- | -------------------- | --------------------------------------------------------------- |
-| Drafts and full attempt history     | IndexedDB via Dexie  | Never uploaded, downloaded, or remotely deleted by history sync |
-| Best result per problem             | IndexedDB            | Compact best-progress row                                       |
-| Explicitly saved My solutions       | IndexedDB            | Saved graph/API/entity snapshot                                 |
-| Problems, walkthroughs, Learn cards | Static content files | No database rows                                                |
+| Data                                    | Browser              | Supabase                                          |
+| --------------------------------------- | -------------------- | ------------------------------------------------- |
+| Latest editable HLD per question        | IndexedDB via Dexie  | One compact account-scoped design_drafts snapshot |
+| Full attempt history and older versions | IndexedDB via Dexie  | Never uploaded or downloaded by history sync      |
+| Best result per problem                 | IndexedDB            | Compact best-progress row                         |
+| Explicitly saved My solutions           | IndexedDB            | Saved graph/API/entity snapshot                   |
+| Problems, walkthroughs, Learn cards     | Static content files | No database rows                                  |
 
-History belongs to the browser/device. Clearing site data removes it; export designs that need a separate backup. The sync worker watches only progress and explicitly saved solutions, so canvas/timer/history edits do not generate cloud writes. Legacy local attempt IDs and history links remain stable.
+History belongs to the browser/device. Clearing site data removes it; export designs that need a separate backup. The sync worker watches current design snapshots, progress and explicitly saved solutions. Full history and timer-only changes do not generate cloud history writes. Legacy local attempt IDs and history links remain stable. See [cloud drafts and conflict handling](CLOUD-DRAFTS-AND-CANVAS.md).
 
 A synced progress row proves a previous submission even on a fresh device without history. Both solution gates and early-peek scoring use that fact. Progress merge and upload bookkeeping preserve newer local results recorded while a network operation is in flight.
 

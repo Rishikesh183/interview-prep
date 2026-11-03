@@ -13,6 +13,7 @@ const SPEC_TYPES = [
   "note", "group",
   "ui_component", "client_store", "query_cache", "api_client", "browser_storage",
   "web_worker", "service_worker", "realtime_client", "router",
+  "microservice", "edge_gateway",
 ]; // prettier-ignore
 
 describe("component catalog", () => {

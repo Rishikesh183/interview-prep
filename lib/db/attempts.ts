@@ -1,6 +1,7 @@
 import { AttemptSchema, type Attempt } from "@/lib/schema";
 import { db } from "./dexie";
 import { getProgress } from "./progress";
+import { queueDraft } from "./drafts";
 
 /** A compact synced progress row proves a submission even when this device has no history. */
 export async function hasSubmittedProblem(problemId: string): Promise<boolean> {
@@ -44,8 +45,15 @@ export async function latestInProgress(problemId: string): Promise<Attempt | nul
   return attempts.find((a) => a.status === "in_progress") ?? null;
 }
 
-export async function saveAttempt(attempt: Attempt): Promise<void> {
-  await db().attempts.put({ ...attempt, updatedAt: Date.now() });
+export async function saveAttempt(
+  attempt: Attempt,
+  userId?: string,
+  guard?: () => boolean,
+): Promise<void> {
+  const saved = { ...attempt, updatedAt: Date.now(), ownerUserId: attempt.ownerUserId ?? userId };
+  await db().attempts.put(saved);
+  if (userId && saved.ownerUserId === userId && (!guard || guard()))
+    await queueDraft(saved, userId, guard);
 }
 
 export async function deleteAttempt(id: string): Promise<void> {

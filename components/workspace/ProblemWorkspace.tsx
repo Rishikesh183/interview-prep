@@ -1,6 +1,8 @@
 "use client";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { useAuth } from "@/components/auth/useAuth";
+import { DraftSyncIndicator } from "./DraftSyncIndicator";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Loader2, Lock, Plus } from "lucide-react";
 import Link from "next/link";
@@ -48,14 +50,21 @@ export function ProblemWorkspace({ problem }: { problem: Problem }) {
         problem={problem}
         requested={requested}
         onNewAttempt={() => setRequested(`${NEW_ATTEMPT}:${Date.now()}`)}
+        onResume={setRequested}
       />
     </ReactFlowProvider>
   );
 }
 
-type Props = { problem: Problem; requested: string | null; onNewAttempt: () => void };
+type Props = {
+  problem: Problem;
+  requested: string | null;
+  onNewAttempt: () => void;
+  onResume: (id: string) => void;
+};
 
-function Workspace({ problem, requested, onNewAttempt }: Props) {
+function Workspace({ problem, requested, onNewAttempt, onResume }: Props) {
+  const auth = useAuth();
   const status = useAttemptPersistence(
     problem,
     requested?.startsWith(NEW_ATTEMPT) ? NEW_ATTEMPT : requested,
@@ -63,7 +72,8 @@ function Workspace({ problem, requested, onNewAttempt }: Props) {
   const meta = useAttemptStore((s) => s.meta);
   const stage = meta?.stage ?? "requirements";
   const readOnly = isReadOnly(meta);
-  const loading = status === "loading" || !meta || meta.problemId !== problem.id;
+  const loading =
+    auth.status === "loading" || status === "loading" || !meta || meta.problemId !== problem.id;
   const [panelOpen, setPanelOpen] = useState(true);
   // The canvas gets the room on the design stage; the panel comes back on the other stages.
   // Only on stage changes, so a manual toggle within a stage sticks.
@@ -121,6 +131,12 @@ function Workspace({ problem, requested, onNewAttempt }: Props) {
         <ShortcutsButton />
         <ThemeToggle />
       </header>
+
+      {!loading && (
+        <div className="shrink-0 border-b px-3 py-1.5">
+          <DraftSyncIndicator problem={problem} onResume={onResume} />
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {panelOpen && (

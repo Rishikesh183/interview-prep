@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiEndpointSchema } from "./api";
+import { EntitySchema } from "./problem";
 import { GraphSchema } from "./graph";
 
 export const CanvasExportSchema = z.object({
@@ -8,5 +9,6 @@ export const CanvasExportSchema = z.object({
   exportedAt: z.number(),
   graph: GraphSchema,
   apis: z.array(ApiEndpointSchema).default([]),
+  entities: z.array(EntitySchema).default([]),
 });
 export type CanvasExport = z.infer<typeof CanvasExportSchema>;

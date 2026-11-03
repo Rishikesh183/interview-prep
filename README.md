@@ -4,8 +4,8 @@ A practice app for system design interviews with 30 backend problems and a focus
 of 15 frontend problems. Work through a question stage by stage, draw the architecture, and get
 instant feedback from built-in tests, lint rules and an optional AI reviewer.
 
-Drafts, design checks and history run locally in the browser. Sign-in is required to submit;
-cross-device progress sync and AI review use the configured services.
+Practice and history run locally in the browser. Sign-in is required to submit and enables
+cross-device sync of your latest HLD per question; full history stays on the device.
 
 ## Features
 
@@ -18,6 +18,9 @@ cross-device progress sync and AI review use the configured services.
 - **Architecture canvas** — drag components (clients, gateways, services, caches, databases,
   queues, ...) onto a [React Flow](https://reactflow.dev) canvas, connect them with protocol edges,
   configure each one, undo/redo, and export as PNG or JSON.
+- **Canvas starters and replacement** — explicit Microservice and combined gateway/load-balancer
+  components, three-client and distributed-rate-limiter starters, and connection-preserving
+  component replacement with protocol/ownership previews and complete undo.
 - **Live lint** — rules flag common design smells as you draw: a client talking to a database,
   a single DB with no HA, a read-heavy path with no cache, a queue with no consumer, and more
   (`lib/lint/rules.ts`).
@@ -34,7 +37,9 @@ cross-device progress sync and AI review use the configured services.
   state, performance and recovery, linked from the problems and palette.
 - **Sandbox** — a free-form canvas with up to 5 named tabs for practice outside a problem.
 - **History and progress** — attempts stay in local IndexedDB; the progress page summarises
-  points and solved problems. Cloud sync stores compact best progress and explicitly saved solutions.
+  points and solved problems. Cloud sync stores one latest editable HLD per question, compact best
+  progress and explicitly saved solutions. Concurrent draft edits require a choice, keeping both
+  versions recoverable. See [cloud draft setup and migration](docs/CLOUD-DRAFTS-AND-CANVAS.md).
 - **All-time leaderboard** — signed-in users compare total best points across both tracks.
   Ties share a rank; retakes count once. Rankings reuse synced progress, while history stays local.
   See [leaderboard storage and access](docs/LEADERBOARD.md).

@@ -9,18 +9,24 @@ import { resetHistory, useWorkspaceStore } from "@/store/workspace";
 
 export type { SaveStatus };
 
-async function load(id: string) {
-  useAttemptStore.getState().clear();
+let activeSandbox: string | undefined;
+async function load(id: string, signal: AbortSignal) {
   const content = await loadSandbox(id).catch(() => null);
+  if (signal.aborted) return;
+  activeSandbox = id;
+  useAttemptStore.getState().clear();
   const store = useWorkspaceStore.getState();
-  store.setGraph(content?.graph ?? { nodes: [], edges: [] });
-  store.setApis(content?.apis ?? []);
+  store.setDocument(
+    content?.graph ?? { nodes: [], edges: [] },
+    content?.apis ?? [],
+    content?.entities ?? [],
+  );
   resetHistory();
 }
 
 function snapshot(): SandboxContent {
   const s = useWorkspaceStore.getState();
-  return { graph: s.getGraph(), apis: s.apis };
+  return { graph: s.getGraph(), apis: s.apis, entities: s.entities };
 }
 
 /**
@@ -30,8 +36,8 @@ function snapshot(): SandboxContent {
 export function useSandboxPersistence(id: string): SaveStatus {
   return usePersistence({
     key: `sandbox:${id}`,
-    load: () => load(id),
-    snapshot,
+    load: (signal) => load(id, signal),
+    snapshot: () => (activeSandbox === id && !useAttemptStore.getState().meta ? snapshot() : null),
     save: (content) => saveSandbox(id, content),
     subscribe: [useWorkspaceStore.subscribe],
   });

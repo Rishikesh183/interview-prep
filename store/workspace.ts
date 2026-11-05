@@ -23,6 +23,7 @@ import {
 import { snapToGrid } from "@/lib/graph/placement";
 import { planReplacement, repairOwnership, type EditorDocument } from "@/lib/graph/replacement";
 import { insertPreset } from "@/lib/graph/presets";
+import { planServiceCount } from "@/lib/graph/serviceGroups";
 import type { ApiEndpoint, Entity, EdgeData, Graph, NodeData } from "@/lib/schema";
 
 type GraphState = EditorDocument;
@@ -58,7 +59,8 @@ export type WorkspaceState = GraphState & {
   setEntities: (entities: Entity[]) => void;
   setDocument: (graph: Graph, apis: ApiEndpoint[], entities?: Entity[]) => void;
   replaceNode: (nodeId: string, type: string, removeApis?: boolean) => boolean;
-  addPreset: (id: string) => string[];
+  addPreset: (id: string, serviceCount?: number) => string[];
+  setServiceCount: (upstreamId: string, count: number, confirmRemoval?: boolean) => boolean;
   getGraph: () => Graph;
 };
 
@@ -330,8 +332,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({ ...plan.document, highlight: NO_HIGHLIGHT });
         return true;
       },
-      addPreset: (id) => {
-        const preset = insertPreset(get(), id);
+      setServiceCount: (upstreamId, count, confirmRemoval = false) => {
+        const plan = planServiceCount(get(), upstreamId, count);
+        if (!plan || (plan.removed.length > 0 && !confirmRemoval)) return false;
+        checkpoint();
+        set({ ...plan.document, highlight: NO_HIGHLIGHT });
+        return true;
+      },
+      addPreset: (id, serviceCount) => {
+        const preset = insertPreset(get(), id, serviceCount);
         if (!preset) return [];
         get().setDocument(preset.graph, preset.apis, preset.entities);
         get().selectNodes(preset.addedIds);

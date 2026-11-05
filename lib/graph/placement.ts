@@ -21,13 +21,17 @@ function overlaps(a: Rect, b: Rect): boolean {
  * Nearest spot to `desired` (top-left) where a new node does not overlap any existing rect.
  * Searches outward in square rings of slot-sized steps.
  */
-export function findFreePosition(desired: Point, occupied: Rect[]): Point {
-  const stepX = SLOT.width + SLOT.gap;
-  const stepY = SLOT.height + SLOT.gap;
+export function findFreePosition(
+  desired: Point,
+  occupied: Rect[],
+  footprint = { width: SLOT.width, height: SLOT.height },
+): Point {
+  const stepX = footprint.width + SLOT.gap;
+  const stepY = footprint.height + SLOT.gap;
   const fits = (p: Point) =>
     !occupied.some((r) =>
       overlaps(
-        { ...p, width: SLOT.width, height: SLOT.height },
+        { ...p, ...footprint },
         {
           x: r.x - SLOT.gap / 2,
           y: r.y - SLOT.gap / 2,

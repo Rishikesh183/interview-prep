@@ -15,6 +15,7 @@ import { API_OWNER_TYPES } from "@/lib/workspace/stages";
 import { ConfigForm } from "./form/ConfigForm";
 import { CATEGORY_STYLES } from "./nodes/categoryStyles";
 import { ReplaceComponent } from "./ReplaceComponent";
+import { MicroserviceGroup } from "./MicroserviceGroup";
 
 export function Inspector({ node }: { node: AppNode }) {
   const updateNodeData = useWorkspaceStore((s) => s.updateNodeData);
@@ -93,6 +94,9 @@ export function Inspector({ node }: { node: AppNode }) {
             </TabsList>
             <TabsContent value="config" className="pt-2">
               <ConfigForm nodeId={node.id} type={type} config={node.data.config} />
+              <div className="mt-4">
+                <MicroserviceGroup key={node.id} nodeId={node.id} />
+              </div>
             </TabsContent>
             {ownsApis && (
               <TabsContent value="apis" className="pt-2">

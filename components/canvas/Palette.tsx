@@ -10,6 +10,7 @@ import { CATEGORY_STYLES } from "./nodes/categoryStyles";
 import { PRESETS } from "@/lib/graph/presets";
 import { useWorkspaceStore } from "@/store/workspace";
 import { useReactFlow } from "@xyflow/react";
+import { MAX_SERVICE_COUNT } from "@/lib/graph/serviceGroups";
 
 export const DRAG_MIME = "application/x-sysdesign-node";
 
@@ -26,6 +27,13 @@ function matches(def: ComponentDef, q: string): boolean {
 export function Palette({ onAdd, track }: Props) {
   const { fitView } = useReactFlow();
   const [query, setQuery] = useState("");
+  const [serviceCount, setServiceCount] = useState("3");
+  const count = Number(serviceCount);
+  const validCount =
+    serviceCount.trim() !== "" &&
+    Number.isInteger(count) &&
+    count >= 1 &&
+    count <= MAX_SERVICE_COUNT;
   const searchRef = useRef<HTMLInputElement>(null);
   useShortcuts({ search: () => searchRef.current?.focus() });
   const groups = useMemo(() => {
@@ -62,6 +70,27 @@ export function Palette({ onAdd, track }: Props) {
         </div>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-2">
+        {track !== "frontend" && (
+          <div className="space-y-1">
+            <label htmlFor="starter-service-count" className="text-xs font-medium">
+              Microservices in starter
+            </label>
+            <Input
+              id="starter-service-count"
+              type="number"
+              min={1}
+              max={MAX_SERVICE_COUNT}
+              step={1}
+              className="h-8 text-xs"
+              value={serviceCount}
+              aria-invalid={!validCount}
+              onChange={(e) => setServiceCount(e.target.value)}
+            />
+            <p className="text-muted-foreground text-[10px]">
+              Choose 1–{MAX_SERVICE_COUNT}; change it later in the upstream component’s Config.
+            </p>
+          </div>
+        )}
         {track !== "frontend" &&
           PRESETS.filter(
             (p) =>
@@ -70,10 +99,19 @@ export function Palette({ onAdd, track }: Props) {
             <button
               key={p.id}
               type="button"
+              disabled={!validCount}
               title={p.description}
-              className="hover:bg-accent w-full rounded-md border px-2 py-2 text-left text-xs"
+              className="hover:bg-accent w-full rounded-md border px-2 py-2 text-left text-xs disabled:opacity-50"
               onClick={() => {
-                const ids = useWorkspaceStore.getState().addPreset(p.id);
+                const ids = useWorkspaceStore.getState().addPreset(p.id, count);
+                const upstream = useWorkspaceStore
+                  .getState()
+                  .nodes.find(
+                    (n) =>
+                      ids.includes(n.id) &&
+                      n.type === (p.id === "distributed-limiter" ? "rate_limiter" : "edge_gateway"),
+                  );
+                if (upstream) useWorkspaceStore.getState().selectNodes([upstream.id]);
                 requestAnimationFrame(
                   () =>
                     void fitView({ nodes: ids.map((id) => ({ id })), padding: 0.2, maxZoom: 1 }),

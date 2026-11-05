@@ -21,6 +21,9 @@ cross-device sync of your latest HLD per question; full history stays on the dev
 - **Canvas starters and replacement** — explicit Microservice and combined gateway/load-balancer
   components, three-client and distributed-rate-limiter starters, and connection-preserving
   component replacement with protocol/ownership previews and complete undo.
+- **Configurable microservice groups** — choose 1–20 services in a starter, or change a gateway,
+  limiter or service's connected service count later. New services get editable nodes, routes
+  and API scaffolds; shrinking previews removals and supports complete undo.
 - **Live lint** — rules flag common design smells as you draw: a client talking to a database,
   a single DB with no HA, a read-heavy path with no cache, a queue with no consumer, and more
   (`lib/lint/rules.ts`).
@@ -91,7 +94,7 @@ localStorage.
 
 - Edits autosave after 1s of quiet (at least every 5s while you keep working). Closing the tab
   with unsaved changes shows a confirmation prompt.
-- When signed in, a background worker (`lib/sync/`) pushes and pulls attempts, progress and saved
+- When signed in, a background worker (`lib/sync/`) pushes and pulls current HLD drafts, progress and saved
   solutions to Supabase so they follow you across devices. Sandboxes stay local to the browser.
 
 ## Scripts

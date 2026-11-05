@@ -3,11 +3,12 @@ import { inferEdgeDefaults } from "@/lib/catalog/edges";
 import type { Graph, GraphNode, GraphEdge, Entity, ApiEndpoint } from "@/lib/schema";
 import { nextId, toGraph } from "./convert";
 import type { EditorDocument } from "./replacement";
+import { MAX_SERVICE_COUNT } from "./serviceGroups";
 
 export const PRESETS = [
   {
     id: "api-entry",
-    label: "3 clients + gateway/LB + microservices",
+    label: "Clients + gateway/LB + microservices",
     description: "One shared L7 ingress; all callers and service routes already connected.",
   },
   {
@@ -21,8 +22,11 @@ export const PRESETS = [
 export function insertPreset(
   document: EditorDocument,
   presetId: string,
+  serviceCount = 3,
 ): { graph: Graph; apis: ApiEndpoint[]; entities: Entity[]; addedIds: string[] } | null {
   if (!PRESETS.some((p) => p.id === presetId)) return null;
+  if (!Number.isInteger(serviceCount) || serviceCount < 1 || serviceCount > MAX_SERVICE_COUNT)
+    return null;
   const graph = toGraph(document.nodes, document.edges);
   const nodeIds = graph.nodes.map((n) => n.id),
     edgeIds = graph.edges.map((e) => e.id),
@@ -93,7 +97,7 @@ export function insertPreset(
       "cache",
       "Shared rate-limit buckets",
       720,
-      460,
+      Math.max(460, serviceCount * 180),
       {
         engine: "Redis",
         purpose: "counter-store",
@@ -129,16 +133,17 @@ export function insertPreset(
     });
     api(upstream, "/limits/check");
   }
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < serviceCount; i++) {
+    const domain = ["Orders", "Catalog", "Accounts"][i] ?? `Service ${i + 1}`;
     const service = node(
       "microservice",
-      ["Orders", "Catalog", "Accounts"][i] + " microservice",
+      domain + " microservice",
       presetId === "distributed-limiter" ? 1100 : 740,
       i * 180,
-      { domain: ["Orders", "Catalog", "Accounts"][i] },
+      { domain },
     );
     edge(upstream, service, "Allowed request");
-    api(service, ["/orders", "/catalog", "/accounts"][i]);
+    api(service, ["/orders", "/catalog", "/accounts"][i] ?? `/v1/service-${i + 1}`);
   }
   return {
     graph: { nodes: [...graph.nodes, ...added], edges: [...graph.edges, ...edges] },
